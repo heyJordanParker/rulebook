@@ -14,6 +14,6 @@
     "skills"
   ],
   "dependencies": {
-    "@cmodjs/core": "^5.13.1"
+    "@cmodjs/core": "^6.0.2"
   }
 }

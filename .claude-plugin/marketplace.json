@@ -10,8 +10,8 @@
       "description": "Checks every file, reply, and tool call a Claude Code agent writes against your rules and linters before it lands, and an error refuses it.",
       "source": {
         "source": "archive",
-        "url": "https://github.com/heyJordanParker/rulebook/releases/download/v0.2.4/rulebook-0.2.4.zip",
-        "sha256": "23290273001a5b2bdb4246485ffa4c26a1b1bbe0c9a9684dfa58c3eb28e7891e"
+        "url": "https://github.com/heyJordanParker/rulebook/releases/download/v0.2.5/rulebook-0.2.5.zip",
+        "sha256": "ce0433cd024faccb720d8837d89b7baba42f415dcda82734e7542ef6ff1d4921"
       }
     },
     {
