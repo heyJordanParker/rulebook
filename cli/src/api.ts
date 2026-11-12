@@ -29,6 +29,7 @@ export type RuleSettings = {
   readonly agent?: string
   readonly model?: string
   readonly effort?: string
+  readonly threshold?: number
 }
 
 export type LinterName = 'mago' | 'oxlint' | 'biome' | 'stylelint' | 'ruff' | 'selene' | 'shellcheck'

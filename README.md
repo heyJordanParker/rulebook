@@ -13,7 +13,7 @@ Edit to .claude/rules/testing.md refused. Fix every error, then edit again.
 
 ## Install
 
-rulebook is a mod for [Claude Mod Manager (cmod)](https://github.com/heyJordanParker/cmod), version 5.13.1 or later. With cmod installed, run:
+rulebook is a mod for [Claude Mod Manager (cmod)](https://github.com/heyJordanParker/cmod), version 6.0.0 or later. With cmod installed, run:
 
 ```sh
 cmod install heyJordanParker/rulebook
@@ -89,7 +89,7 @@ export default defineConfig({
 | `probes` | The probe files, relative to the config. |
 | `timeout` | How long an agentic rule or a linter run may take, in milliseconds, unless the rule sets its own. 30 000 by default. |
 | `existingErrors` | `warning`, the default, lets an edit through an error that was already in the file. `error` blocks it too. Either way, an edit's answer lists only the findings on lines the edit wrote, and counts the rest in one line that names the `rulebook <file>` command that lists them. An edit that adds and removes more than 1,000 lines in all counts every line as written, because finding the lines it wrote took 18 s for a rewrite of a 10,000-line file. |
-| `rules` | A level, `"off"`, or the settings of any rule: `level`, `runs`, `paths`, and for an agentic rule `timeout`, `agent`, `model`, `effort`. |
+| `rules` | A level, `"off"`, or the settings of any rule: `level`, `runs`, `paths`, and for an agentic rule `timeout`, `agent`, `model`, `effort`. `model: 'jev'` runs the rule on Jev, and `threshold` sets the probability a line needs to pass on Jev. |
 | `linters` | The linters to run on every write, such as `['mago', 'oxlint']`. A linter no config lists never runs. |
 | `messages` | Where rulebook finds a message by itself. `tools` checks each matching tool call, such as `['mcp__inbox__*']`, as `@<name>` before it runs. `folder` makes a full run check each file under that folder, relative to the config, as `@<name>/<path>`. A rule covers any `@` name without it. |
 
@@ -126,7 +126,7 @@ export default defineRule({
 })
 ```
 
-An agentic rule is a `.md` file. Its frontmatter is Claude Code's Skill frontmatter without `name` and `context`, with rulebook's `level`, `runs`, and `timeout` under `metadata`, and its body is the check. rulebook runs it the way Claude Code runs any `context: fork` Skill: in a subagent in the project, which reads the project's Claude.md files. `agent` picks the subagent, whose own frontmatter applies, its preloaded Skills included.
+An agentic rule is a `.md` file. Its frontmatter is Claude Code's Skill frontmatter without `name` and `context`, with rulebook's `level`, `runs`, `timeout`, and `threshold` under `metadata`, and its body is the check. Unless its `model` is `jev`, rulebook runs it the way Claude Code runs any `context: fork` Skill: in a subagent in the project, which reads the project's Claude.md files. `agent` picks the subagent, whose own frontmatter applies, its preloaded Skills included.
 
 ```md
 ---
@@ -144,6 +144,27 @@ metadata:
 Check each Fact in this Claude.md against the code, folders, and commands it names.
 Report each Fact the code contradicts, with what the code shows instead.
 ```
+
+An agentic rule with `model: jev` runs on Jev, TypeSafe's decision model, instead of Claude Code, and rulebook sends it to Jev's newest model, `jev-latest`. rulebook asks Jev whether each line that holds text follows the rule, and flags each line Jev gives a probability below `metadata.threshold`, with the description as the message. The threshold is 0.7 unless the rule or a config sets it, the starting point TypeSafe's docs give for a yes. Raise it to flag more lines Jev is unsure of. On a 7-line file, a rule that flags metaphors took 0.8 s on Jev and 13.0 s on Claude Code with `model: haiku`, and both flagged the same two lines. Jev reads only the rule and the file, never the project, so write a Jev rule for a mistake a line shows by itself, such as a metaphor or a hedge. It runs no agent, so rulebook refuses `agent`, `effort`, `allowed-tools`, and `disallowed-tools` on it.
+
+```md
+---
+description: Write literally, with no metaphors or idioms.
+model: jev
+metadata:
+  threshold: 0.8
+---
+
+A line breaks the rule when it describes code with a metaphor or an idiom, such as code that "asks questions".
+```
+
+A Jev rule reads your TypeSafe API key from rulebook's cmod secret. Store it once on each computer, with the key on stdin:
+
+```sh
+printf '%s' "$TYPESAFE_API_KEY" | cmod secret store rulebook jev
+```
+
+Without it, the rule does not run, and the write lands with a note that names the command. `JEV_BASE_URL` sends the requests to a gateway instead of `https://api.typesafe.ai`.
 
 `runs: manual` keeps a rule off edits, for a check that takes minutes. It runs when you run `rulebook`. `runs: always`, the default, runs it on every edit too.
 
@@ -268,4 +289,4 @@ Biome, oxlint, Mago, ruff, selene, shellcheck, and each agentic rule's Claude Co
 
 A config and a `.ts` rule are code, and rulebook runs them, the way ESLint runs its configs. A session in a project loads that project's `rulebook.config.ts` files and their rules, so open a cloned repository only when you trust its configs.
 
-rulebook sends nothing anywhere by itself. The mod talks to `rulebook serve` over a Unix socket on your computer, and the program starts only `git`, the linters your configs list, and `claude`. An agentic rule is the one exception: it runs `claude -p` with your own Claude Code account, and that session reads the checked file and sends it to Anthropic, as any Claude Code session does.
+rulebook sends nothing anywhere by itself. The mod talks to `rulebook serve` over a Unix socket on your computer, and the program starts only `git`, the linters your configs list, and `claude`. Agentic rules are the exception. A Claude Code rule runs `claude -p` with your own Claude Code account, and that session reads the checked file and sends it to Anthropic, as any Claude Code session does. A Jev rule sends the rule and the checked file to TypeSafe's API with your TypeSafe API key.

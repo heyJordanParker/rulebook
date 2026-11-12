@@ -37,9 +37,9 @@ The file's extension picks the kind:
 
 - `.yml` is a pattern rule, which matches the code's syntax tree with ast-grep
 - `.ts` is a script rule, which runs your own TypeScript
-- `.md` is an agentic rule, which runs a Claude Code subagent
+- `.md` is an agentic rule, which runs a Claude Code subagent, or Jev with `model: jev`
 
-A pattern or script rule checks a file in about a millisecond. An agentic rule takes seconds to minutes, so write one only when the check takes judgment.
+A pattern or script rule checks a file in about a millisecond. A Jev rule takes under a second, and a Claude Code rule takes seconds to minutes, so write an agentic rule only when the check takes judgment.
 
 IF the project's own linter can express the check:
 ### Add it to that linter's config instead of writing a rule
@@ -107,9 +107,24 @@ metadata:
 A Domain.md word names the business, never code. Report each sentence that uses a Domain.md word to name a file, method, or class.
 ```
 
-- rulebook runs each agentic rule the way Claude Code runs a forked Skill, in a subagent in the project, so it reads the project's Claude.md files.
+- rulebook runs each agentic rule with a Claude model the way Claude Code runs a forked Skill, in a subagent in the project, so it reads the project's Claude.md files.
 - `agent` names the subagent type, `general-purpose` when it is left out. That agent's frontmatter applies: its tools, its model, and the Skills it preloads.
-- `model`, `effort`, `allowed-tools`, and `disallowed-tools` work as in any Skill. No rule can edit a file.
+- A Claude `model`, `effort`, `allowed-tools`, and `disallowed-tools` work as in any Skill. No rule can edit a file.
+
+IF one line shows the mistake by itself, such as a metaphor or a hedge:
+### Run the rule on Jev with `model: jev`
+`model: jev` runs the rule on Jev, TypeSafe's decision model, in under a second. rulebook asks Jev whether each line follows the rule, and flags each line it gives a probability below `metadata.threshold`, 0.7 by default, with the description as the message. Jev reads only the rule and the file, so a check that needs the project, such as a Fact the code contradicts, stays on Claude Code. A Jev rule takes no `agent`, `effort`, `allowed-tools`, or `disallowed-tools`, and runs only where `cmod secret store rulebook jev` stored a TypeSafe API key.
+Example:
+```md
+---
+description: Write literally, with no metaphors or idioms.
+model: jev
+metadata:
+  threshold: 0.8
+---
+
+A line breaks the rule when it describes code with a metaphor or an idiom, such as code that "asks questions".
+```
 
 ## 7. Set its level and when it runs
 

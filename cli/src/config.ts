@@ -34,7 +34,7 @@ export type Settings = {
 }
 
 const KEYS = new Set(['extends', 'plugins', 'paths', 'probes', 'timeout', 'existingErrors', 'rules', 'linters', 'messages'])
-const RULE_KEYS = new Set(['level', 'runs', 'paths', 'timeout', 'agent', 'model', 'effort'])
+const RULE_KEYS = new Set(['level', 'runs', 'paths', 'timeout', 'agent', 'model', 'effort', 'threshold'])
 const MESSAGE_KEYS = new Set(['tools', 'folder'])
 const BUILT_IN: Pick<LoadedConfig, 'file' | 'plugins' | 'messages'> = { file: 'rulebook', plugins: {}, messages: { reply: { tools: [], folder: undefined } } }
 
@@ -210,6 +210,7 @@ function validOverride(file: string, id: string, override: unknown): void {
   if (override.runs !== undefined && !isRuns(override.runs)) fail('runs is "always" or "manual".')
   if (override.paths !== undefined && !isStrings(override.paths)) fail('paths is a list of globs.')
   if (override.timeout !== undefined && !isTimeout(override.timeout)) fail('timeout is a whole number of milliseconds above 0.')
+  if (override.threshold !== undefined && !isThreshold(override.threshold)) fail('threshold is a probability above 0 and at most 1.')
   for (const key of ['agent', 'model', 'effort'] as const) if (override[key] !== undefined && typeof override[key] !== 'string') fail(`${key} is a string.`)
 }
 
@@ -240,4 +241,8 @@ export function isRuns(value: unknown): value is Runs {
 
 export function isTimeout(value: unknown): value is number {
   return Number.isInteger(value) && (value as number) > 0
+}
+
+export function isThreshold(value: unknown): value is number {
+  return typeof value === 'number' && value > 0 && value <= 1
 }

@@ -1,4 +1,3 @@
-import type { RenderElement } from 'claude-code'
 import type { PageInit } from '../../node_modules/@cmodjs/core/mod.js'
 import { Box, Text } from '../../node_modules/@cmodjs/core/ui/elements.js'
 import type { RulebookState, Report } from '../state.js'
@@ -15,7 +14,7 @@ export const resultsPage: PageInit<RulebookState> = {
   },
 }
 
-function Results({ reports, failures }: { readonly reports: readonly Report[]; readonly failures: readonly string[] }): RenderElement {
+function Results({ reports, failures }: { readonly reports: readonly Report[]; readonly failures: readonly string[] }): JSX.Element {
   const findings = reports.flatMap((report) => report.findings)
   const errors = findings.filter(({ level }) => level === 'error').length
   const flagged = reports.filter((report) => report.findings.length > 0 || report.failures.length > 0)

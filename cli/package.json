@@ -1,6 +1,6 @@
 {
   "name": "@cmodjs/rulebook",
-  "version": "0.2.5",
+  "version": "0.3.0",
   "description": "Checks every file, reply, and tool call a Claude Code agent writes against your rules and linters before it lands.",
   "license": "MIT",
   "type": "module",

@@ -5,7 +5,7 @@ import { isRecord, isStrings } from './config.ts'
 import { isQuestion, projectOf, type Question } from './questions.ts'
 import type { Answered, Asked } from './worker.ts'
 
-const ENVIRONMENT = ['CLAUDE_CONFIG_DIR', 'HOME', 'PATH', 'XDG_CACHE_HOME', 'XDG_CONFIG_HOME']
+const ENVIRONMENT = ['CLAUDE_CONFIG_DIR', 'HOME', 'JEV_BASE_URL', 'PATH', 'XDG_CACHE_HOME', 'XDG_CONFIG_HOME']
 const IDLE_MS = 15 * 60_000
 const WORKER = new URL(Bun.isStandaloneExecutable ? './src/worker.ts' : './worker.ts', import.meta.url)
 

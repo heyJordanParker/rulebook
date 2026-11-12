@@ -29,6 +29,7 @@ let home: string
 let project: string
 let environment: Record<string, string>
 let server: { readonly pid: number; readonly socket: string; stop(): Promise<void> }
+let jev: Bun.Server<undefined> | undefined
 
 beforeEach(async () => {
   home = realpathSync(mkdtempSync('/tmp/rulebook-serve-'))
@@ -40,11 +41,14 @@ beforeEach(async () => {
   write(join(home, 'config', 'rulebook', 'rules', 'block-hedging.ts'), HEDGING_RULE)
   environment = { ...(process.env as Record<string, string>), HOME: home, XDG_CONFIG_HOME: join(home, 'config') }
   delete environment.CLAUDE_CONFIG_DIR
+  delete environment.XDG_DATA_HOME
   server = await served()
 })
 
 afterEach(async () => {
   await server.stop()
+  await jev?.stop()
+  jev = undefined
   rmSync(home, { recursive: true, force: true })
 })
 
@@ -196,6 +200,102 @@ test("an agentic rule of a session on a profile runs claude with the profile's C
   expect(await onProfile.json()).toEqual({ failures: [], findings: [] })
   expect(await ask('edit', edit)).toEqual({ status: 200, answer: { failures: [], findings: [] } })
   expect((await Bun.file(seen).text()).trim().split('\n')).toEqual([profile, 'none'])
+})
+
+type JevRequest = { readonly authorization: string | null; readonly body: { readonly model: string; readonly state: { readonly rule: string; readonly lines: string }; readonly questions: Record<string, { readonly type: string; readonly instructions: string }> } }
+
+function fakeJev(): readonly JevRequest[] {
+  const requests: JevRequest[] = []
+  jev = Bun.serve({
+    port: 0,
+    async fetch(request) {
+      const body = (await request.json()) as JevRequest['body']
+      requests.push({ authorization: request.headers.get('authorization'), body })
+      const lines = new Map(body.state.lines.split('\n').map((numbered) => [`line_${numbered.slice(0, numbered.indexOf(' |')).trim()}`, numbered]))
+      const follows = (line: string) => (line.includes('Slice') ? 0.1 : line.includes('maybe') ? 0.8 : 0.95)
+      const answers = Object.fromEntries(Object.keys(body.questions).map((name) => [name, { type: 'noul', noul: follows(lines.get(name) ?? '') }]))
+      return Response.json({ model: 'jev-1.14.0', answers, usage: { input_tokens: 1, output_tokens: 1 } })
+    },
+  })
+  environment.JEV_BASE_URL = `http://127.0.0.1:${jev.port}`
+  fakeCmod()
+  write(join(home, 'jev-key'), 'stored-key')
+  return requests
+}
+
+function fakeCmod(): void {
+  const key = join(home, 'jev-key')
+  const cmod = write(join(home, '.local', 'share', 'cmod', 'programs', 'cmod'), `#!/bin/sh\nif [ "$*" = 'secret get rulebook jev' ] && [ -f '${key}' ]; then cat '${key}'; fi\n`)
+  Bun.spawnSync(['chmod', '755', cmod])
+}
+
+function jevRule(frontmatter: string): void {
+  write(join(home, 'config', 'rulebook', 'rules', 'block-domain-words.md'), `---\ndescription: Name code with code words, never Domain.md words.\n${frontmatter}\n---\n\nReport each Domain.md word that names code.\n`)
+}
+
+test('a rule with model: jev asks Jev whether each line that holds text follows the rule, and a line under the threshold refuses the edit', async () => {
+  const requests = fakeJev()
+  jevRule('model: jev')
+  expect(await ask('edit', written(join(project, 'Claude.md'), 'Each Slice is a commit.\n\nRun the tests.\n'))).toEqual({ status: 200, answer: expect.objectContaining({ refuse: 'Edit to Claude.md refused. Fix every error, then edit again.\n\n  1  error  global/block-domain-words  Name code with code words, never Domain.md words.\n     > Each Slice is a commit.' }) })
+  expect(requests).toHaveLength(1)
+  const [{ authorization, body }] = requests as [JevRequest]
+  expect(authorization).toBe('Bearer stored-key')
+  expect(body.model).toBe('jev-latest')
+  expect(body.state.rule).toBe('Name code with code words, never Domain.md words.\n\nReport each Domain.md word that names code.')
+  expect(body.state.lines).toBe('1 | Each Slice is a commit.\n2 | \n3 | Run the tests.\n4 | ')
+  expect(Object.keys(body.questions)).toEqual(['line_1', 'line_3'])
+  expect(body.questions.line_3).toMatchObject({ type: 'noul', instructions: 'Line 3 of the file follows the rule.' })
+})
+
+test('a line Jev gives 0.8 passes at the default threshold of 0.7, and fails a rule or a config that sets 0.9', async () => {
+  fakeJev()
+  const edit = written(join(project, 'Claude.md'), 'Each step maybe runs.\n')
+  jevRule('model: jev')
+  expect(await ask('edit', edit)).toEqual({ status: 200, answer: { failures: [], findings: [] } })
+  jevRule('model: jev\nmetadata:\n  threshold: 0.9')
+  expect(await ask('edit', edit)).toMatchObject({ status: 200, answer: { refuse: expect.stringContaining('1  error  global/block-domain-words') } })
+  jevRule('model: jev')
+  write(join(project, 'rulebook.config.ts'), "export default { rules: { 'global/block-domain-words': { threshold: 0.9 } } }\n")
+  expect(await ask('edit', edit)).toMatchObject({ status: 200, answer: { refuse: expect.stringContaining('1  error  global/block-domain-words') } })
+})
+
+test("a config that sets model: 'jev' runs a Claude rule on Jev, whatever agent the rule names", async () => {
+  const requests = fakeJev()
+  jevRule('model: haiku\nagent: explorer')
+  write(join(project, 'rulebook.config.ts'), "export default { rules: { 'global/block-domain-words': { model: 'jev' } } }\n")
+  expect(await ask('edit', written(join(project, 'Claude.md'), 'Each Slice is a commit.\n'))).toMatchObject({ status: 200, answer: { refuse: expect.stringContaining('1  error  global/block-domain-words') } })
+  expect(requests.map(({ body }) => body.model)).toEqual(['jev-latest'])
+})
+
+test('a file too long for one Jev request asks Jev in windows of whole lines, each line once, and flags the lines of every window', async () => {
+  const requests = fakeJev()
+  jevRule('model: jev')
+  const lines = Array.from({ length: 3_000 }, (_, index) => (index === 2_990 ? 'Each Slice is a commit.' : `Step ${index + 1} writes its log.`))
+  const { answer } = await ask('edit', written(join(project, 'Claude.md'), `${lines.join('\n')}\n`))
+  expect((answer as { findings: { line: number }[] }).findings.map(({ line }) => line)).toEqual([2_991])
+  expect(requests.length).toBeGreaterThan(1)
+  expect(requests.flatMap(({ body }) => Object.keys(body.questions).map((name) => Number(name.slice('line_'.length)))).toSorted((a, b) => a - b)).toEqual(lines.map((_, index) => index + 1))
+  expect(requests.map(({ body }) => body.state.lines.split('\n').length).reduce((sum, count) => sum + count)).toBe(3_001)
+})
+
+test('a Jev answer that fails with a page that is not JSON lands the edit with a note that names its status and its text', async () => {
+  jev = Bun.serve({ port: 0, fetch: () => new Response('<html>502 Bad Gateway</html>', { status: 502 }) })
+  environment.JEV_BASE_URL = `http://127.0.0.1:${jev.port}/`
+  fakeCmod()
+  write(join(home, 'jev-key'), 'stored-key')
+  jevRule('model: jev')
+  expect(await ask('edit', written(join(project, 'Claude.md'), 'Each Slice is a commit.\n'))).toEqual({ status: 200, answer: { failures: ['global/block-domain-words did not run on Claude.md: Jev answered 502: <html>502 Bad Gateway</html>'], findings: [], note: expect.any(String) } })
+})
+
+test("a Jev rule reads its key from rulebook's cmod secret, and the first check after the key is stored runs without a restart", async () => {
+  const requests = fakeJev()
+  rmSync(join(home, 'jev-key'))
+  jevRule('model: jev')
+  const edit = written(join(project, 'Claude.md'), 'Each Slice is a commit.\n')
+  expect(await ask('edit', edit)).toMatchObject({ answer: { failures: ['global/block-domain-words did not run on Claude.md: global/block-domain-words runs on Jev, and rulebook has no Jev key. Store your TypeSafe API key with `cmod secret store rulebook jev`, which reads it on stdin.'] } })
+  write(join(home, 'jev-key'), 'stored-key')
+  expect(await ask('edit', edit)).toMatchObject({ answer: { refuse: expect.stringContaining('1  error  global/block-domain-words') } })
+  expect(requests.map(({ authorization }) => authorization)).toEqual(['Bearer stored-key'])
 })
 
 test('edits to an existing file list the project files once per worker, and a Claude.md that a checked write creates brings its imports in', async () => {

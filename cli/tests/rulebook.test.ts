@@ -304,6 +304,31 @@ test('a manual rule never runs on an edit, and runs when rulebook runs', () => {
   expect(run.stdout).toBe('Claude.md\n  1  error  global/require-true-facts  The code says otherwise.\n     > A fact.\n\n1 error, 0 warnings in 1 file\n')
 })
 
+test('a Jev rule that names an agent fails to load, and a config that sets model jev and an agent on one rule fails', () => {
+  agenticRule('require-true-facts', 'model: jev\nagent: explorer')
+  const { failures } = JSON.parse(rulebook(['rules']).stdout) as { failures: string[] }
+  expect(failures).toEqual([`${join(home, 'config', 'rulebook', 'rules', 'require-true-facts.md')}: model jev runs the rule on Jev, which runs no agent, so rulebook does not read agent. The rule global/require-true-facts checks nothing until it loads.`])
+  agenticRule('require-true-facts', 'agent: explorer')
+  write(join(project, 'rulebook.config.ts'), `export default { rules: { 'global/require-true-facts': { model: 'jev', effort: 'low' } } }\n`)
+  const run = rulebook(['--static'])
+  expect(run.code).toBe(2)
+  expect(run.stderr).toBe('rulebook: A rulebook config sets effort on global/require-true-facts, which runs on Jev, and Jev runs no agent.\n')
+})
+
+test('a threshold on a Claude rule or outside 0 to 1 fails to load, and a config that sets one on a Claude rule fails', () => {
+  const source = join(home, 'config', 'rulebook', 'rules', 'require-true-facts.md')
+  const failures = () => (JSON.parse(rulebook(['rules']).stdout) as { failures: string[] }).failures
+  agenticRule('require-true-facts', 'model: sonnet\nmetadata:\n  threshold: 0.9')
+  expect(failures()).toEqual([`${source}: metadata.threshold is the probability Jev must give a line to pass, so it needs model: jev. The rule global/require-true-facts checks nothing until it loads.`])
+  agenticRule('require-true-facts', 'model: jev\nmetadata:\n  threshold: 90')
+  expect(failures()).toEqual([`${source}: metadata.threshold is a probability above 0 and at most 1. The rule global/require-true-facts checks nothing until it loads.`])
+  agenticRule('require-true-facts', 'model: sonnet')
+  write(join(project, 'rulebook.config.ts'), `export default { rules: { 'global/require-true-facts': { threshold: 0.9 } } }\n`)
+  const run = rulebook(['--static'])
+  expect(run.code).toBe(2)
+  expect(run.stderr).toBe("rulebook: A rulebook config sets threshold on global/require-true-facts, which runs on Claude Code. threshold is the probability Jev must give a line to pass, so it needs model: 'jev'.\n")
+})
+
 test('two agentic rules with timeouts of 300 and 600 ms end within one 600 ms deadline, and the edit lands', () => {
   write(join(project, 'rulebook.config.ts'), `export default { timeout: 300, rules: { 'global/require-true-facts': { timeout: 600 } } }\n`)
   agenticRule('block-domain-words-for-code', 'model: haiku')

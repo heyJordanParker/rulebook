@@ -6,6 +6,7 @@ import type { Finding, Level, LinterName, PromptFile } from './api.ts'
 import { runAgentic } from './agent.ts'
 import { importedFile, isClaudeMd, readClaudeMd } from './claude-md.ts'
 import { isInside, type Settings } from './config.ts'
+import { isJev, runJev } from './jev.ts'
 import { coveringLinters, LINTERS, lintFolder, lintText, projectLinters, type Covering, type ProjectLinter } from './linters.ts'
 import { seconds } from './lsp.ts'
 import type { LoadedRule, StaticRule } from './rules.ts'
@@ -103,7 +104,7 @@ export async function checkFile(settings: Settings, rules: readonly LoadedRule[]
   const timer = longest === 0 ? undefined : setTimeout(() => deadline.abort(new Error(`it ran past ${seconds(longest)}`)), longest)
   const runs = await Promise.all(chosen.map(async (rule) => {
     try {
-      const found = rule.kind === 'static' ? await rule.check(prompt, doc) : await runAgentic(rule, prompt, settings.root, changed, deadline.signal)
+      const found = rule.kind === 'static' ? await rule.check(prompt, doc) : isJev(rule.model) ? await runJev(rule, prompt, deadline.signal) : await runAgentic(rule, prompt, settings.root, changed, deadline.signal)
       return { rule, found: validFindings(rule.id, prompt, found) }
     } catch (error) {
       return { rule, failure: error instanceof Error ? error.message : String(error) }

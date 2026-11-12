@@ -2,6 +2,14 @@
 
 What changed in each version of rulebook, for the people who use it. cmod publish releases the section for the version, and Settings shows it.
 
+## [0.3.0]
+
+### Added
+- An agentic rule with `model: jev` runs on Jev, TypeSafe's decision model, instead of Claude Code. Jev answers in under a second, where a Claude Code subagent takes seconds to minutes. On a 7-line file, a metaphor rule took 0.8 s on Jev and 13.0 s on Claude Code's `haiku`, and both flagged the same lines. A line passes when Jev gives it a probability of following the rule of at least `metadata.threshold`, 0.7 unless the rule or a config sets it. A config's `model` setting moves any agentic rule to Jev or back. A Jev rule reads your TypeSafe API key from rulebook's cmod secret, which `cmod secret store rulebook jev` stores from stdin.
+
+### Changed
+- The mod bundles `@cmodjs/core` 6.0.2 and needs cmod 6.0.0 or later.
+
 ## [0.2.5]
 
 ### Changed

@@ -4,7 +4,8 @@ import type { NapiConfig } from '@ast-grep/napi'
 import type { Finding, Level, PromptFile, Rule, RuleSettings, Runs } from './api.ts'
 import { importsRule, noSuppressionsRule } from './check.ts'
 import type { Import } from './claude-md.ts'
-import { isLevel, isRecord, isRuns, isStrings, isTimeout, rootRelative, type Settings } from './config.ts'
+import { isLevel, isRecord, isRuns, isStrings, isThreshold, isTimeout, rootRelative, type Settings } from './config.ts'
+import { isJev } from './jev.ts'
 import { cacheFolder } from './linters.ts'
 import { importDefault } from './modules.ts'
 
@@ -31,6 +32,7 @@ export type AgenticRule = Common & {
   readonly agent: string | undefined
   readonly model: string | undefined
   readonly effort: string | undefined
+  readonly threshold: number | undefined
   readonly allowedTools: string | readonly string[] | undefined
   readonly disallowedTools: string | readonly string[] | undefined
 }
@@ -42,7 +44,8 @@ export type Rules = { readonly rules: readonly LoadedRule[]; readonly failures: 
 const RULE_FILES = new Bun.Glob('**/*.{ts,md,yml}')
 const SCRIPT_KEYS = new Set(['description', 'level', 'runs', 'paths', 'check'])
 const FRONTMATTER_KEYS = new Set(['description', 'agent', 'model', 'effort', 'paths', 'allowed-tools', 'disallowed-tools', 'metadata'])
-const METADATA_KEYS = new Set(['level', 'runs', 'timeout'])
+const METADATA_KEYS = new Set(['level', 'runs', 'timeout', 'threshold'])
+const CLAUDE_KEYS = ['agent', 'effort', 'allowed-tools', 'disallowed-tools'] as const
 const PATTERN_KEYS = new Set(['description', 'language', 'paths', 'level', 'runs', 'rule'])
 const LANGUAGES = ['typescript', 'tsx', 'javascript', 'html', 'css', 'php', 'python', 'bash', 'lua', 'json', 'yaml', 'toml', 'markdown']
 
@@ -110,9 +113,12 @@ async function agenticRule(id: string, source: string, timeout: number): Promise
   for (const key of ['allowed-tools', 'disallowed-tools'] as const) if (frontmatter[key] !== undefined && typeof frontmatter[key] !== 'string' && !isStrings(frontmatter[key])) fail(`${key} is a string or a list.`)
   const metadata = frontmatter.metadata ?? {}
   if (!isRecord(metadata)) return fail('metadata is a map.')
-  for (const key of Object.keys(metadata)) if (!METADATA_KEYS.has(key)) fail(`metadata.${key} is not a rulebook key. rulebook reads metadata.level, metadata.runs, and metadata.timeout.`)
+  for (const key of Object.keys(metadata)) if (!METADATA_KEYS.has(key)) fail(`metadata.${key} is not a rulebook key. rulebook reads metadata.level, metadata.runs, metadata.timeout, and metadata.threshold.`)
   if (metadata.timeout !== undefined && !isTimeout(metadata.timeout)) fail('metadata.timeout is a whole number of milliseconds above 0.')
+  if (metadata.threshold !== undefined && !isThreshold(metadata.threshold)) fail('metadata.threshold is a probability above 0 and at most 1.')
   if (body === '') fail('the rule has no body. The body is the check.')
+  if (isJev(frontmatter.model)) for (const key of CLAUDE_KEYS) if (frontmatter[key] !== undefined) fail(`model jev runs the rule on Jev, which runs no agent, so rulebook does not read ${key}.`)
+  if (metadata.threshold !== undefined && !isJev(frontmatter.model)) fail('metadata.threshold is the probability Jev must give a line to pass, so it needs model: jev.')
   return {
     ...commonOf(id, source, { ...metadata, description: frontmatter.description, paths: frontmatter.paths }),
     kind: 'agentic',
@@ -121,6 +127,7 @@ async function agenticRule(id: string, source: string, timeout: number): Promise
     agent: frontmatter.agent as string | undefined,
     model: frontmatter.model as string | undefined,
     effort: frontmatter.effort as string | undefined,
+    threshold: metadata.threshold as number | undefined,
     allowedTools: frontmatter['allowed-tools'] as string | readonly string[] | undefined,
     disallowedTools: frontmatter['disallowed-tools'] as string | readonly string[] | undefined,
   }
@@ -218,8 +225,11 @@ function overridden(rule: LoadedRule, override: RuleSettings | undefined): Loade
   const { level, runs, paths } = override
   const common = { ...rule, ...(level === undefined ? {} : { level }), ...(runs === undefined ? {} : { runs }), ...(paths === undefined ? {} : { paths }) }
   if (common.kind === 'static') {
-    for (const key of ['agent', 'model', 'effort', 'timeout'] as const) if (override[key] !== undefined) throw new Error(`A rulebook config sets ${key} on ${rule.id}, a static rule, which runs no agent.`)
+    for (const key of ['agent', 'model', 'effort', 'timeout', 'threshold'] as const) if (override[key] !== undefined) throw new Error(`A rulebook config sets ${key} on ${rule.id}, a static rule, which runs no agent.`)
     return common
   }
-  return { ...common, ...(override.timeout === undefined ? {} : { timeout: override.timeout }), ...(override.agent === undefined ? {} : { agent: override.agent }), ...(override.model === undefined ? {} : { model: override.model }), ...(override.effort === undefined ? {} : { effort: override.effort }) }
+  const agentic = { ...common, ...(override.timeout === undefined ? {} : { timeout: override.timeout }), ...(override.agent === undefined ? {} : { agent: override.agent }), ...(override.model === undefined ? {} : { model: override.model }), ...(override.effort === undefined ? {} : { effort: override.effort }), ...(override.threshold === undefined ? {} : { threshold: override.threshold }) }
+  if (isJev(agentic.model)) for (const key of ['agent', 'effort'] as const) if (override[key] !== undefined) throw new Error(`A rulebook config sets ${key} on ${rule.id}, which runs on Jev, and Jev runs no agent.`)
+  if (!isJev(agentic.model) && override.threshold !== undefined) throw new Error(`A rulebook config sets threshold on ${rule.id}, which runs on Claude Code. threshold is the probability Jev must give a line to pass, so it needs model: 'jev'.`)
+  return agentic
 }
