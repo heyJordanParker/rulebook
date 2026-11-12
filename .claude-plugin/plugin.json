@@ -1,7 +1,7 @@
 {
   "name": "rulebook",
-  "version": "0.3.0",
-  "description": "Checks every file, reply, and tool call a Claude Code agent writes against your rules and linters before it lands, and an error refuses it.",
+  "version": "0.4.0",
+  "description": "Checks every file, reply, tool call, and commit against your rules and linters before it lands, and an error refuses it.",
   "author": {
     "name": "Jordan Parker",
     "email": "jordan@parkerlabs.co"
