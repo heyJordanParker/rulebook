@@ -44,7 +44,7 @@ function served(tested: Tested, answers: () => Answers): void {
   tested.fakes.process.run = async (command) => printed(Object.entries(ENVIRONMENT).map(([name, value]) => `${name}=${value}\0`).join(''), command.join(' ') === 'env -0' ? 0 : 1)
   tested.fakes.http.fetch = async (url, init) => {
     const answer = answers()[url.slice('http://localhost/'.length)]
-    const { input } = JSON.parse(init?.body ?? '{}') as { input: Readonly<Record<string, string>> }
+    const { input } = JSON.parse(typeof init?.body === 'string' ? init.body : '{}') as { input: Readonly<Record<string, string>> }
     return { status: 200, ok: true, headers: {}, text: JSON.stringify(typeof answer === 'function' ? answer(input) : answer) }
   }
 }
