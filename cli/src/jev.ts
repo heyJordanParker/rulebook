@@ -1,5 +1,5 @@
 import { join } from 'node:path'
-import type { Finding, PromptFile } from './api.ts'
+import type { Finding, CheckedFile } from './api.ts'
 import { isRecord } from './config.ts'
 import type { AgenticRule } from './rules.ts'
 
@@ -14,7 +14,7 @@ export function isJev(model: unknown): boolean {
   return model === 'jev'
 }
 
-export async function runJev(rule: AgenticRule, file: PromptFile, deadline: AbortSignal): Promise<readonly Finding[]> {
+export async function runJev(rule: AgenticRule, file: CheckedFile, deadline: AbortSignal): Promise<readonly Finding[]> {
   const key = await jevKey()
   if (key === '') throw new Error(`${rule.id} runs on Jev, and rulebook has no Jev key. Store your TypeSafe API key with \`cmod secret store rulebook jev\`, which reads it on stdin.`)
   const width = String(file.lines.length).length

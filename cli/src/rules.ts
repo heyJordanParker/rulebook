@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, renameSync } from 'node:fs'
 import { basename, join } from 'node:path'
 import type { NapiConfig } from '@ast-grep/napi'
-import type { Finding, Level, PromptFile, Rule, RuleSettings, Runs } from './api.ts'
+import type { Finding, Level, CheckedFile, Rule, RuleSettings, Runs } from './api.ts'
 import { importsRule, noSuppressionsRule } from './check.ts'
 import type { Import } from './claude-md.ts'
 import { isLevel, isRecord, isRuns, isStrings, isThreshold, isTimeout, rootRelative, type Settings } from './config.ts'
@@ -22,7 +22,7 @@ type Doc = { readonly file: string; readonly imports: readonly Import[] }
 
 export type StaticRule = Common & {
   readonly kind: 'static'
-  check(file: PromptFile, doc: Doc | undefined): readonly Finding[] | Promise<readonly Finding[]>
+  check(file: CheckedFile, doc: Doc | undefined): readonly Finding[] | Promise<readonly Finding[]>
 }
 
 export type AgenticRule = Common & {
@@ -82,7 +82,11 @@ async function rulesOf(settings: Settings): Promise<Rules> {
     }
   }
   for (const id of Object.keys(settings.rules)) if (!ids.has(id)) throw new Error(`A rulebook config sets the rule "${id}", which no plugin holds. The rules are ${[...ids].join(', ')}.`)
-  return { rules: rules.map((rule) => overridden(rule, settings.rules[rule.id])), failures }
+  const loaded = rules.map((rule) => overridden(rule, settings.rules[rule.id]))
+  for (const { id, paths, level } of loaded) {
+    if (paths === undefined && level !== 'off' && settings.paths.length === 0) failures.push(`The rule ${id} has no paths, and no config lists paths, so it checks no file. Give the rule paths, such as paths: ['**/*.ts'].`)
+  }
+  return { rules: loaded, failures }
 }
 
 function loadedRule(id: string, source: string, timeout: number): Promise<LoadedRule> {
@@ -194,7 +198,7 @@ function commonOf(id: string, source: string, keys: Readonly<Record<string, unkn
   const { description, level, runs } = keys
   if (typeof description !== 'string' || description.trim() === '' || description.trim().includes('\n')) return fail('a rule needs a description: the Rule in one line of plain words, such as "Don\'t write em dashes."')
   if (level !== undefined && !isLevel(level)) fail('level is "error" or "warning".')
-  if (runs !== undefined && !isRuns(runs)) fail('runs is "always" or "manual".')
+  if (runs !== undefined && !isRuns(runs)) fail('runs is "always", "commit", or "manual".')
   return {
     id,
     source,

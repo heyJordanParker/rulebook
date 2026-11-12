@@ -6,17 +6,20 @@ import packageJson from '../package.json' with { type: 'json' }
 import { checkFile, displayPath, isCovered, isPrompt, lintProject } from './check.ts'
 import { loadSettings, projectRoot, type Settings } from './config.ts'
 import { filesBySettings, importedFiles, listedFiles, probeFiles, projectFiles } from './files.ts'
-import { answer, projectOf, type Question } from './questions.ts'
-import { textReport } from './report.ts'
+import { answer, checkToolCall, projectOf, type Question } from './questions.ts'
+import { checkCommit } from './commit.ts'
+import { commitReport, textReport } from './report.ts'
 import { loadRules, type LoadedRule } from './rules.ts'
 import { serve } from './serve.ts'
 
-const HELP = `rulebook ${packageJson.version}: lints Claude Code Prompts against static and agentic rules.
+const HELP = `rulebook ${packageJson.version}: checks any file, agent reply, and tool call against your rules and your project's linters.
 
 Usage:
-  rulebook [files...]           Check every Prompt and probe of this project, or only the files named, with every rule.
+  rulebook [files...]           Check every file a rule covers, every Prompt, and every probe of this project, or only the files named, with every rule.
   rulebook --static [files...]  Check with the static rules only.
   rulebook --json [files...]    Print the results as JSON.
+  rulebook commit               Check every staged file as the commit will record it, with every rule that runs always or on commit. Run it as the git pre-commit hook.
+  rulebook hook                 Check the tool call a Claude Code PreToolUse hook sends on stdin: an Edit, Write, or MultiEdit, or a call a message's tools match. An error refuses it.
   rulebook edit                 Check the Edit, Write, or MultiEdit call Claude Code sends on stdin, before it runs.
   rulebook text <@name>         Check the message on stdin, such as @reply, with every rule whose paths cover its @-name.
   rulebook rules                Print, for each folder that holds a rulebook.config.ts, each rule that is on there, with its description and the paths it covers, and each message with the tools that send it, as JSON.
@@ -37,7 +40,25 @@ async function main(argv: readonly string[]): Promise<number> {
   if (positionals[0] === 'edit') return asked('edit', JSON.parse(await Bun.stdin.text()))
   if (positionals[0] === 'text') return asked('text', { name: positionals[1] ?? '', text: await Bun.stdin.text(), cwd: process.cwd() })
   if (positionals[0] === 'rules') return asked('rules', { cwd: process.cwd() })
+  if (positionals[0] === 'commit') return commit(values.json === true)
+  if (positionals[0] === 'hook') return hook(JSON.parse(await Bun.stdin.text()))
   return check(positionals, values.static === true, values.json === true)
+}
+
+async function hook(input: unknown): Promise<number> {
+  const answer = await checkToolCall(input)
+  if (answer?.refuse !== undefined) {
+    await Bun.write(Bun.stderr, `${answer.refuse}\n`)
+    return 2
+  }
+  return answer?.note === undefined ? 0 : print(JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', additionalContext: answer.note } }))
+}
+
+async function commit(isJson: boolean): Promise<number> {
+  const { reports, failures } = await checkCommit(projectRoot(process.cwd(), process.cwd()))
+  const { text, isRefused } = commitReport(reports, failures)
+  await print(isJson ? JSON.stringify({ reports, failures }) : text)
+  return isRefused ? 1 : 0
 }
 
 async function asked(question: Question, input: unknown): Promise<number> {

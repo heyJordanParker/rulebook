@@ -183,7 +183,7 @@ test('an edited stylelint.config.mjs takes effect on the next request, though th
 
 test('a broken config fails the answer with its reason, and the fixed config answers on the next request', async () => {
   const config = write(join(project, 'rulebook.config.ts'), "export default { lint: true }\n")
-  expect(await ask('edit', written(join(project, 'Claude.md'), 'A fact.\n'))).toEqual({ status: 500, answer: `${config}: "lint" is not a rulebook config key. The keys are extends, plugins, paths, probes, timeout, existingErrors, rules, linters, messages.` })
+  expect(await ask('edit', written(join(project, 'Claude.md'), 'A fact.\n'))).toEqual({ status: 500, answer: `${config}: "lint" is not a rulebook config key. The keys are extends, plugins, paths, probes, timeout, existingErrors, rules, linters, programs, messages.` })
   write(config, 'export default {}\n')
   expect(await ask('edit', written(join(project, 'Claude.md'), 'A fact.\n'))).toEqual({ status: 200, answer: { failures: [], findings: [] } })
 })

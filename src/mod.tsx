@@ -124,7 +124,7 @@ export const rulebook = defineMod({
     everyAgent.beforeToolCall(
       async (call, { signal }) => {
         const message = (await listed()).messages.find(({ isSentBy }) => isSentBy(call.name))
-        return message === undefined ? undefined : relayed(await asked<EditAnswer>('text', { name: message.name, text: textsOf(call.input).join('\n\n'), cwd: call.cwd }, signal))
+        return message === undefined ? undefined : relayed(await asked<EditAnswer>('text', { name: message.name, input: call.input, cwd: call.cwd }, signal))
       },
       { timeoutMs: longestMs },
     )
@@ -191,13 +191,6 @@ function listedOf({ root, sources, folders, messages, failures }: Listing): List
 function anyOf(listed: readonly ListedRegExp[]): (text: string) => boolean {
   const regExps = listed.map(({ source, flags }) => new RegExp(source, flags))
   return (text) => regExps.some((regExp) => regExp.test(text))
-}
-
-function textsOf(value: unknown): readonly string[] {
-  if (typeof value === 'string') return [value]
-  if (Array.isArray(value)) return value.flatMap(textsOf)
-  if (typeof value === 'object' && value !== null) return Object.values(value).flatMap(textsOf)
-  return []
 }
 
 function displayPath(root: string, file: string): string {

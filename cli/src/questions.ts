@@ -3,12 +3,14 @@ import { checkFile, globRegExp } from './check.ts'
 import { CONFIG_FILE, globalConfigFile, isRecord, loadSettings, projectRoot } from './config.ts'
 import { checkEdit, editRoot, type ToolCall } from './edit.ts'
 import { listedFiles } from './files.ts'
-import { editAnswer } from './report.ts'
+import { editAnswer, type EditAnswer } from './report.ts'
 import { loadRules } from './rules.ts'
 
 export type Question = 'edit' | 'text' | 'rules'
 
-type Text = { readonly name: string; readonly text: string; readonly cwd: string }
+type Text = { readonly name: string; readonly text: string; readonly cwd: string; readonly input?: Readonly<Record<string, unknown>> }
+
+const EDIT_TOOLS = /^(Edit|Write|MultiEdit)$/
 
 type Answerer = {
   root(input: unknown): string
@@ -48,12 +50,21 @@ export function answer(question: Question, input: unknown, root: string): Promis
   return QUESTIONS[question].answer(input, root)
 }
 
-async function checkText({ name, text, cwd }: Text, root: string): Promise<unknown> {
+async function checkText({ name, text, cwd, input }: Text, root: string): Promise<EditAnswer> {
   const settings = await loadSettings(cwd, root)
   if (!name.startsWith('@')) throw new Error('rulebook text checks a message by its @-name, such as @reply or @inbox/<id>.md.')
   const { rules } = await loadRules(settings)
-  const report = await checkFile(settings, rules, name, text, { scope: 'edit', imported: async () => new Set() })
+  const report = await checkFile(settings, rules, name, text, { scope: 'edit', imported: async () => new Set(), ...(input === undefined ? {} : { input }) })
   return editAnswer(report)
+}
+
+export async function checkToolCall(input: unknown): Promise<EditAnswer | undefined> {
+  const call = toolCall(input)
+  if (EDIT_TOOLS.test(call.tool_name)) return checkEdit(call, editRoot(call))
+  const root = projectRoot(call.cwd, call.cwd)
+  const messages = Object.entries((await loadSettings(call.cwd, root)).messages)
+  const name = messages.find(([, { tools }]) => tools.some((glob) => globRegExp(glob).test(call.tool_name)))?.[0]
+  return name === undefined ? undefined : checkText({ name: `@${name}`, text: textsOf(call.tool_input).join('\n\n'), cwd: call.cwd, input: call.tool_input }, root)
 }
 
 async function listRules(cwd: string, root: string): Promise<unknown> {
@@ -88,8 +99,17 @@ function toolCall(input: unknown): ToolCall {
 }
 
 function textOf(input: unknown): Text {
-  if (!isRecord(input) || typeof input.name !== 'string' || typeof input.text !== 'string' || typeof input.cwd !== 'string') throw new Error('rulebook text reads {"name", "text", "cwd"}.')
+  if (!isRecord(input) || typeof input.name !== 'string' || typeof input.cwd !== 'string') throw new Error('rulebook text reads {"name", "text" or "input", "cwd"}.')
+  if (isRecord(input.input)) return { name: input.name, text: textsOf(input.input).join('\n\n'), cwd: input.cwd, input: input.input }
+  if (typeof input.text !== 'string') throw new Error('rulebook text reads {"name", "text" or "input", "cwd"}.')
   return { name: input.name, text: input.text, cwd: input.cwd }
+}
+
+function textsOf(value: unknown): readonly string[] {
+  if (typeof value === 'string') return [value]
+  if (Array.isArray(value)) return value.flatMap(textsOf)
+  if (isRecord(value)) return Object.values(value).flatMap(textsOf)
+  return []
 }
 
 function cwdOf(input: unknown): string {

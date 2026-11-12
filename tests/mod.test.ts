@@ -56,7 +56,10 @@ function serving(answers: Answers, options: Parameters<typeof testMod>[1] = {}):
 }
 
 function refusing(refusal: string) {
-  return ({ text }: Readonly<Record<string, string>>) => (text?.includes(EM_DASH) ? { refuse: `${refusal}\n\n  1  error  global/block-em-dashes  Split the sentence at the em dash.\n     > ${text.split('\n')[0]}`, failures: [], findings: [SPLIT] } : { failures: [], findings: [] })
+  return ({ text, input }: { readonly text?: string; readonly input?: { readonly title?: string } }) => {
+    const first = (text ?? input?.title ?? '').split('\n')[0] ?? ''
+    return first.includes(EM_DASH) ? { refuse: `${refusal}\n\n  1  error  global/block-em-dashes  Split the sentence at the em dash.\n     > ${first}`, failures: [], findings: [SPLIT] } : { failures: [], findings: [] }
+  }
 }
 
 function asked(tested: Tested, question?: string) {
@@ -192,7 +195,7 @@ test("a call to a tool a message's tools match is refused before it runs when it
   expect(await tested.raise.beforeToolCall({ name: 'mcp__inbox__propose', input: proposal })).toEqual({ refuse: `Inbox refused. Fix every error, then send it again.\n\n  1  error  global/block-em-dashes  Split the sentence at the em dash.\n     > Ship it ${EM_DASH} today.` })
   expect(await tested.raise.beforeToolCall({ name: 'mcp__notes__add', input: { text: `Ship it ${EM_DASH} today.` } })).toBeUndefined()
   expect(await tested.raise.beforeToolCall({ name: 'Read', input: { file_path: '/work/Claude.md' } })).toBeUndefined()
-  expect(asked(tested).map(({ url, input }) => ({ url, input }))).toEqual([{ url: 'http://localhost/text', input: { name: '@inbox', text: `Ship it ${EM_DASH} today.\n\nSlow checks\n\nCache the rules.`, cwd: '/work' } }])
+  expect(asked(tested).map(({ url, input }) => ({ url, input }))).toEqual([{ url: 'http://localhost/text', input: { name: '@inbox', input: proposal, cwd: '/work' } }])
 })
 
 test('a reply that breaks a rule is refused once with the refusal, and the turn ends after its rewrite', async () => {

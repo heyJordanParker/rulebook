@@ -2,7 +2,7 @@ import { existsSync, readFileSync, realpathSync, statSync } from 'node:fs'
 import { relative } from 'node:path'
 import { diffArrays } from 'diff'
 import picomatch from 'picomatch/posix'
-import type { Finding, Level, LinterName, PromptFile } from './api.ts'
+import type { Finding, Level, LinterName, CheckedFile } from './api.ts'
 import { runAgentic } from './agent.ts'
 import { importedFile, isClaudeMd, readClaudeMd } from './claude-md.ts'
 import { isInside, type Settings } from './config.ts'
@@ -11,7 +11,7 @@ import { coveringLinters, LINTERS, lintFolder, lintText, projectLinters, type Co
 import { seconds } from './lsp.ts'
 import type { LoadedRule, StaticRule } from './rules.ts'
 
-type Scope = 'edit' | 'all' | 'static'
+type Scope = 'edit' | 'commit' | 'all' | 'static'
 
 export type Reported = {
   readonly rule: string
@@ -34,6 +34,7 @@ type CheckOptions = {
   readonly scope: Scope
   readonly previous?: string | undefined
   readonly imported: () => Promise<ReadonlySet<string>>
+  readonly input?: Readonly<Record<string, unknown>>
 }
 
 const PIN = /^\s*<!--\s*rulebook-expect\s+(\S+)\s*-->\s*$/
@@ -83,14 +84,14 @@ export async function checkFile(settings: Settings, rules: readonly LoadedRule[]
   const isMemory = !isMessage && isClaudeMd(file)
   const imported = !isMessage && !(configured && isMemory) && existsSync(file) && (await options.imported()).has(realpathSync(file))
   const covered = rules.filter((rule) => inScope(rule, options.scope) && covers(rule, path, configured || imported))
-  const linted = !isMessage && !probe ? coveringLinters(settings.linters, file, text, settings.root) : []
+  const linted = !isMessage && !probe ? coveringLinters(settings.linters, settings.programs, file, text, settings.root) : []
   if (!configured && !imported && covered.length === 0 && linted.length === 0) return undefined
   const written = text.split('\n')
   const isDoc = imported || isMemory
   const mayPin = text.includes('rulebook-expect')
   const claudeMd = isDoc || probe || (mayPin && written.some((line) => PIN.test(line))) ? readClaudeMd(text) : undefined
   const memory = isDoc ? claudeMd : undefined
-  const prompt: PromptFile = memory === undefined ? { path, text, lines: written } : { path, text: memory.lines.join('\n'), lines: memory.lines }
+  const prompt: CheckedFile = { root: settings.root, path, ...(memory === undefined ? { text, lines: written } : { text: memory.lines.join('\n'), lines: memory.lines }), ...(options.input === undefined ? {} : { input: options.input }) }
   const doc = memory === undefined ? undefined : { file, imports: memory.imports }
   const pins = mayPin ? pinsOf(written, claudeMd?.lines ?? []) : []
   const pinned = new Set(pins.map(({ rule }) => rule))
@@ -133,7 +134,7 @@ export async function checkFile(settings: Settings, rules: readonly LoadedRule[]
 export async function lintProject(groups: ReadonlyMap<Settings, readonly string[]>, reports: readonly FileReport[], only?: readonly string[]): Promise<readonly FileReport[]> {
   const linters = new Map<string, { readonly linter: ProjectLinter; readonly settings: Settings; readonly timeout: number }>()
   for (const [settings, files] of groups) {
-    for (const linter of projectLinters(settings.linters, files, settings.root)) {
+    for (const linter of projectLinters(settings.linters, settings.programs, files, settings.root)) {
       const key = `${linter.name}\0${linter.config ?? ''}`
       const known = linters.get(key)
       linters.set(key, known === undefined ? { linter, settings, timeout: settings.timeout } : { ...known, linter: { ...known.linter, files: [...known.linter.files, ...linter.files] }, timeout: Math.max(known.timeout, settings.timeout) })
@@ -185,6 +186,7 @@ function covers(rule: LoadedRule, path: string, isPrompt: boolean): boolean {
 function inScope(rule: LoadedRule, scope: Scope): boolean {
   if (scope === 'all') return true
   if (scope === 'static') return rule.kind === 'static'
+  if (scope === 'commit') return rule.runs !== 'manual'
   return rule.runs === 'always'
 }
 
@@ -264,6 +266,8 @@ const SUPPRESSIONS: Readonly<Record<LinterName, RegExp>> = {
   ruff: /#\s*(?:(?:ruff|flake8):\s*)?noqa\b|#\s*ruff:\s*(?:ignore|disable|file-ignore)\[/i,
   selene: /--#?\s*selene:\s*allow\(/,
   shellcheck: /#\s*shellcheck\s.*\bdisable=/,
+  pint: /(?:\/\/|\*)\s*@php-cs-fixer-ignore\b/,
+  tsc: /(?:\/\/|\/\*)\s*@ts-(?:expect-error|ignore|nocheck)\b/,
 }
 
 export const noSuppressionsRule: StaticRule = {
@@ -296,7 +300,7 @@ function probeFindings(found: readonly Flag[], pins: readonly Pin[]): readonly F
   ]
 }
 
-function validFindings(rule: string, file: PromptFile, found: readonly Finding[]): readonly Finding[] {
+function validFindings(rule: string, file: CheckedFile, found: readonly Finding[]): readonly Finding[] {
   for (const finding of found) {
     if (!Number.isInteger(finding.line) || finding.line < 1 || finding.line > file.lines.length) throw new Error(`${rule} flagged line ${finding.line}, which ${file.path} does not have`)
     if (finding.message !== undefined && (typeof finding.message !== 'string' || finding.message.trim() === '')) throw new Error(`${rule} flagged line ${finding.line} with a blank message. Write the message, or leave it out to show the rule's description`)

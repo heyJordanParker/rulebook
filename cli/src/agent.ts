@@ -1,7 +1,7 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import type { Finding, PromptFile } from './api.ts'
+import type { Finding, CheckedFile } from './api.ts'
 import { isRecord } from './config.ts'
 import type { AgenticRule } from './rules.ts'
 
@@ -46,7 +46,7 @@ function sessionArguments(plugin: string): string[] {
   ]
 }
 
-function ruleSkill(rule: AgenticRule, file: PromptFile, changed: readonly number[] | undefined): string {
+function ruleSkill(rule: AgenticRule, file: CheckedFile, changed: readonly number[] | undefined): string {
   const list = (tools: string | readonly string[] | undefined): string[] => (tools === undefined ? [] : typeof tools === 'string' ? tools.split(/[\s,]+/).filter((tool) => tool !== '') : [...tools])
   const allowed = list(rule.allowedTools)
   const frontmatter = {
@@ -77,7 +77,7 @@ ${numbered}${edit}
 Answer only with a JSON object of the form {"findings": [{"line": <number>, "message": "<what the author changes>"}]}: one finding per line that breaks the rule. A line that follows the rule gets no finding, so never write a finding that says a line is fine. When every line follows the rule, answer {"findings": []}. Change no file.`
 }
 
-export async function runAgentic(rule: AgenticRule, file: PromptFile, root: string, changed: readonly number[] | undefined, deadline: AbortSignal): Promise<readonly Finding[]> {
+export async function runAgentic(rule: AgenticRule, file: CheckedFile, root: string, changed: readonly number[] | undefined, deadline: AbortSignal): Promise<readonly Finding[]> {
   const plugin = mkdtempSync(join(tmpdir(), 'rulebook-rule-'))
   try {
     mkdirSync(join(plugin, '.claude-plugin'))

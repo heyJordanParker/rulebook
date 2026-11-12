@@ -1,11 +1,13 @@
 export type Level = 'error' | 'warning'
 
-export type Runs = 'always' | 'manual'
+export type Runs = 'always' | 'commit' | 'manual'
 
-export type PromptFile = {
+export type CheckedFile = {
+  readonly root: string
   readonly path: string
   readonly text: string
   readonly lines: readonly string[]
+  readonly input?: Readonly<Record<string, unknown>>
 }
 
 export type Finding = {
@@ -18,7 +20,7 @@ export type Rule = {
   readonly level?: Level
   readonly runs?: Runs
   readonly paths?: readonly string[]
-  check(file: PromptFile): readonly Finding[] | Promise<readonly Finding[]>
+  check(file: CheckedFile): readonly Finding[] | Promise<readonly Finding[]>
 }
 
 export type RuleSettings = {
@@ -32,7 +34,7 @@ export type RuleSettings = {
   readonly threshold?: number
 }
 
-export type LinterName = 'mago' | 'oxlint' | 'biome' | 'stylelint' | 'ruff' | 'selene' | 'shellcheck'
+export type LinterName = 'mago' | 'oxlint' | 'biome' | 'stylelint' | 'ruff' | 'selene' | 'shellcheck' | 'pint' | 'tsc'
 
 export type Config = {
   readonly extends?: readonly (string | Config)[]
@@ -43,6 +45,7 @@ export type Config = {
   readonly existingErrors?: Level
   readonly rules?: Readonly<Record<string, Level | 'off' | RuleSettings>>
   readonly linters?: readonly LinterName[]
+  readonly programs?: Readonly<Partial<Record<LinterName, readonly string[]>>>
   readonly messages?: Readonly<Record<string, { readonly tools?: readonly string[]; readonly folder?: string }>>
 }
 

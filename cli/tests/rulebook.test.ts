@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test } from 'bun:test'
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 
@@ -138,10 +138,10 @@ test('a MultiEdit is checked as the file reads after every replacement', () => {
 
 test("a project config turns a global rule off or changes its level, and adds the project's own rules", () => {
   write(join(project, 'rulebook.config.ts'), `import { defineConfig } from '@cmodjs/rulebook'
-export default defineConfig({ plugins: { app: './tools/rulebook/rules' }, rules: { 'global/block-em-dashes': 'warning', 'global/block-hedging': 'off' } })
+export default defineConfig({ plugins: { app: './rules' }, rules: { 'global/block-em-dashes': 'warning', 'global/block-hedging': 'off' } })
 `)
   const dash = String.fromCharCode(0x2014)
-  write(join(project, 'tools', 'rulebook', 'rules', 'block-npm-run.ts'), `export default { description: 'Run just, never npm run.', check: ({ lines }) => lines.flatMap((text, index) => (text.includes('npm run') ? [{ line: index + 1, message: 'Run just.' }] : [])) }\n`)
+  write(join(project, 'rules','block-npm-run.ts'), `export default { description: 'Run just, never npm run.', check: ({ lines }) => lines.flatMap((text, index) => (text.includes('npm run') ? [{ line: index + 1, message: 'Run just.' }] : [])) }\n`)
   const answer = edit('Write', { file_path: join(project, 'Claude.md'), content: `Run it ${dash} probably.\nRun npm run migrate.\n` })
   expect(answer.refuse).toBe(`Edit to Claude.md refused. Fix every error, then edit again.\n\n  2  error  app/block-npm-run  Run just.\n     > Run npm run migrate.\n\nWarnings:\n  1  warning  global/block-em-dashes  Split the sentence at the em dash.\n     > Run it ${dash} probably.`)
 })
@@ -181,8 +181,8 @@ test("a project with no config of its own, under a folder that holds one, uses t
 
 test("extends: ['../rulebook.config.ts'] merges the global config, then each extends entry, then the config's own keys, so a later rules setting turns an inherited rule to 'warning'", () => {
   const dash = String.fromCharCode(0x2014)
-  write(join(project, 'rulebook.config.ts'), `export default { plugins: { app: './tools/rulebook/rules' }, rules: { 'global/block-em-dashes': 'off', 'global/block-hedging': 'error' } }\n`)
-  write(join(project, 'tools', 'rulebook', 'rules', 'block-npm-run.ts'), `export default { description: 'Run just, never npm run.', check: ({ lines }) => lines.flatMap((text, index) => (text.includes('npm run') ? [{ line: index + 1, message: 'Run just.' }] : [])) }\n`)
+  write(join(project, 'rulebook.config.ts'), `export default { plugins: { app: './rules' }, rules: { 'global/block-em-dashes': 'off', 'global/block-hedging': 'error' } }\n`)
+  write(join(project, 'rules','block-npm-run.ts'), `export default { description: 'Run just, never npm run.', check: ({ lines }) => lines.flatMap((text, index) => (text.includes('npm run') ? [{ line: index + 1, message: 'Run just.' }] : [])) }\n`)
   write(join(project, 'a', 'rulebook.config.ts'), `export default { extends: ['../rulebook.config.ts'], rules: { 'global/block-em-dashes': 'warning' } }\n`)
   const answer = edit('Write', { file_path: join(project, 'a', 'Claude.md'), content: `Run it ${dash} probably.\nRun npm run migrate.\n` })
   expect(answer.findings).toEqual([
@@ -420,11 +420,11 @@ test('a rule of any kind without a description checks nothing, every other rule 
 
 test("a project's rule that fails to load leaves the global rules checking that project, and a config setting for it is no error", () => {
   const dash = String.fromCharCode(0x2014)
-  write(join(project, 'rulebook.config.ts'), `export default { plugins: { app: './tools/rulebook/rules' }, rules: { 'app/require-module-doc-shape': 'warning' } }\n`)
-  const rule = write(join(project, 'tools', 'rulebook', 'rules', 'require-module-doc-shape.ts'), `export default { check: () => [] }\n`)
+  write(join(project, 'rulebook.config.ts'), `export default { plugins: { app: './rules' }, rules: { 'app/require-readme-sections': 'warning' } }\n`)
+  const rule = write(join(project, 'rules','require-readme-sections.ts'), `export default { check: () => [] }\n`)
   const listing = rulebook(['rules'])
   expect(listing.stderr).toBe('')
-  expect((JSON.parse(listing.stdout) as { failures: string[] }).failures).toEqual([`${rule}: a rule needs a description: the Rule in one line of plain words, such as "Don't write em dashes." The rule app/require-module-doc-shape checks nothing until it loads.`])
+  expect((JSON.parse(listing.stdout) as { failures: string[] }).failures).toEqual([`${rule}: a rule needs a description: the Rule in one line of plain words, such as "Don't write em dashes." The rule app/require-readme-sections checks nothing until it loads.`])
   expect(edit('Write', { file_path: join(project, 'Claude.md'), content: `Run it ${dash} now.\n` }).refuse).toBe(`Edit to Claude.md refused. Fix every error, then edit again.\n\n  1  error  global/block-em-dashes  Split the sentence at the em dash.\n     > Run it ${dash} now.`)
 })
 
@@ -760,6 +760,272 @@ test('a later rules setting merges over an earlier one key by key, and a level w
   expect(levels("{ runs: 'manual' }", "'warning'")).toEqual([])
   expect(levels("'warning'", "{ paths: ['**/Claude.md'] }")).toEqual(['warning'])
   expect(levels("'off'", "{ paths: ['**/Claude.md'] }")).toEqual([])
+})
+
+function git(...args: readonly string[]): void {
+  const run = Bun.spawnSync(['git', '-c', 'user.name=Test', '-c', 'user.email=test@example.com', '-c', 'commit.gpgsign=false', ...args], { cwd: project, env: { ...process.env, HOME: home } })
+  expect(run.stderr.toString()).toBe('')
+}
+
+test('rulebook commit checks each staged file of any kind as the commit records it, and refuses an error only on a line the commit wrote', () => {
+  const dash = String.fromCharCode(0x2014)
+  write(join(home, 'config', 'rulebook', 'rules', 'block-console-log.yml'), "description: Don't log to the console.\nlanguage: typescript\npaths: ['**/*.ts']\nrule:\n  pattern: console.log($$$ARGS)\n")
+  write(join(project, 'Claude.md'), `# Facts\n\nOld ${dash} line.\n`)
+  git('add', 'Claude.md')
+  git('commit', '-q', '-m', 'first')
+  write(join(project, 'Claude.md'), `# Facts\n\nOld ${dash} line.\nNew ${dash} line.\n`)
+  write(join(project, 'src', 'app.ts'), 'const a = 1\nconsole.log(a)\n')
+  git('add', 'Claude.md', 'src/app.ts')
+  write(join(project, 'Claude.md'), `# Facts\n\nOld ${dash} line.\nNew ${dash} line.\nUnstaged ${dash} line.\n`)
+  expect(rulebook(['commit'])).toEqual({
+    code: 1,
+    stdout: [
+      'Commit refused. Fix every error, stage the fix, then commit again.',
+      `Claude.md\n  4  error  global/block-em-dashes  Split the sentence at the em dash.\n     > New ${dash} line.`,
+      "src/app.ts\n  2  error  global/block-console-log  Don't log to the console.\n     > console.log(a)",
+      '2 errors, 0 warnings in 2 files',
+      '1 finding in these files was there before this commit. `rulebook Claude.md` lists it.',
+    ].join('\n\n') + '\n',
+    stderr: '',
+  })
+  write(join(project, 'Claude.md'), `# Facts\n\nOld ${dash} line.\nNew line.\n`)
+  write(join(project, 'src', 'app.ts'), 'const a = 1\n')
+  git('add', 'Claude.md', 'src/app.ts')
+  expect(rulebook(['commit'])).toEqual({ code: 0, stdout: '0 errors, 0 warnings in 2 files\n\n1 finding in these files was there before this commit. `rulebook Claude.md` lists it.\n', stderr: '' })
+})
+
+test('a rule that runs on commit checks a commit and never an edit, and a manual rule checks neither', () => {
+  const rule = (name: string, runs: string, word: string) => write(join(home, 'config', 'rulebook', 'rules', `${name}.ts`), `export default { description: "Don't leave ${word}.", runs: '${runs}', check: ({ lines }) => lines.flatMap((text, index) => (text.includes('${word}') ? [{ line: index + 1 }] : [])) }\n`)
+  rule('block-todo', 'commit', 'TODO')
+  rule('block-fixme', 'manual', 'FIXME')
+  expect(edit('Write', { file_path: join(project, 'Claude.md'), content: 'TODO here.\nFIXME here.\n' })).toEqual(NOTHING)
+  write(join(project, 'Claude.md'), 'TODO here.\nFIXME here.\n')
+  git('add', 'Claude.md')
+  expect(rulebook(['commit']).stdout).toBe("Commit refused. Fix every error, stage the fix, then commit again.\n\nClaude.md\n  1  error  global/block-todo  Don't leave TODO.\n     > TODO here.\n\n1 error, 0 warnings in 1 file\n")
+  expect(rulebook(['--static']).stdout).toContain('2  error  global/block-fixme')
+})
+
+test("rulebook commit refuses a type error the commit causes in a caller it never staged, with the project's own TypeScript", () => {
+  write(join(project, '.gitignore'), 'node_modules\n')
+  symlinkSync(join(import.meta.dir, '..', 'node_modules'), join(project, 'node_modules'))
+  write(join(project, 'rulebook.config.ts'), "export default { linters: ['tsc'] }\n")
+  write(join(project, 'tsconfig.json'), '{ "compilerOptions": { "strict": true }, "include": ["src"] }\n')
+  write(join(project, 'src', 'price.ts'), 'export function price(): number {\n  return 1\n}\n')
+  write(join(project, 'src', 'checkout.ts'), "import { price } from './price'\n\nexport const total: number = price()\n")
+  git('add', '-A')
+  git('commit', '-q', '-m', 'first')
+  write(join(project, 'src', 'price.ts'), "export function price(): string {\n  return '1'\n}\n")
+  git('add', 'src/price.ts')
+  expect(rulebook(['commit'])).toEqual({
+    code: 1,
+    stdout: [
+      'Commit refused. Fix every error, stage the fix, then commit again.',
+      "src/checkout.ts\n  3  error  tsc/TS2322  Type 'string' is not assignable to type 'number'.\n     > export const total: number = price()",
+      '1 error, 0 warnings in 2 files',
+    ].join('\n\n') + '\n',
+    stderr: '',
+  })
+}, 30_000)
+
+function importingProject(): void {
+  write(join(project, 'rulebook.config.ts'), "export default { linters: ['oxlint'] }\n")
+  write(join(project, '.oxlintrc.json'), '{ "plugins": ["import"], "rules": { "import/named": "error" } }\n')
+  write(join(project, 'src', 'lib.js'), 'export const total = 1\nexport const count = 2\n')
+  write(join(project, 'src', 'app.js'), "import { count, total } from './lib.js'\n\nexport const sum = count + total\n")
+  git('add', '-A')
+  git('commit', '-q', '-m', 'first')
+}
+
+const TOTAL_REFUSED = {
+  code: 1,
+  stdout: [
+    'Commit refused. Fix every error, stage the fix, then commit again.',
+    'src/app.js\n  1  error  oxlint/import/named  named import "total" not found help: Does "./lib.js" have the export "total"?\n     > import { count, total } from \'./lib.js\'',
+    '1 error, 0 warnings in 2 files',
+  ].join('\n\n') + '\n',
+  stderr: '',
+}
+
+test('rulebook commit refuses an error the commit adds to a file it never staged, and not one HEAD already had', () => {
+  importingProject()
+  write(join(project, 'src', 'app.js'), "import { count, total } from './lib.js'\nimport { missing } from './lib.js'\n\nexport const sum = count + total + missing\n")
+  git('add', 'src/app.js')
+  git('commit', '-q', '-m', 'an error HEAD keeps')
+  write(join(project, 'src', 'lib.js'), 'export const count = 2\n')
+  git('add', 'src/lib.js')
+  expect(rulebook(['commit'])).toEqual(TOTAL_REFUSED)
+  write(join(project, 'src', 'lib.js'), 'export const total = 1\nexport const count = 3\n')
+  git('add', 'src/lib.js')
+  expect(rulebook(['commit'])).toEqual({ code: 0, stdout: '0 errors, 0 warnings in 1 file\n', stderr: '' })
+})
+
+test("rulebook commit lints the commit's tree, never the working tree", () => {
+  importingProject()
+  write(join(project, 'src', 'lib.js'), 'export const total = 1\nexport const count = 3\n')
+  git('add', 'src/lib.js')
+  write(join(project, 'src', 'lib.js'), 'export const count = 3\n')
+  expect(rulebook(['commit'])).toEqual({ code: 0, stdout: '0 errors, 0 warnings in 1 file\n', stderr: '' })
+  git('add', 'src/lib.js')
+  write(join(project, 'src', 'app.js'), "import { count } from './lib.js'\n\nexport const sum = count\n")
+  expect(rulebook(['commit'])).toEqual(TOTAL_REFUSED)
+})
+
+function magoProject(): string {
+  write(join(project, '.gitignore'), 'vendor\nlib/framework\n')
+  write(join(project, 'rulebook.config.ts'), "export default { linters: ['mago'] }\n")
+  write(join(project, 'mago.toml'), '[source]\npaths = ["src"]\nincludes = ["vendor", "lib/framework"]\n\n[analyzer]\nminimum-fail-level = "Warning"\n')
+  write(join(project, 'lib', 'framework', 'functions.php'), '<?php\n\nfunction framework_version(): string\n{\n    return "";\n}\n')
+  write(join(project, 'src', 'Total.php'), '<?php\n\necho 1;\n')
+  const log = join(home, 'mago.log')
+  const mago = write(join(project, 'vendor', 'bin', 'mago'), `#!${process.execPath}
+import { appendFileSync, existsSync, readFileSync } from 'node:fs'
+appendFileSync(${JSON.stringify(log)}, process.argv[2] + '\\n')
+if (existsSync('broken')) {
+  console.error('mago crashed')
+  process.exit(2)
+}
+const text = process.argv.includes('--stdin-input') ? readFileSync(0, 'utf8') : readFileSync('src/Total.php', 'utf8')
+const missing = (name) => name === 'undefined_call' || (name === 'framework_version' && !existsSync('lib/framework/functions.php'))
+const issues = process.argv[2] !== 'analyze' ? [] : text.split('\\n').flatMap((line, index) => [...line.matchAll(/(\\w+)\\(\\);/g)].filter(([, name]) => missing(name)).map(([, name]) => ({ level: 'Warning', code: 'non-existent-function', message: \`Function \\\`\${name}\\\` could not be found.\`, annotations: [{ kind: 'Primary', span: { file_id: { name: 'src/Total.php', size: text.length, file_type: 'Host' }, start: { line: index } } }] })))
+console.log(JSON.stringify({ issues }))
+process.exit(issues.length === 0 ? 0 : 1)
+`)
+  chmodSync(mago, 0o755)
+  git('add', '-A')
+  git('commit', '-q', '-m', 'first')
+  return log
+}
+
+test("mago lints a write and analyzes only a commit, reads each finding's file by the name Mago gives it, refuses each issue at its minimum-fail-level, and analyzes the commit with the folders mago.toml includes", () => {
+  const log = magoProject()
+  expect(edit('Write', { file_path: join(project, 'src', 'Total.php'), content: '<?php\n\nundefined_call();\n' })).toEqual(NOTHING)
+  expect(readFileSync(log, 'utf8')).toBe('lint\n')
+  write(join(project, 'src', 'Total.php'), '<?php\n\necho framework_version();\n')
+  git('add', 'src/Total.php')
+  expect(rulebook(['commit'])).toEqual({ code: 0, stdout: '0 errors, 0 warnings in 1 file\n', stderr: '' })
+  write(join(project, 'src', 'Total.php'), '<?php\n\necho framework_version();\nundefined_call();\n')
+  git('add', 'src/Total.php')
+  expect(rulebook(['commit'])).toEqual({
+    code: 1,
+    stdout: [
+      'Commit refused. Fix every error, stage the fix, then commit again.',
+      'src/Total.php\n  4  error  mago/non-existent-function  Function `undefined_call` could not be found.\n     > undefined_call();',
+      '1 error, 0 warnings in 1 file',
+    ].join('\n\n') + '\n',
+    stderr: '',
+  })
+})
+
+test('mago covers the file extensions mago.toml lists in source.extensions, and .php when it lists none', () => {
+  const log = magoProject()
+  expect(edit('Write', { file_path: join(project, 'src', 'Ledger.phtml'), content: 'class Ledger {}\n' })).toEqual(NOTHING)
+  expect(existsSync(log)).toBe(false)
+  write(join(project, 'mago.toml'), '[source]\npaths = ["src"]\nextensions = ["php", "phtml"]\n')
+  expect(edit('Write', { file_path: join(project, 'src', 'Ledger.phtml'), content: 'class Ledger {}\n' })).toEqual(NOTHING)
+  expect(readFileSync(log, 'utf8')).toBe('lint\n')
+})
+
+test('a mago.toml that does not parse leaves every other rule checking', () => {
+  magoProject()
+  write(join(project, 'mago.toml'), '[source\n')
+  expect(edit('Write', { file_path: join(project, 'Claude.md'), content: `Run it ${String.fromCharCode(0x2014)} now.\n` }).refuse).toContain('global/block-em-dashes')
+})
+
+test("programs runs a linter through the project's own command, in the linter's folder, on a write and in a commit's tree", () => {
+  const log = magoProject()
+  const wrapper = write(join(project, 'scripts', 'mago'), `#!/bin/sh\necho wrapped >> ${JSON.stringify(log)}\nexec vendor/bin/mago "$@"\n`)
+  chmodSync(wrapper, 0o755)
+  write(join(project, 'rulebook.config.ts'), "export default { linters: ['mago'], programs: { mago: ['scripts/mago'] } }\n")
+  git('add', '-A')
+  git('commit', '-q', '-m', 'wrap mago')
+  expect(edit('Write', { file_path: join(project, 'src', 'Total.php'), content: '<?php\n\necho 2;\n' })).toEqual(NOTHING)
+  expect(readFileSync(log, 'utf8')).toBe('wrapped\nlint\n')
+})
+
+test("rulebook commit runs a linter when the commit changes only the linter's config or a baseline it names", () => {
+  const log = magoProject()
+  write(join(project, 'mago.toml'), '[source]\npaths = ["src"]\n\n[analyzer]\nbaseline = "mago-baseline.toml"\n')
+  write(join(project, 'mago-baseline.toml'), '')
+  git('add', '-A')
+  git('commit', '-q', '-m', 'baseline')
+  writeFileSync(log, '')
+  write(join(project, 'mago-baseline.toml'), '# no entries\n')
+  git('add', 'mago-baseline.toml')
+  expect(rulebook(['commit']).code).toBe(0)
+  expect(readFileSync(log, 'utf8').split('\n').filter((line) => line !== '').sort()).toEqual(['analyze', 'lint'])
+})
+
+test("rulebook hook refuses a Claude Code tool call a message's rule flags, and a rule reads the call's input field by field", () => {
+  write(join(project, 'rulebook.config.ts'), "export default { plugins: { app: './rules' }, messages: { bash: { tools: ['Bash'] } } }\n")
+  write(join(project, 'rules', 'block-npx.ts'), "export default { description: 'Run the project scripts, never npx.', paths: ['@bash'], check: ({ input, lines }) => (String(input?.command ?? '').startsWith('npx ') ? [{ line: lines.indexOf(String(input?.command)) + 1 }] : []) }\n")
+  const hook = (input: Record<string, unknown>) => {
+    const run = Bun.spawnSync([process.execPath, MAIN, 'hook'], { cwd: project, stdin: new Blob([JSON.stringify({ hook_event_name: 'PreToolUse', tool_name: 'Bash', tool_input: input, cwd: project })]), env: { ...process.env, HOME: home, XDG_CONFIG_HOME: join(home, 'config') } })
+    return { code: run.exitCode, stdout: run.stdout.toString(), stderr: run.stderr.toString() }
+  }
+  expect(hook({ command: 'npx tsc', description: 'Type-check' })).toEqual({ code: 2, stdout: '', stderr: 'Bash refused. Fix every error, then send it again.\n\n  1  error  app/block-npx  Run the project scripts, never npx.\n     > npx tsc\n' })
+  expect(hook({ command: 'bun run check', description: 'npx would be slower' })).toEqual({ code: 0, stdout: '', stderr: '' })
+})
+
+test('rulebook hook refuses an Edit a rule flags and answers a warning as context for the agent', () => {
+  const dash = String.fromCharCode(0x2014)
+  write(join(project, 'rulebook.config.ts'), "export default { rules: { 'global/block-em-dashes': 'warning' } }\n")
+  const run = Bun.spawnSync([process.execPath, MAIN, 'hook'], { cwd: project, stdin: new Blob([JSON.stringify({ hook_event_name: 'PreToolUse', tool_name: 'Write', tool_input: { file_path: join(project, 'Claude.md'), content: `Run it ${dash} now.\n` }, cwd: project })]), env: { ...process.env, HOME: home, XDG_CONFIG_HOME: join(home, 'config') } })
+  expect(run.exitCode).toBe(0)
+  expect(JSON.parse(run.stdout.toString())).toEqual({ hookSpecificOutput: { hookEventName: 'PreToolUse', additionalContext: expect.stringContaining('1  warning  global/block-em-dashes') } })
+})
+
+test('a script rule reads the project root, so it can read any project file', () => {
+  write(join(project, 'rulebook.config.ts'), "export default { plugins: { app: './rules' } }\n")
+  write(join(project, 'rules', 'require-changelog.ts'), "import { existsSync } from 'node:fs'\nimport { join } from 'node:path'\nexport default { description: 'Keep a CHANGELOG.md beside the code.', paths: ['src/**'], check: ({ root }) => (existsSync(join(root, 'CHANGELOG.md')) ? [] : [{ line: 1 }]) }\n")
+  expect(edit('Write', { file_path: join(project, 'src', 'app.ts'), content: 'export const a = 1\n' }).refuse).toContain('1  error  app/require-changelog  Keep a CHANGELOG.md beside the code.')
+  write(join(project, 'CHANGELOG.md'), '# Changelog\n')
+  expect(edit('Write', { file_path: join(project, 'src', 'app.ts'), content: 'export const a = 1\n' })).toEqual(NOTHING)
+})
+
+test("rulebook commit shows each error of a linter that failed on HEAD's tree as a warning, and names the failure", () => {
+  magoProject()
+  write(join(project, 'broken'), '')
+  git('add', 'broken')
+  git('commit', '-q', '-m', 'mago fails here')
+  git('rm', '-q', 'broken')
+  write(join(project, 'src', 'Total.php'), '<?php\n\nundefined_call();\n')
+  git('add', 'src/Total.php')
+  expect(rulebook(['commit'])).toEqual({
+    code: 0,
+    stdout: [
+      'src/Total.php\n  3  warning  mago/non-existent-function  Function `undefined_call` could not be found.\n     > undefined_call();',
+      'mago did not run on HEAD:mago.toml: it exited 2: mago crashed',
+      '0 errors, 1 warning in 2 files',
+    ].join('\n\n') + '\n',
+    stderr: '',
+  })
+})
+
+test('rulebook commit checks a renamed file against its text at its old path, so its old errors never refuse the rename', () => {
+  const dash = String.fromCharCode(0x2014)
+  write(join(project, 'a', 'Claude.md'), `Old ${dash} line.\n`)
+  git('add', '-A')
+  git('commit', '-q', '-m', 'first')
+  git('mv', 'a', 'b')
+  expect(rulebook(['commit'])).toEqual({ code: 0, stdout: '0 errors, 0 warnings in 1 file\n\n1 finding in these files was there before this commit. `rulebook b/Claude.md` lists it.\n', stderr: '' })
+})
+
+test('a rule with no paths, in a project whose configs list no paths, is named as checking no file', () => {
+  write(join(home, 'config', 'rulebook', 'rulebook.config.ts'), 'export default {}\n')
+  write(join(project, 'rulebook.config.ts'), "export default { plugins: { app: './rules' } }\n")
+  write(join(project, 'rules', 'block-todo.ts'), "export default { description: \"Don't leave TODO.\", check: () => [] }\n")
+  expect(rulebook(['--static']).stdout).toBe("The rule app/block-todo has no paths, and no config lists paths, so it checks no file. Give the rule paths, such as paths: ['**/*.ts'].\n\n0 errors, 0 warnings in 0 files\n")
+})
+
+test("existingErrors: 'error' refuses a commit for an error a staged file already had", () => {
+  const dash = String.fromCharCode(0x2014)
+  write(join(project, 'rulebook.config.ts'), "export default { existingErrors: 'error' }\n")
+  write(join(project, 'Claude.md'), `Old ${dash} line.\n`)
+  git('add', '-A')
+  git('commit', '-q', '-m', 'first')
+  write(join(project, 'Claude.md'), `Old ${dash} line.\nNew line.\n`)
+  git('add', 'Claude.md')
+  expect(rulebook(['commit'])).toMatchObject({ code: 1, stdout: expect.stringContaining('1  error  global/block-em-dashes') })
 })
 
 test('a script rule with a key rulebook does not read fails to load and names the key', () => {

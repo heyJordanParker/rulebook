@@ -17,7 +17,7 @@ function findingLines(findings: readonly Reported[]): string {
 }
 
 function failureLines(report: FileReport): readonly string[] {
-  return report.failures.map(({ rule, reason }) => `${rule} did not run on ${report.path}: ${reason}`)
+  return report.failures.map(({ rule, reason }) => `${rule} did not run${report.path === '.' ? '' : ` on ${report.path}`}: ${reason}`)
 }
 
 export function editAnswer(report: FileReport | undefined): EditAnswer {
@@ -58,6 +58,17 @@ function subject(path: string): string {
   if (!path.startsWith('@')) return `Edit to ${path}`
   const [name = ''] = path.slice(1).split('/')
   return `${name.charAt(0).toUpperCase()}${name.slice(1)}`
+}
+
+export function commitReport(reports: readonly FileReport[], unloaded: readonly string[]): { readonly text: string; readonly isRefused: boolean } {
+  const isHidden = ({ isExisting, level }: Reported): boolean => isExisting && level !== 'error'
+  const written = reports.map((report) => ({ ...report, findings: report.findings.filter((finding) => !isHidden(finding)) }))
+  const isRefused = written.some(({ findings }) => findings.some(({ level }) => level === 'error'))
+  const existing = reports.flatMap(({ path, findings }) => (findings.some(isHidden) ? [path] : []))
+  const count = reports.flatMap(({ findings }) => findings.filter(isHidden)).length
+  const before = count === 0 ? [] : [`${count} ${count === 1 ? 'finding' : 'findings'} in these files ${count === 1 ? 'was' : 'were'} there before this commit. \`rulebook ${existing.join(' ')}\` lists ${count === 1 ? 'it' : 'them'}.`]
+  const body = textReport(written, unloaded)
+  return { isRefused, text: [...(isRefused ? ['Commit refused. Fix every error, stage the fix, then commit again.'] : []), body, ...before].join('\n\n') }
 }
 
 export function textReport(reports: readonly FileReport[], unloaded: readonly string[]): string {

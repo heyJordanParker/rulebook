@@ -2,6 +2,36 @@
 
 What changed in each version of rulebook, for the people who use it. cmod publish releases the section for the version, and Settings shows it.
 
+## [0.4.0]
+
+### Added
+- `rulebook commit` checks every commit as the git pre-commit hook. It reads each staged file from the staging area, checks it against its committed text the way an edit is checked, and refuses the commit only for an error on a line the commit wrote, so another agent's unstaged work and errors already in a file never refuse it.
+- The project's linters check the whole commit: each listed linter that covers a staged or deleted file runs over a copy of the commit's tree and of `HEAD`'s tree, and the commit is refused for each error it adds, such as a type error in a caller the commit never touched.
+- `runs: commit` runs a rule on every commit and every full run, never on an edit, for a check too slow for every write.
+- `linters: ['pint']` runs Laravel Pint on every PHP write without touching the project folder, and names each fixer Pint would apply.
+- `linters: ['tsc']` type-checks the whole project with `tsc -b --noEmit` on every commit and full run.
+- A script rule's `check` receives `root`, the project root's absolute path, so it can read other project files, ask git about uncommitted work, or run a program, as a git hook can.
+- Biome checks what `biome check` checks: formatting, as `biome/format` on the first line Biome would change, and assists such as `biome/assist/source/organizeImports`, beside its lint rules. Biome's config turns each one off.
+- `programs` names the command that runs a linter, such as `{ mago: ['bun', 'scripts/mago.ts'] }`, so a project's own wrapper can set the linter's arguments and environment, or build what it reads first.
+- `rulebook hook` checks the tool calls of every Claude Code session in a project from its `.claude/settings.json`, with no cmod: it refuses an Edit, Write, MultiEdit, or message tool call a rule's error flags.
+- A script rule gets a tool call's fields one by one as `input`, such as a Bash call's `command`.
+- `rulebook commit` runs a linter when the commit changes only its config or a baseline its config names.
+- Mago covers the extensions `mago.toml` lists in `source.extensions`, such as `.phtml`, as well as `.php`.
+- oxlint reads `oxlint.config.ts`, `oxlint.config.mts`, and `.oxlintrc.jsonc` as well as `.oxlintrc.json`.
+
+### Changed
+- rulebook checks any file a rule covers, code as much as docs. A script rule's `check` now receives a `CheckedFile`, the type `PromptFile` was.
+- `mago analyze` runs only over the whole project, on a commit and a full run, as `tsc` does. A PHP write runs `mago lint` alone, so it no longer waits on a whole-program analysis, which took 37 to 105 s on one write in a large project.
+
+- A rule with no `paths`, in a project whose configs list no `paths`, is named as a rule that checks no file in `rulebook rules`, a full run, and a commit, instead of checking nothing silently.
+- A whole-project linter failure reads `tsc did not run: ...`, without `on .`.
+- The README opens with a project setup for code rules, linters, and the commit hook, kept in a `.githooks` folder the repository holds.
+
+### Fixed
+- `existingErrors: 'error'` refuses a commit for an error a staged file already had, as it refuses an edit.
+- A Mago issue at or above the `minimum-fail-level` of `mago.toml`'s `[linter]` or `[analyzer]` is an error, so rulebook refuses what `mago` itself fails on. Every Mago level below `error` was a warning before.
+- A project with Mago extensions gets Mago's findings. rulebook read each finding's file from a field extension findings leave out, so every such run failed with "mago did not run".
+
 ## [0.3.0]
 
 ### Added

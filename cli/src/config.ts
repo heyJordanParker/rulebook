@@ -30,10 +30,11 @@ export type Settings = {
   readonly existingErrors: Level
   readonly rules: Readonly<Record<string, RuleSettings>>
   readonly linters: readonly LinterName[]
+  readonly programs: Readonly<Partial<Record<LinterName, readonly string[]>>>
   readonly messages: Readonly<Record<string, MessageSource>>
 }
 
-const KEYS = new Set(['extends', 'plugins', 'paths', 'probes', 'timeout', 'existingErrors', 'rules', 'linters', 'messages'])
+const KEYS = new Set(['extends', 'plugins', 'paths', 'probes', 'timeout', 'existingErrors', 'rules', 'linters', 'programs', 'messages'])
 const RULE_KEYS = new Set(['level', 'runs', 'paths', 'timeout', 'agent', 'model', 'effort', 'threshold'])
 const MESSAGE_KEYS = new Set(['tools', 'folder'])
 const BUILT_IN: Pick<LoadedConfig, 'file' | 'plugins' | 'messages'> = { file: 'rulebook', plugins: {}, messages: { reply: { tools: [], folder: undefined } } }
@@ -111,6 +112,7 @@ async function settingsOf(root: string, file: string | undefined): Promise<Setti
     existingErrors: latest.find(({ existingErrors }) => existingErrors !== undefined)?.existingErrors ?? 'warning',
     rules: overrides(configs.map(({ loaded, config }) => rootRelativeRules(loaded.basePath, config.rules ?? {}))),
     linters: [...new Set(configs.flatMap(({ config }) => config.linters ?? []))],
+    programs: Object.assign({}, ...configs.map(({ config }) => config.programs ?? {})),
     messages: Object.assign({}, ...sources.map(({ messages }) => messages)),
   }
 }
@@ -183,6 +185,11 @@ function validConfig(file: string, value: unknown): Config {
   for (const [id, override] of Object.entries(isRecord(value.rules) ? value.rules : {})) validOverride(file, id, override)
   if (value.linters !== undefined && !isStrings(value.linters)) fail(`linters is a list of the linters to run, such as ['oxlint', 'biome']. The linters are ${Object.keys(LINTERS).join(', ')}.`)
   for (const name of isStrings(value.linters) ? value.linters : []) if (!Object.hasOwn(LINTERS, name)) fail(`linters names "${name}", which is not a linter rulebook runs. The linters are ${Object.keys(LINTERS).join(', ')}.`)
+  if (value.programs !== undefined && !isRecord(value.programs)) fail("programs maps each linter to the command that runs it, such as { mago: ['bun', 'scripts/mago.ts'] }.")
+  for (const [name, command] of Object.entries(isRecord(value.programs) ? value.programs : {})) {
+    if (!Object.hasOwn(LINTERS, name)) fail(`programs names "${name}", which is not a linter rulebook runs. The linters are ${Object.keys(LINTERS).join(', ')}.`)
+    if (!isStrings(command) || command.length === 0) fail(`programs["${name}"] is the command that runs ${name}, a list of words such as ['bun', 'scripts/${name}.ts'].`)
+  }
   if (value.messages !== undefined && !isRecord(value.messages)) fail('messages maps each message name, such as "inbox", to the tools and the folder its text comes from.')
   for (const [name, message] of Object.entries(isRecord(value.messages) ? value.messages : {})) validMessage(file, name, message)
   return value as Config
@@ -207,7 +214,7 @@ function validOverride(file: string, id: string, override: unknown): void {
   if (!isRecord(override)) return fail('is "error", "warning", "off", or an object of rule settings.')
   for (const key of Object.keys(override)) if (!RULE_KEYS.has(key)) fail(`sets "${key}", which no rule has. A rule's settings are ${[...RULE_KEYS].join(', ')}.`)
   if (override.level !== undefined && override.level !== 'off' && !isLevel(override.level)) fail('level is "error", "warning", or "off".')
-  if (override.runs !== undefined && !isRuns(override.runs)) fail('runs is "always" or "manual".')
+  if (override.runs !== undefined && !isRuns(override.runs)) fail('runs is "always", "commit", or "manual".')
   if (override.paths !== undefined && !isStrings(override.paths)) fail('paths is a list of globs.')
   if (override.timeout !== undefined && !isTimeout(override.timeout)) fail('timeout is a whole number of milliseconds above 0.')
   if (override.threshold !== undefined && !isThreshold(override.threshold)) fail('threshold is a probability above 0 and at most 1.')
@@ -236,7 +243,7 @@ export function isLevel(value: unknown): value is Level {
 }
 
 export function isRuns(value: unknown): value is Runs {
-  return value === 'always' || value === 'manual'
+  return value === 'always' || value === 'commit' || value === 'manual'
 }
 
 export function isTimeout(value: unknown): value is number {

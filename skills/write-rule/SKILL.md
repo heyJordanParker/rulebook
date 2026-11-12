@@ -1,11 +1,11 @@
 ---
 name: write-rule
-description: Write or change a rulebook rule, the lint that checks Claude Code Prompts such as Claude.md, rules, Skills, and agent files. TRIGGER when asked to add, change, or test a rulebook rule, or to edit a rulebook.config.ts. DO NOT TRIGGER to fix a Prompt that a rulebook rule flagged; fix the Prompt.
+description: Write or change a rulebook rule, a check rulebook runs on any file, agent reply, or tool call it covers, on every agent write and every commit. TRIGGER when asked to add, change, or test a rulebook rule, or to edit a rulebook.config.ts. DO NOT TRIGGER to fix a Prompt that a rulebook rule flagged; fix the Prompt.
 ---
 
 # Write a rulebook rule
 
-rulebook checks every Prompt an Agent edits, and every other file or message a rule's `paths` cover. An error refuses the edit, and a warning lets it land with a note. `rulebook` in a terminal, or `/rulebook` in a session, checks every Prompt of the project with every rule.
+rulebook checks every file and message a rule's `paths` cover, on every Agent write and every commit. An error refuses the write or the commit, and a warning lets it land with a note. `rulebook` in a terminal, or `/rulebook` in a session, checks every file of the project a rule covers, with every rule and the project's linters.
 
 ## 1. Find the config that holds the rule
 
@@ -15,8 +15,8 @@ rulebook checks every Prompt an Agent edits, and every other file or message a r
 - rulebook turns on no rule by itself. `extends: [recommended]` turns on `rulebook/imports`. `rules: { 'rulebook/no-suppressions': 'error' }` turns on the rule that flags a comment that suppresses a linter's rule, such as `// oxlint-disable-next-line` or `# noqa`. A Claude Code plugin's rules apply only when a config extends the plugin's `rulebook.config.ts`.
 - `messages` tells rulebook where to find a message by itself: `tools` checks each matching tool call as `@<name>`, and `folder` makes a full run check each file under that folder as `@<name>/<path>`. A rule covers any `@` name without it.
 - `plugins` names each rule folder. A rule is one file at any depth of that folder, and its name is `<plugin>/<path in the folder, without the extension>`: with `plugins: { global: './rules' }`, `rules/writing/block-em-dashes.ts` is `global/writing/block-em-dashes`.
-- `paths` lists the files that count as Prompts, relative to the config's folder, and `probes` the probe files. The global config's `paths` are relative to the project root.
-- `linters` lists the linters rulebook runs on every write, such as `['mago', 'oxlint']`, from `mago`, `oxlint`, `biome`, `stylelint`, `ruff`, `selene`, and `shellcheck`. A linter no config lists never runs.
+- `paths` lists the Prompts, the files every rule without its own `paths` checks, relative to the config's folder, and `probes` the probe files. The global config's `paths` are relative to the project root.
+- `linters` lists the linters rulebook runs on every write, such as `['mago', 'oxlint']`, from `mago`, `pint`, `oxlint`, `biome`, `stylelint`, `tsc`, `ruff`, `selene`, and `shellcheck`. `tsc` and `mago analyze` run only over the whole project, on a commit and a full run. A linter no config lists never runs.
 
 IF you move or rename a rule:
 ### Rename it in every config setting and probe pin
@@ -46,7 +46,7 @@ IF the project's own linter can express the check:
 rulebook runs each linter a config's `linters` lists on every write with the project's config, and reports its findings as `<linter>/<rule>`, such as `mago/no-direct-db-query`. List the linter in the project's `rulebook.config.ts` when no config lists it yet. The linter's config stays the one place its rules live.
 
 ### Cover what the rule checks with `paths`
-A rule without `paths` checks every Prompt. `paths` takes globs for any file, relative to the folder of the config whose `plugins` names the rule's folder, or to the project root for the global config, and messages named with `@`: `@reply` is the main Agent's final reply, and any other `@` path covers the message a mod checks by that name, such as `@inbox/**` for each inbox item. A glob that starts with `@` matches only a message, so `**` covers every file and no message.
+A rule without `paths` checks every Prompt, so a rule for code names its files. `paths` takes globs for any file, relative to the folder of the config whose `plugins` names the rule's folder, or to the project root for the global config, and messages named with `@`: `@reply` is the main Agent's final reply, and any other `@` path covers the message a mod checks by that name, such as `@inbox/**` for each inbox item. A glob that starts with `@` matches only a message, so `**` covers every file and no message.
 Example: `paths: ['**', '@reply', '@inbox/**']`
 
 ## 4. Write a pattern rule when the code's shape decides
@@ -76,7 +76,7 @@ rule:
 
 ## 5. Write a script rule when a program decides
 
-A script rule returns each line it flags. A finding without a `message` shows the rule's description.
+A script rule returns each line it flags. A finding without a `message` shows the rule's description. `check` receives `root`, the project root's absolute path, `path`, the file's path from that root or its `@` name, `text`, and `lines`, so a rule can read other project files, ask git, or run a program. A rule on a tool call's message also gets the call's fields as `input`, such as a Bash call's `command`.
 
 ```ts
 import { defineRule } from '@cmodjs/rulebook'
@@ -131,7 +131,7 @@ A line breaks the rule when it describes code with a metaphor or an idiom, such 
 A pattern or script rule sets these keys at its top level, and an agentic rule sets them under `metadata`:
 
 - `level` is `error`, the default, or `warning`.
-- `runs` is `always`, the default, or `manual`. A manual rule never runs on an edit, only when someone runs `rulebook` or `/rulebook`.
+- `runs` is `always`, the default, `commit`, or `manual`. A commit rule never runs on an edit, only on a commit's `rulebook commit` and when someone runs `rulebook` or `/rulebook`. A manual rule runs only when someone runs `rulebook` or `/rulebook`.
 
 ### Give an agentic rule the time it needs with `metadata.timeout`
 `timeout` is the milliseconds an agentic rule may take, the config's `timeout` by default, which is 30 000 unless the config sets it. Only an agentic rule has one, because the deadline stops only agentic sessions. rulebook refuses a `timeout` on a pattern or script rule.
@@ -139,8 +139,8 @@ A pattern or script rule sets these keys at its top level, and an agentic rule s
 The agentic rules of one file share one deadline, the longest `timeout` among them. Every agentic rule of a run starts at once, and the deadline starts with them. A rule still running at the deadline stops, and the edit lands with a note that names it.
 
 IF an agentic rule takes longer than an edit can wait:
-### Make it manual, and give it the timeout it needs
-Measure one run on the largest Prompt it covers, and set `timeout` well past that.
+### Run it on commit, or make it manual, and give it the timeout it needs
+Measure one run on the largest file it covers, and set `timeout` well past that. Use `runs: commit` when a commit can wait that long, and `runs: manual` when it cannot.
 
 ## 8. Write a probe for the rule
 
