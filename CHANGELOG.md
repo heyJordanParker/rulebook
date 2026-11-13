@@ -2,6 +2,20 @@
 
 What changed in each version of rulebook, for the people who use it. cmod publish releases the section for the version, and Settings shows it.
 
+## [0.5.0]
+
+### Changed
+- rulebook's commands and flags are Biome's, so `rulebook check` works the way `biome check` does. Change each call:
+  - `rulebook [files...]` is `rulebook check [files...]`.
+  - `rulebook commit` is `rulebook check --staged`, so a pre-commit hook runs `exec rulebook check --staged`.
+  - `rulebook text <@name>` is `rulebook check --stdin-file-path=<@name>`. It prints the refusal or the note an agent reads and exits 1 on a refusal, and a path that names a file checks stdin as the text that file will hold.
+  - `--json` is `--reporter=json`. A full, staged, and stdin check each print `{ reports, failures }`.
+  - `--static` is `--skip=agentic`. `--skip` also skips a rule, every rule of a plugin or rule folder, or a linter, and repeats.
+  - `rulebook rules` is `rulebook inspect rules`.
+  - `rulebook hook` is `rulebook claude-hook`, so change the command in `.claude/settings.json`.
+- `rulebook edit` is gone. `rulebook claude-hook` checks the same Edit, Write, and MultiEdit calls.
+- The mod starts its server as `rulebook __run_server`, which the help leaves out, as Biome leaves out its own.
+
 ## [0.4.0]
 
 ### Added

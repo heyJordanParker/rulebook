@@ -1,6 +1,6 @@
 {
   "name": "rulebook",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Checks every file, reply, tool call, and commit against your rules and linters before it lands, and an error refuses it.",
   "author": {
     "name": "Jordan Parker",

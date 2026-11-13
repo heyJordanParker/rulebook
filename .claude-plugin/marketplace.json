@@ -3,15 +3,15 @@
   "owner": {
     "name": "heyJordanParker"
   },
-  "description": "Checks every file, reply, and tool call a Claude Code agent writes against your rules and linters before it lands, and an error refuses it.",
+  "description": "Checks every file, reply, tool call, and commit against your rules and linters before it lands, and an error refuses it.",
   "plugins": [
     {
       "name": "rulebook",
-      "description": "Checks every file, reply, and tool call a Claude Code agent writes against your rules and linters before it lands, and an error refuses it.",
+      "description": "Checks every file, reply, tool call, and commit against your rules and linters before it lands, and an error refuses it.",
       "source": {
         "source": "archive",
-        "url": "https://github.com/heyJordanParker/rulebook/releases/download/v0.3.0/rulebook-0.3.0.zip",
-        "sha256": "c221aebed64f2b60efd4fd9b70f773575d8071989609c85d5201ffe9ca84f0c1"
+        "url": "https://github.com/heyJordanParker/rulebook/releases/download/v0.4.0/rulebook-0.4.0.zip",
+        "sha256": "0024af9ddb8168d2f76a83d4ef435340bd4721befc8402fdeb71deca635fd66f"
       }
     },
     {

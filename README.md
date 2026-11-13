@@ -1,6 +1,6 @@
 # rulebook
 
-rulebook checks your files against your rules: any file a rule covers, code and docs alike, every CLAUDE.md, rule, Skill, and agent file, and every agent message a rule covers. A rule is an ast-grep pattern in any of 13 languages, a TypeScript check, or a check an agent runs, and rulebook runs your project's own linters beside them. When any agent writes a file with Edit, Write, or MultiEdit, rulebook checks it as the write will leave it. An error refuses the edit, and the agent reads why, with the line it wrote. A warning lets the edit land, and the agent reads it beside the result. As the git pre-commit hook, `rulebook commit` checks every commit, by an agent or a person, with the project's rules and linters and the committer's global config.
+rulebook checks your files against your rules: any file a rule covers, code and docs alike, every CLAUDE.md, rule, Skill, and agent file, and every agent message a rule covers. A rule is an ast-grep pattern in any of 13 languages, a TypeScript check, or a check an agent runs, and rulebook runs your project's own linters beside them. When any agent writes a file with Edit, Write, or MultiEdit, rulebook checks it as the write will leave it. An error refuses the edit, and the agent reads why, with the line it wrote. A warning lets the edit land, and the agent reads it beside the result. As the git pre-commit hook, `rulebook check --staged` checks every commit, by an agent or a person, with the project's rules and linters and the committer's global config.
 
 rulebook checks what agents send you the same way. Before the main agent ends its turn, rulebook checks its final reply as `@reply`. An error keeps the agent from stopping once per turn, and the agent writes the whole reply again. A rewrite that still breaks a rule ends the turn, and its findings show as a warning toast. A subagent's answer is never checked. Before any agent calls a tool that a config's `messages` `tools` match, such as an inbox tool, rulebook checks the text of every field the call sends, and an error refuses the call before it runs. A script rule also gets the call's fields one by one as `input`, such as a Bash call's `command`.
 
@@ -52,11 +52,11 @@ rule:
   pattern: console.log($$$ARGS)
 ```
 
-Run `rulebook` in the project to check every file a rule covers. In a Claude Code session, the agent reads "Don't log to the console." before it writes a file under `src/`, and a write that adds a `console.log` is refused. To check every commit too, commit this as `.githooks/pre-commit`:
+Run `rulebook check` in the project to check every file a rule covers. In a Claude Code session, the agent reads "Don't log to the console." before it writes a file under `src/`, and a write that adds a `console.log` is refused. To check every commit too, commit this as `.githooks/pre-commit`:
 
 ```sh
 #!/bin/sh
-exec rulebook commit
+exec rulebook check --staged
 ```
 
 Then make it run, once per clone:
@@ -134,7 +134,7 @@ export default defineConfig({
 | `paths` | The Prompts: the files every rule without its own `paths` checks, relative to the config's folder. The global config's paths, and those of a config outside the project, are relative to the project root. Every file a Claude.md or `.claude/rules/` file among them imports, four hops deep, counts too. |
 | `probes` | The probe files, relative to the config. |
 | `timeout` | How long an agentic rule or a linter run may take, in milliseconds, unless the rule sets its own. 30 000 by default. |
-| `existingErrors` | `warning`, the default, lets an edit through an error that was already in the file. `error` blocks it too. Either way, an edit's answer lists only the findings on lines the edit wrote, and counts the rest in one line that names the `rulebook <file>` command that lists them. An edit that adds and removes more than 1,000 lines in all counts every line as written, because finding the lines it wrote took 18 s for a rewrite of a 10,000-line file. |
+| `existingErrors` | `warning`, the default, lets an edit through an error that was already in the file. `error` blocks it too. Either way, an edit's answer lists only the findings on lines the edit wrote, and counts the rest in one line that names the `rulebook check <file>` command that lists them. An edit that adds and removes more than 1,000 lines in all counts every line as written, because finding the lines it wrote took 18 s for a rewrite of a 10,000-line file. |
 | `rules` | A level, `"off"`, or the settings of any rule: `level`, `runs`, `paths`, and for an agentic rule `timeout`, `agent`, `model`, `effort`. `model: 'jev'` runs the rule on Jev, and `threshold` sets the probability a line needs to pass on Jev. |
 | `linters` | The linters to run on every write, every commit, and every full run, such as `['mago', 'oxlint']`. A linter no config lists never runs. |
 | `programs` | The command that runs a linter in place of the program rulebook finds, such as `{ mago: ['bun', 'scripts/mago.ts'] }`. It runs in the linter's folder, and rulebook adds its usual arguments, so a project's own wrapper can set the linter's arguments and environment, or build what the linter reads first. |
@@ -144,7 +144,7 @@ export default defineConfig({
 
 A rule is one file in a rule folder, at any depth. Its path in the folder is its name: with `plugins: { global: './rules' }`, `rules/writing/block-em-dashes.ts` is `global/writing/block-em-dashes`, so moving a rule renames it. Every rule has a `description`, the Rule in one line of plain words, and rulebook refuses to load a rule without one.
 
-A rule's `paths` decide what it checks. A path is a glob for any file, or a message named with `@`. A file glob is relative to the folder of the config that declares it: the config whose `plugins` names the rule's folder, or the config whose `rules` setting gives the rule new `paths`. The global config's rule paths, and those of a config outside the project, are relative to the project root. `@reply` is the agent's final reply. Any other `@` path covers the message a mod checks by that name, such as `@inbox/**` for each item the inbox checks with `rulebook text @inbox/<id>.md`, so a rule covers a mod's messages without any config naming the mod. A glob that starts with `@` matches only a message, and any other glob only a file, so `**` covers every file and no message. A rule without `paths` checks every Prompt, and when no config lists `paths`, a full run, a commit, and `rulebook rules` name it as a rule that checks no file.
+A rule's `paths` decide what it checks. A path is a glob for any file, or a message named with `@`. A file glob is relative to the folder of the config that declares it: the config whose `plugins` names the rule's folder, or the config whose `rules` setting gives the rule new `paths`. The global config's rule paths, and those of a config outside the project, are relative to the project root. `@reply` is the agent's final reply. Any other `@` path covers the message a mod checks by that name, such as `@inbox/**` for each item the inbox checks with `rulebook check --stdin-file-path=@inbox/<id>.md`, so a rule covers a mod's messages without any config naming the mod. A glob that starts with `@` matches only a message, and any other glob only a file, so `**` covers every file and no message. A rule without `paths` checks every Prompt, and when no config lists `paths`, a full run, a commit, and `rulebook inspect rules` name it as a rule that checks no file.
 
 ```ts
 paths: ['**', '@reply', '@inbox', '@inbox/**']
@@ -217,7 +217,7 @@ Without it, the rule does not run, and the write lands with a note that names th
 
 `runs` decides when a rule runs. `commit` is for a check too slow for every write, and `manual` for a check that takes minutes:
 
-| `runs` | Every write | Every commit | `rulebook` |
+| `runs` | Every write | Every commit | `rulebook check` |
 | --- | --- | --- | --- |
 | `always`, the default | yes | yes | yes |
 | `commit` | no | yes | yes |
@@ -283,11 +283,11 @@ It checks every file with an extension a linter covers, and every file with no e
 
 ## Check every commit
 
-`rulebook commit` checks every file a commit stages, as the commit will record it, with every rule that runs `always` or on `commit`. It reads each file from the staging area, so another agent's unstaged work never decides the result. It refuses the commit only for a rule's error on a line the commit wrote, and counts the findings that were already in those files. A renamed file is checked against its text at its old path. Make it the project's pre-commit hook in a folder the repository holds, so every clone gets it:
+`rulebook check --staged` checks every file a commit stages, as the commit will record it, with every rule that runs `always` or on `commit`. It reads each file from the staging area, so another agent's unstaged work never decides the result. It refuses the commit only for a rule's error on a line the commit wrote, and counts the findings that were already in those files. A renamed file is checked against its text at its old path. Make it the project's pre-commit hook in a folder the repository holds, so every clone gets it:
 
 ```sh
 #!/bin/sh
-exec rulebook commit
+exec rulebook check --staged
 ```
 
 ```sh
@@ -295,9 +295,9 @@ chmod +x .githooks/pre-commit
 git config core.hooksPath .githooks
 ```
 
-Git skips a hook that is not executable, and `core.hooksPath` is set once per clone. A project that installs `@cmodjs/rulebook` as a dev dependency runs `exec node_modules/.bin/rulebook commit`, so a teammate without cmod commits with the same version.
+Git skips a hook that is not executable, and `core.hooksPath` is set once per clone. A project that installs `@cmodjs/rulebook` as a dev dependency runs `exec node_modules/.bin/rulebook check --staged`, so a teammate without cmod commits with the same version.
 
-The project's linters check the whole commit, because a change can also break a file the commit never touched, such as a caller whose type no longer fits. So when a listed linter covers a file the commit stages or deletes, or the commit changes the linter's config or a baseline its config names, `rulebook commit` runs that linter over the whole project, on a copy of the tree the commit makes. When that copy has an error, it runs the linter again on a copy of `HEAD`'s tree, and refuses the commit for each error the commit's tree has and `HEAD`'s tree does not, matched by file, rule, and message, so an error the project already had never refuses it. It lists those errors with the rest, under their file:
+The project's linters check the whole commit, because a change can also break a file the commit never touched, such as a caller whose type no longer fits. So when a listed linter covers a file the commit stages or deletes, or the commit changes the linter's config or a baseline its config names, `rulebook check --staged` runs that linter over the whole project, on a copy of the tree the commit makes. When that copy has an error, it runs the linter again on a copy of `HEAD`'s tree, and refuses the commit for each error the commit's tree has and `HEAD`'s tree does not, matched by file, rule, and message, so an error the project already had never refuses it. It lists those errors with the rest, under their file:
 
 ```text
 Commit refused. Fix every error, stage the fix, then commit again.
@@ -332,11 +332,11 @@ Rules for docs/CLAUDE.md:
 - Don't state a Fact the code contradicts.
 ```
 
-An agent reads each description once, until its context compacts. The mod loads the rules once per session with the `rules` answer of `rulebook serve`, which lists the rules of each folder that holds a `rulebook.config.ts`, and again at the session's next check after a rulebook config or rule file it lists changes, so a session that sits idle asks nothing. The mod shows each file the rules of its nearest folder in that list, and the session start shows the rules of the session's own folder.
+An agent reads each description once, until its context compacts. The mod loads the rules once per session with the `rules` answer of the rulebook server, which lists the rules of each folder that holds a `rulebook.config.ts`, and again at the session's next check after a rulebook config or rule file it lists changes, so a session that sits idle asks nothing. The mod shows each file the rules of its nearest folder in that list, and the session start shows the rules of the session's own folder.
 
 ## Prove a rule with a probe
 
-A probe holds lines the rule must flag, each under a pin, and lines it must leave alone. rulebook fails on a pin that stops firing and on a flag with no pin. It skips each pin of a rule the run leaves out, such as a `runs: manual` rule's pin in an edit or a `--static` run, and fails a pin that names no rule. A pin works only in a probe.
+A probe holds lines the rule must flag, each under a pin, and lines it must leave alone. rulebook fails on a pin that stops firing and on a flag with no pin. It skips each pin of a rule the run leaves out, such as a `runs: manual` rule's pin in an edit or a rule a `--skip` names, and fails a pin that names no rule. A pin works only in a probe.
 
 ```md
 <!-- rulebook-expect global/block-em-dashes -->
@@ -347,22 +347,24 @@ Run the tests. They take a minute.
 
 ## Run it
 
+rulebook's commands and flags are Biome's, so `rulebook check` works the way `biome check` does:
+
 ```text
-rulebook [files...]           Check every file a rule covers, every Prompt, and every probe of this project, or only the files named, with every rule.
-rulebook --static [files...]  Check with the static rules only.
-rulebook --json [files...]    Print the results as JSON.
-rulebook commit               Check every staged file as the commit will record it, with every rule that runs always or on commit. Run it as the git pre-commit hook.
-rulebook edit                 Check the Edit, Write, or MultiEdit call Claude Code sends on stdin, before it runs.
-rulebook text <@name>         Check the message on stdin, such as @reply, with every rule whose paths cover its @-name.
-rulebook rules                Print, for each folder that holds a rulebook.config.ts, each rule that is on there, with its description and the paths it covers, and each message with the tools that send it, as JSON.
-rulebook serve                Answer edit, text, and rules as POST /edit, /text, and /rules on a Unix socket, keeping each project's configs and rules loaded, and print unix:<socket path> first.
+rulebook check [files...]                Check every file a rule covers, every Prompt, and every probe of this project, or only the files named, with every rule and linter.
+rulebook check --staged                  Check what the next commit records, with every rule that runs always or on commit. Run it as the git pre-commit hook.
+rulebook check --stdin-file-path=<path>  Check stdin as the text of the file or message at <path>, such as @reply, with every rule that runs always.
+rulebook check --reporter=json           Print the results as JSON.
+rulebook check --skip=<name>             Skip a rule, every rule of a plugin or folder, a linter, or every agentic rule, such as --skip=agentic. Repeat it to skip more.
+rulebook inspect rules                   Print, for each folder that holds a rulebook.config.ts, each rule that is on there, with its description and the paths it covers, and each message with the tools that send it, as JSON.
+rulebook claude-hook                     Check the tool call a Claude Code PreToolUse hook sends on stdin: an Edit, Write, or MultiEdit, or a call a message's tools match. An error refuses it.
+rulebook --version                       Print the version.
 ```
 
 A full run also checks every file a rule's `paths` cover, and every file in each message `folder`, by its @-name. It skips a file that holds a NUL byte in its first 8000 bytes, as git does for a binary file.
 
 A full run also runs each listed linter once over its project, in the linter's own whole-project mode, from the outermost folder that holds its config, and once from the project root with the linter's own defaults for the files no config folder holds, and lists its findings with the rest. So a full run gives each file the findings an edit gives it. Named files list only their own linter findings.
 
-`rulebook text @reply` answers `{ refuse?, note?, failures, findings }` on stdout, as `rulebook edit` does. A refusal names the message it refused, such as `Reply refused.` or, for `@inbox/<id>.md`, `Inbox refused.`, and quotes each line it flags.
+`rulebook check --stdin-file-path=@reply` checks the text on stdin as the agent's reply, and `--stdin-file-path=src/app.ts` checks it as the text that file will hold, with the rules and linters an edit runs. It prints what an agent reads: a refusal, which exits 1, or a note with the warnings, and nothing when nothing is flagged. A refusal names what it refused, such as `Reply refused.` or, for `@inbox/<id>.md`, `Inbox refused.`, and quotes each line it flags. With `--reporter=json`, every check prints `{ reports, failures }`: each checked file's `path`, `findings`, and the `failures` of rules and linters that did not run, and the rule files that did not load.
 
 `/rulebook` in a session runs the same check and lists the results in the Sidebar.
 
@@ -371,18 +373,18 @@ A full run also runs each listed linter once over its project, in the linter's o
 The rulebook mod checks every session on a computer with cmod. A project can also check every clone's Claude Code sessions with a hook its `.claude/settings.json` holds:
 
 ```json
-{ "hooks": { "PreToolUse": [{ "hooks": [{ "type": "command", "command": "rulebook hook" }] }] } }
+{ "hooks": { "PreToolUse": [{ "hooks": [{ "type": "command", "command": "rulebook claude-hook" }] }] } }
 ```
 
-`rulebook hook` reads the tool call Claude Code sends, checks an Edit, Write, or MultiEdit as the write will leave the file, and checks any call a message's `tools` match as that message. An error exits 2 with the refusal, which refuses the call, and a warning reaches the agent as context. It starts a fresh `rulebook` for each call, so each check pays a cold start the mod's server does not.
+`rulebook claude-hook` reads the tool call Claude Code sends, checks an Edit, Write, or MultiEdit as the write will leave the file, and checks any call a message's `tools` match as that message. An error exits 2 with the refusal, which refuses the call, and a warning reaches the agent as context. It starts a fresh `rulebook` for each call, so each check pays a cold start the mod's server does not.
 
 ## One server checks every session
 
-The mod starts one `rulebook serve` for the whole computer, and every session's checks go to it. It keeps each project's configs, rules, ast-grep parsers, and Stylelint loaded in that project's own worker, so a check skips the load a fresh `rulebook` pays. A changed config or rule file, or a new config on the way up from the file, replaces that project's worker before the next check, so an edit to a rule applies to the next write. So does a plugin folder or `extends` file that a config names, once it appears or changes, so a config that failed because one was missing or did not parse answers as soon as it is fixed.
+The mod starts one rulebook server for the whole computer, and every session's checks go to it. It keeps each project's configs, rules, ast-grep parsers, and Stylelint loaded in that project's own worker, so a check skips the load a fresh `rulebook` pays. A changed config or rule file, or a new config on the way up from the file, replaces that project's worker before the next check, so an edit to a rule applies to the next write. So does a plugin folder or `extends` file that a config names, once it appears or changes, so a config that failed because one was missing or did not parse answers as soon as it is fixed.
 
 The worker also keeps the set of files the project's Claude.md files import, so an edit to an existing file skips the walk over every file of the project. A changed, new, or deleted Claude.md, rules link, or import that the walk read replaces the worker too, and so does a Claude.md or rules file a checked write creates, once the write lands, so the next check walks again. A Claude.md created outside any checked write, such as by `git checkout`, counts at the next worker replacement. So does an approval of imports from outside the project in `~/.claude.json`, because Claude Code writes that file so often that watching it would replace the worker before nearly every check.
 
-These are the medians of 20 checks, a fresh `rulebook edit` process against the server, measured while other sessions held the computer's 1-minute load average at 31 to 33, and at 19 for the edits to an existing file:
+These are the medians of 20 checks, a fresh `rulebook` process against the server, measured while other sessions held the computer's 1-minute load average at 31 to 33, and at 19 for the edits to an existing file:
 
 | Check | Fresh process | Server |
 | --- | --- | --- |
@@ -393,10 +395,10 @@ These are the medians of 20 checks, a fresh `rulebook edit` process against the 
 | An edit to an existing file, 485-file repository | 52.9 ms | 0.6 ms |
 | An edit to an existing file, 29,618-file repository | 628.3 ms | 0.5 ms |
 
-Biome, oxlint, Mago, Pint, ruff, selene, shellcheck, and each agentic rule's Claude Code session still start per write, because none of them lints pending text in process with the findings its own command line gives. A server that is down, or a config that fails to load, fails each check with an error toast and lets the write through, so a broken setup never blocks an agent's work. A rule file that fails to load is skipped, and every other rule keeps checking. Its failure shows as one warning toast, in the first session that loads the rules after the rule broke, whatever number of sessions and projects you run, and shows again only once a load found it fixed and it broke again. A rule or linter that did not run on a write tells the agent in the write's note, and goes to the Log in cmod's Settings as a warning. The `rulebook` command keeps working on its own, for full runs and CI.
+Biome, oxlint, Mago, Pint, ruff, selene, shellcheck, and each agentic rule's Claude Code session still start per write, because none of them lints pending text in process with the findings its own command line gives. A server that is down, or a config that fails to load, fails each check with an error toast and lets the write through, so a broken setup never blocks an agent's work. A rule file that fails to load is skipped, and every other rule keeps checking. Its failure shows as one warning toast, in the first session that loads the rules after the rule broke, whatever number of sessions and projects you run, and shows again only once a load found it fixed and it broke again. A rule or linter that did not run on a write tells the agent in the write's note, and goes to the Log in cmod's Settings as a warning. `rulebook check` keeps working on its own, for full runs and CI.
 
 ## What runs and what leaves your machine
 
 A config and a `.ts` rule are code, and rulebook runs them, the way ESLint runs its configs. A session in a project loads that project's `rulebook.config.ts` files and their rules, so open a cloned repository only when you trust its configs.
 
-rulebook sends nothing anywhere by itself. The mod talks to `rulebook serve` over a Unix socket on your computer, and the program starts only `git`, the linters your configs list, and `claude`. Agentic rules are the exception. A Claude Code rule runs `claude -p` with your own Claude Code account, and that session reads the checked file and sends it to Anthropic, as any Claude Code session does. A Jev rule sends the rule and the checked file to TypeSafe's API with your TypeSafe API key.
+rulebook sends nothing anywhere by itself. The mod talks to the rulebook server over a Unix socket on your computer, and the program starts only `git`, the linters your configs list, and `claude`. Agentic rules are the exception. A Claude Code rule runs `claude -p` with your own Claude Code account, and that session reads the checked file and sends it to Anthropic, as any Claude Code session does. A Jev rule sends the rule and the checked file to TypeSafe's API with your TypeSafe API key.
