@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync,
 import { constants, tmpdir } from 'node:os'
 import { basename, dirname, join, relative } from 'node:path'
 import type { LinterName } from './api.ts'
-import { checkFile, lintProject, type FileReport, type Reported } from './check.ts'
+import { checkFile, isSkipped, lintProject, type FileReport, type Reported } from './check.ts'
 import { isInside, loadSettings } from './config.ts'
 import { filesBySettings, loadImportedFiles } from './files.ts'
 import { isLinterInput, LINTERS, projectLinters } from './linters.ts'
@@ -13,7 +13,7 @@ export type CommitReport = { readonly reports: readonly FileReport[]; readonly f
 const DEPENDENCIES = new Set(Object.values(LINTERS).flatMap(({ copies }) => copies.map((copy) => copy.split('/')[0] ?? copy)))
 const SIGNALS = ['SIGINT', 'SIGTERM', 'SIGHUP'] as const
 
-export async function checkCommit(root: string): Promise<CommitReport> {
+export async function checkStaged(root: string, skip: readonly string[]): Promise<CommitReport> {
   const unloaded = new Set<string>()
   const staged = await gitPaths(root, ['diff', '--cached', '--name-only', '-z', '--diff-filter=ACMR'])
   const deleted = await gitPaths(root, ['diff', '--cached', '--name-only', '-z', '--no-renames', '--diff-filter=D'])
@@ -25,10 +25,10 @@ export async function checkCommit(root: string): Promise<CommitReport> {
     const settings = await loadSettings(dirname(file), root)
     const { rules, failures } = await loadRules(settings)
     for (const failure of failures) unloaded.add(failure)
-    return checkFile(settings, rules, file, text, { scope: 'commit', previous: await committed(root, renamed.get(path) ?? path), imported: () => loadImportedFiles(root) })
+    return checkFile(settings, rules, file, text, { scope: 'commit', previous: await committed(root, renamed.get(path) ?? path), imported: () => loadImportedFiles(root), skip })
   }))
   const reports = checked.filter((report) => report !== undefined)
-  const linters = new Set((await Promise.all([...staged, ...deleted].map((path) => lintersCovering(root, path)))).flat())
+  const linters = new Set((await Promise.all([...staged, ...deleted].map((path) => lintersCovering(root, path)))).flat().filter((name) => !isSkipped(skip, name)))
   return { reports: linters.size === 0 ? reports : withAddedErrors(reports, await addedErrors(root, linters, renamed)), failures: [...unloaded] }
 }
 

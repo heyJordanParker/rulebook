@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, realpathSync, rmSync, 
 import { dirname, join } from 'node:path'
 
 const MAIN = join(import.meta.dir, '..', 'src', 'main.ts')
+const ASK = join(import.meta.dir, 'ask.ts')
 const OWN_OXLINT = join(import.meta.dir, '..', 'node_modules', 'oxlint', 'bin', 'oxlint')
 const OWN_TSC = join(import.meta.dir, '..', 'node_modules', 'typescript', 'lib', 'tsc.js')
 const NO_LINTERS_PATH = '/usr/bin:/bin'
@@ -31,8 +32,8 @@ function withLinters(...names: readonly string[]): void {
   write(join(project, 'rulebook.config.ts'), `export default { linters: ${JSON.stringify(names)} }\n`)
 }
 
-function rulebook(args: readonly string[], stdin?: string, path = process.env.PATH ?? '') {
-  const run = Bun.spawnSync([process.execPath, MAIN, ...args], {
+function rulebook(args: readonly string[], stdin?: string, path = process.env.PATH ?? '', entry = MAIN) {
+  const run = Bun.spawnSync([process.execPath, entry, ...args], {
     cwd: project,
     stdin: stdin === undefined ? 'ignore' : new Blob([stdin]),
     env: { ...process.env, HOME: home, XDG_CONFIG_HOME: join(home, 'config'), PATH: path },
@@ -41,7 +42,7 @@ function rulebook(args: readonly string[], stdin?: string, path = process.env.PA
 }
 
 function edit(tool: string, input: Record<string, unknown>, path?: string) {
-  const run = rulebook(['edit'], JSON.stringify({ tool_name: tool, tool_input: input, cwd: project }), path)
+  const run = rulebook(['edit'], JSON.stringify({ tool_name: tool, tool_input: input, cwd: project }), path, ASK)
   expect(run.stderr).toBe('')
   return JSON.parse(run.stdout) as { refuse?: string; note?: string; failures: string[]; findings: { rule: string; line: number; level: string; isExisting: boolean }[] }
 }
@@ -97,21 +98,21 @@ test("oxlint reads an oxlint.config.ts and runs its JS plugin's rules on a write
   const file = write(join(project, 'src', 'app.ts'), 'export const total = 2\n')
   expect(edit('Edit', { file_path: file, old_string: 'export const total = 2', new_string: 'export const total = 2\nexport const foo = 1' }).findings).toEqual([expect.objectContaining({ rule: 'oxlint/demo/no-foo', line: 2, level: 'error' })])
   write(file, 'export const total = 2\nexport const foo = 1\n')
-  expect(rulebook([]).stdout).toBe('src/app.ts\n  2  error  oxlint/demo/no-foo  Name it something other than foo.\n     > export const foo = 1\n\n1 error, 0 warnings in 1 file\n')
+  expect(rulebook(['check']).stdout).toBe('src/app.ts\n  2  error  oxlint/demo/no-foo  Name it something other than foo.\n     > export const foo = 1\n\n1 error, 0 warnings in 1 file\n')
 })
 
 test('the pending text is linted, not the file on disk', () => {
   withLinters('oxlint')
   write(join(project, '.oxlintrc.json'), '{ "rules": { "no-unused-vars": "error" } }\n')
   const file = write(join(project, 'src', 'app.ts'), 'export function total(): number {\n  return 2\n}\n')
-  expect(rulebook([]).stdout).toBe('0 errors, 0 warnings in 0 files\n')
+  expect(rulebook(['check']).stdout).toBe('0 errors, 0 warnings in 0 files\n')
   const answer = edit('Edit', { file_path: file, old_string: '  return 2', new_string: '  const unused = 1\n  return 2' })
   expect(answer.refuse).toContain('2  error  oxlint/no-unused-vars')
 })
 
 test('linters in a config is a list of linter names, and any other shape fails the config', () => {
   write(join(project, 'rulebook.config.ts'), "export default { linters: { oxlint: 'off' } }\n")
-  const run = rulebook(['edit'], JSON.stringify({ tool_name: 'Write', tool_input: { file_path: join(project, 'src', 'app.ts'), content: 'export const total = 2\n' }, cwd: project }))
+  const run = rulebook(['check', '--stdin-file-path=src/app.ts'], 'export const total = 2\n')
   expect(run.stderr).toBe(`rulebook: ${join(project, 'rulebook.config.ts')}: linters is a list of the linters to run, such as ['oxlint', 'biome']. The linters are mago, oxlint, biome, stylelint, ruff, selene, shellcheck, pint, tsc.\n`)
   expect(run.code).toBe(2)
 })
@@ -152,7 +153,7 @@ test("biome checks a write's formatting and import order the way biome check doe
   const text = 'import { z } from "./z";\nimport { a } from "./a";\n\nexport const total   =  a + z;\n'
   const found = edit('Write', { file_path: file, content: text }).findings.map(({ rule, line, level }) => ({ rule, line, level }))
   write(file, text)
-  const run = rulebook([])
+  const run = rulebook(['check'])
   expect(found).toEqual([
     { rule: 'biome/assist/source/organizeImports', line: 1, level: 'error' },
     { rule: 'biome/format', line: 4, level: 'error' },
@@ -173,7 +174,7 @@ test("stylelint and oxlint flag a disable comment that disables nothing when the
   const written = [...rules(css, cssText), ...rules(ts, tsText)]
   write(css, cssText)
   write(ts, tsText)
-  const run = rulebook([])
+  const run = rulebook(['check'])
   expect({ written, run: run.stdout }).toEqual({ written: expect.arrayContaining([expect.stringMatching(/^error stylelint\//), expect.stringMatching(/^error oxlint\//)]), run: expect.stringContaining('2 errors') })
 })
 
@@ -285,7 +286,7 @@ test("pint flags a write's pending text with each fixer it would apply, at the f
   expect(edit('Write', { file_path: join(project, 'legacy', 'Total.php'), content: text })).toEqual({ failures: [], findings: [] })
   expect(edit('Write', { file_path: file, content: '<?php\n\nfunction total( {\n' }).findings).toEqual([expect.objectContaining({ rule: 'pint/error', line: 3, level: 'error' })])
   write(file, text)
-  expect(rulebook([]).stdout).toBe([
+  expect(rulebook(['check']).stdout).toBe([
     'src/Total.php',
     ...['braces_position', 'single_space_around_construct', 'statement_indentation'].flatMap((fixer) => [
       `  5  error  ${`pint/${fixer}`.padEnd(34)}  The file breaks Pint's ${fixer}, and Pint's first change is on this line. Run pint on the file to fix it.`,
@@ -303,7 +304,7 @@ test('a full run runs each listed linter once over its project and lists its fin
   write(join(project, 'src', 'app.ts'), 'export function total(): number {\n  const unused = 1\n  return 2\n}\n')
   write(join(project, 'ruff.toml'), '')
   write(join(project, 'tools', 'report.py'), 'def total():\n    unused = 1\n    return 2\n')
-  const run = rulebook([])
+  const run = rulebook(['check'])
   expect(run.stdout).toContain("src/app.ts\n  2  error  oxlint/no-unused-vars  Variable 'unused' is declared but never used.")
   expect(run.stdout).toContain('tools/report.py\n  2  error  ruff/F841  Local variable `unused` is assigned to but never used')
   expect(run.stdout).toEndWith('2 errors, 0 warnings in 2 files\n')
@@ -323,7 +324,7 @@ test("a full run gives every file the findings an edit gives it, under its own n
   write(join(project, 'packages', 'a', 'app.ts'), unused)
   write(join(project, 'tools', 'debug.ts'), debug)
   write(join(project, 'packages', 'b', 'debug.ts'), debug)
-  const run = rulebook([])
+  const run = rulebook(['check'])
   expect(run.stdout).toBe([
     'packages/a/app.ts',
     "  2  error  oxlint/no-unused-vars  Variable 'unused' is declared but never used. Unused variables should start with a '_'. help: Consider removing this declaration.",
@@ -348,6 +349,6 @@ test("tsc type-checks the nearest tsconfig.json's program on a full run, and a s
   expect(edit('Write', { file_path: file, content: text })).toEqual({ failures: [], findings: [] })
   expect(existsSync(ran)).toBe(false)
   write(file, text)
-  expect(rulebook([]).stdout).toBe("src/app.ts\n  2  error  tsc/TS2322  Type 'string' is not assignable to type 'number'.\n     > const value: number = 'two'\n\n1 error, 0 warnings in 1 file\n")
+  expect(rulebook(['check']).stdout).toBe("src/app.ts\n  2  error  tsc/TS2322  Type 'string' is not assignable to type 'number'.\n     > const value: number = 'two'\n\n1 error, 0 warnings in 1 file\n")
   expect(existsSync(ran)).toBe(true)
 })

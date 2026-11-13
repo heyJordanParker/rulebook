@@ -5,7 +5,7 @@ description: Write or change a rulebook rule, a check rulebook runs on any file,
 
 # Write a rulebook rule
 
-rulebook checks every file and message a rule's `paths` cover, on every Agent write and every commit. An error refuses the write or the commit, and a warning lets it land with a note. `rulebook` in a terminal, or `/rulebook` in a session, checks every file of the project a rule covers, with every rule and the project's linters.
+rulebook checks every file and message a rule's `paths` cover, on every Agent write and every commit. An error refuses the write or the commit, and a warning lets it land with a note. `rulebook check` in a terminal, or `/rulebook` in a session, checks every file of the project a rule covers, with every rule and the project's linters.
 
 ## 1. Find the config that holds the rule
 
@@ -131,7 +131,7 @@ A line breaks the rule when it describes code with a metaphor or an idiom, such 
 A pattern or script rule sets these keys at its top level, and an agentic rule sets them under `metadata`:
 
 - `level` is `error`, the default, or `warning`.
-- `runs` is `always`, the default, `commit`, or `manual`. A commit rule never runs on an edit, only on a commit's `rulebook commit` and when someone runs `rulebook` or `/rulebook`. A manual rule runs only when someone runs `rulebook` or `/rulebook`.
+- `runs` is `always`, the default, `commit`, or `manual`. A commit rule never runs on an edit, only on a commit's `rulebook check --staged` and when someone runs `rulebook check` or `/rulebook`. A manual rule runs only when someone runs `rulebook check` or `/rulebook`.
 
 ### Give an agentic rule the time it needs with `metadata.timeout`
 `timeout` is the milliseconds an agentic rule may take, the config's `timeout` by default, which is 30 000 unless the config sets it. Only an agentic rule has one, because the deadline stops only agentic sessions. rulebook refuses a `timeout` on a pattern or script rule.
@@ -157,4 +157,4 @@ A probe runs only the rules it pins. A pin works only in a probe file.
 
 ## 9. Run the rule
 
-Run `rulebook <probe>` and `rulebook <a Prompt the rule covers>`. A probe passes with no output above the count line. For a rule that covers a message, pipe a sample into `rulebook text <@name>`, such as `printf 'Run it now.' | rulebook text @reply`.
+Run `rulebook check <probe>` and `rulebook check <a Prompt the rule covers>`. A probe passes with no output above the count line. For a rule that covers a message, pipe a sample into `rulebook check --stdin-file-path=<@name>`, such as `printf 'Run it now.' | rulebook check --stdin-file-path=@reply`.

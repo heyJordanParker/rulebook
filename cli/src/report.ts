@@ -46,7 +46,7 @@ function existingLine(report: FileReport, isMore: boolean): readonly string[] {
   const errors = existing.filter(({ level }) => level === 'error').length
   const noun = errors === existing.length ? 'error' : errors === 0 ? 'warning' : 'finding'
   const isOne = existing.length === 1
-  return [`${existing.length}${isMore ? ' more' : ''} ${noun}${isOne ? '' : 's'} in this file ${isOne ? 'was' : 'were'} there before this edit. \`rulebook ${report.path}\` lists ${isOne ? 'it' : 'them'}.`]
+  return [`${existing.length}${isMore ? ' more' : ''} ${noun}${isOne ? '' : 's'} in this file ${isOne ? 'was' : 'were'} there before this edit. \`rulebook check ${report.path}\` lists ${isOne ? 'it' : 'them'}.`]
 }
 
 function refusal(path: string): string {
@@ -66,7 +66,7 @@ export function commitReport(reports: readonly FileReport[], unloaded: readonly 
   const isRefused = written.some(({ findings }) => findings.some(({ level }) => level === 'error'))
   const existing = reports.flatMap(({ path, findings }) => (findings.some(isHidden) ? [path] : []))
   const count = reports.flatMap(({ findings }) => findings.filter(isHidden)).length
-  const before = count === 0 ? [] : [`${count} ${count === 1 ? 'finding' : 'findings'} in these files ${count === 1 ? 'was' : 'were'} there before this commit. \`rulebook ${existing.join(' ')}\` lists ${count === 1 ? 'it' : 'them'}.`]
+  const before = count === 0 ? [] : [`${count} ${count === 1 ? 'finding' : 'findings'} in these files ${count === 1 ? 'was' : 'were'} there before this commit. \`rulebook check ${existing.join(' ')}\` lists ${count === 1 ? 'it' : 'them'}.`]
   const body = textReport(written, unloaded)
   return { isRefused, text: [...(isRefused ? ['Commit refused. Fix every error, stage the fix, then commit again.'] : []), body, ...before].join('\n\n') }
 }

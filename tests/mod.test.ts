@@ -78,21 +78,21 @@ async function read(tested: Tested, file: string, task?: string) {
   return tested.raise.beforeToolResult({ callId, output: 'A fact.\n' }, { task })
 }
 
-test('the rules for every file and for messages reach the agent as its session starts, and again after each compaction, from one rules question to rulebook serve', async () => {
+test('the rules for every file and for messages reach the agent as its session starts, and again after each compaction, from one rules question to the rulebook server', async () => {
   const tested = serving({ rules: LISTING }, { projectRoot: '/work' })
   expect(await tested.raise.beforeSessionStart({ source: 'startup' })).toEqual({ note: "- Don't write em dashes." })
   expect(await tested.raise.beforeSessionStart({ source: 'compact' })).toEqual({ note: "- Don't write em dashes." })
   expect(asked(tested, 'rules')).toEqual([{ url: 'http://localhost/rules', input: { cwd: '/work' }, environment: ENVIRONMENT, socketPath: SOCKET }])
 })
 
-test('the mod runs one rulebook serve for the whole computer, and starts no rulebook process for a check', async () => {
+test('the mod runs one rulebook server for the whole computer, and starts no rulebook process for a check', async () => {
   const spawned: (readonly string[])[] = []
   const tested = serving({ rules: LISTING, edit: { failures: [], findings: [] } }, { projectRoot: '/work' })
   const spawn = addressed(`unix:${SOCKET}`)
   tested.fakes.process.spawn = (request) => (spawned.push(request.argv), spawn(request))
   await tested.raise.beforeSessionStart({ source: 'startup' })
   await tested.raise.beforeToolCall({ name: 'Write', input: { file_path: '/work/Claude.md', content: 'x' } })
-  expect(spawned).toEqual([['/test/home/.local/share/cmod/programs/cmod', 'program', 'rulebook', '--no-wait', '--', 'rulebook', 'serve']])
+  expect(spawned).toEqual([['/test/home/.local/share/cmod/programs/cmod', 'program', 'rulebook', '--no-wait', '--', 'rulebook', '__run_server']])
   expect(tested.calls.filter(({ call }) => call === 'process.run').map(({ args }) => args[0])).toEqual([['env', '-0']])
 })
 
@@ -170,7 +170,7 @@ test('a rule that did not run goes to the Log as a warning with no toast, and th
   expect(tested.shown.toasts.filter(({ type }) => type !== 'success')).toEqual([])
 })
 
-test('a rulebook serve that cannot start fails each check with an error toast, and checks the edit no other way', async () => {
+test('a rulebook server that cannot start fails each check with an error toast, and checks the edit no other way', async () => {
   const tested = serving({ rules: LISTING, edit: { failures: [], findings: [] } })
   tested.fakes.process.spawn = addressed('listening')
   expect(await tested.raise.beforeToolCall({ name: 'Write', input: { file_path: '/work/Claude.md', content: `Run it ${EM_DASH} now.` } })).toBeUndefined()
@@ -180,7 +180,7 @@ test('a rulebook serve that cannot start fails each check with an error toast, a
   expect(asked(tested)).toEqual([])
 })
 
-test('an answer rulebook serve fails is an error, never a pass', async () => {
+test('an answer the rulebook server fails is an error, never a pass', async () => {
   const tested = serving({ rules: LISTING })
   const answer = tested.fakes.http.fetch
   tested.fakes.http.fetch = async (url, init) => (url.endsWith('/edit') ? { status: 500, ok: false, headers: {}, text: '/work/rulebook.config.ts: "lint" is not a rulebook config key.' } : answer!(url, init))
@@ -234,7 +234,7 @@ test('/rulebook lists every finding in the Sidebar', async () => {
   expect(await tested.shown.page.lines()).toEqual(['1 error, 0 warnings in 1 file', '', failure, '', 'Claude.md', '  3  error  global/block-em-dashes  Split the sentence at the em dash.'])
 })
 
-test('a rule that failed to load shows a warning toast when a rules listing names it, and a listing that rulebook serve already gave it to names it no more', async () => {
+test('a rule that failed to load shows a warning toast when a rules listing names it, and a listing that the rulebook server already gave it to names it no more', async () => {
   const failure = '/work/rules/block-x.ts: a rule needs a description. The rule app/block-x checks nothing until it loads.'
   const ticks: (() => void)[] = []
   let modifiedAt = 1
@@ -255,7 +255,7 @@ test('a rule that failed to load shows a warning toast when a rules listing name
   expect(tested.shown.toasts.filter(({ type }) => type !== 'success').map(({ type, message }) => ({ type, message }))).toEqual([{ type: 'warning', message: failure }])
 })
 
-test('a rules listing that failed loads again on the next check, so the message checks go on once rulebook serve answers', async () => {
+test('a rules listing that failed loads again on the next check, so the message checks go on once the rulebook server answers', async () => {
   const tested = serving({ rules: LISTING, text: { refuse: 'Inbox refused.', failures: [], findings: [] } }, { projectRoot: '/work' })
   const answer = tested.fakes.http.fetch!
   let isBroken = true

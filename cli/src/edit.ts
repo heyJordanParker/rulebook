@@ -16,15 +16,25 @@ export type ToolCall = {
 }
 
 export function editRoot(call: ToolCall): string {
-  const edited = editedFile(call)
-  if (edited === undefined) return projectRoot(call.cwd, call.cwd)
-  return projectRoot(edited.folder, edited.file.startsWith(`${realpathSync(call.cwd)}/`) ? call.cwd : edited.folder)
+  const path = call.tool_input.file_path
+  return typeof path === 'string' ? fileRoot(realFile(path, call.cwd), call.cwd) : projectRoot(call.cwd, call.cwd)
+}
+
+export function realFile(path: string, cwd: string): string {
+  const file = isAbsolute(path) ? path : resolve(cwd, path)
+  const nearest = existingFolder(file)
+  return join(realpathSync(nearest), relative(nearest, file))
+}
+
+export function fileRoot(file: string, cwd: string): string {
+  const folder = existingFolder(dirname(file))
+  return projectRoot(folder, file.startsWith(`${realpathSync(cwd)}/`) ? cwd : folder)
 }
 
 export async function checkEdit(call: ToolCall, root: string): Promise<EditAnswer> {
-  const edited = editedFile(call)
-  if (edited === undefined) return editAnswer(undefined)
-  const { file } = edited
+  const path = call.tool_input.file_path
+  if (typeof path !== 'string') return editAnswer(undefined)
+  const file = realFile(path, call.cwd)
   const previous = existsSync(file) ? await Bun.file(file).text() : undefined
   const next = editedText(call.tool_name, call.tool_input, previous)
   if (next === undefined) return editAnswer(undefined)
@@ -33,15 +43,6 @@ export async function checkEdit(call: ToolCall, root: string): Promise<EditAnswe
   const { rules } = await loadRules(settings)
   const report = await checkFile(settings, rules, file, next, { scope: 'edit', previous: previous ?? '', imported: () => loadImportedFiles(root) })
   return editAnswer(report)
-}
-
-function editedFile(call: ToolCall): { readonly file: string; readonly folder: string } | undefined {
-  const path = call.tool_input.file_path
-  if (typeof path !== 'string') return undefined
-  const file = isAbsolute(path) ? path : resolve(call.cwd, path)
-  const nearest = existingFolder(file)
-  const real = join(realpathSync(nearest), relative(nearest, file))
-  return { file: real, folder: existingFolder(dirname(real)) }
 }
 
 function editedText(tool: string, input: Readonly<Record<string, unknown>>, previous: string | undefined): string | undefined {

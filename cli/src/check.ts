@@ -11,7 +11,7 @@ import { coveringLinters, LINTERS, lintFolder, lintText, projectLinters, type Co
 import { seconds } from './lsp.ts'
 import type { LoadedRule, StaticRule } from './rules.ts'
 
-type Scope = 'edit' | 'commit' | 'all' | 'static'
+type Scope = 'edit' | 'commit' | 'all'
 
 export type Reported = {
   readonly rule: string
@@ -35,6 +35,7 @@ type CheckOptions = {
   readonly previous?: string | undefined
   readonly imported: () => Promise<ReadonlySet<string>>
   readonly input?: Readonly<Record<string, unknown>>
+  readonly skip?: readonly string[]
 }
 
 const PIN = /^\s*<!--\s*rulebook-expect\s+(\S+)\s*-->\s*$/
@@ -83,8 +84,8 @@ export async function checkFile(settings: Settings, rules: readonly LoadedRule[]
   const configured = probe || (!isMessage && isPrompt(settings, file))
   const isMemory = !isMessage && isClaudeMd(file)
   const imported = !isMessage && !(configured && isMemory) && existsSync(file) && (await options.imported()).has(realpathSync(file))
-  const covered = rules.filter((rule) => inScope(rule, options.scope) && covers(rule, path, configured || imported))
-  const linted = !isMessage && !probe ? coveringLinters(settings.linters, settings.programs, file, text, settings.root) : []
+  const covered = rules.filter((rule) => inScope(rule, options) && covers(rule, path, configured || imported))
+  const linted = !isMessage && !probe ? coveringLinters(settings.linters.filter((name) => !isSkipped(options.skip, name)), settings.programs, file, text, settings.root) : []
   if (!configured && !imported && covered.length === 0 && linted.length === 0) return undefined
   const written = text.split('\n')
   const isDoc = imported || isMemory
@@ -95,7 +96,7 @@ export async function checkFile(settings: Settings, rules: readonly LoadedRule[]
   const doc = memory === undefined ? undefined : { file, imports: memory.imports }
   const pins = mayPin ? pinsOf(written, claudeMd?.lines ?? []) : []
   const pinned = new Set(pins.map(({ rule }) => rule))
-  const chosen = probe ? rules.filter((rule) => inScope(rule, options.scope) && pinned.has(rule.id)) : covered
+  const chosen = probe ? rules.filter((rule) => inScope(rule, options) && pinned.has(rule.id)) : covered
   const wrote = options.previous === undefined ? undefined : linesWritten(options.previous, written)
   const changed = wrote === undefined ? undefined : [...wrote].filter((line) => written[line - 1]?.trim() !== '')
 
@@ -115,7 +116,7 @@ export async function checkFile(settings: Settings, rules: readonly LoadedRule[]
   const lints = await linting
   const failures = [...runs.flatMap((run) => ('failure' in run ? [{ rule: run.rule.id, reason: run.failure }] : [])), ...lints.flatMap((lint) => lint.failures)]
   const found = [...runs.flatMap((run) => ('found' in run ? run.found.map(({ line, message }) => ({ line, message: message ?? run.rule.description, rule: run.rule.id, level: run.rule.level === 'off' ? 'error' as const : run.rule.level })) : [])), ...lints.flatMap((lint) => lint.flags)]
-  const unscoped = new Set(rules.filter((rule) => !inScope(rule, options.scope)).map(({ id }) => id))
+  const unscoped = new Set(rules.filter((rule) => !inScope(rule, options)).map(({ id }) => id))
   const flagged = probe ? probeFindings(found, pins.filter(({ rule }) => !unscoped.has(rule))) : [...found, ...pins.map((pin) => ({ rule: 'rulebook/pins', line: pin.line, level: 'error' as const, message: 'A rulebook-expect pin works only in a probe file. Remove it.' }))]
 
   return {
@@ -183,11 +184,15 @@ function covers(rule: LoadedRule, path: string, isPrompt: boolean): boolean {
   return rule.level !== 'off' && (rule.paths === undefined ? isPrompt : matches(rule.paths, path))
 }
 
-function inScope(rule: LoadedRule, scope: Scope): boolean {
+function inScope(rule: LoadedRule, { scope, skip }: CheckOptions): boolean {
+  if (isSkipped(skip, rule.id) || (rule.kind === 'agentic' && isSkipped(skip, 'agentic'))) return false
   if (scope === 'all') return true
-  if (scope === 'static') return rule.kind === 'static'
   if (scope === 'commit') return rule.runs !== 'manual'
   return rule.runs === 'always'
+}
+
+export function isSkipped(skip: readonly string[] | undefined, name: string): boolean {
+  return skip?.some((skipped) => name === skipped || name.startsWith(`${skipped}/`)) ?? false
 }
 
 type Pin = { readonly rule: string; readonly line: number; readonly target: number }

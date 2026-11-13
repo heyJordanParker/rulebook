@@ -52,7 +52,7 @@ export function answer(question: Question, input: unknown, root: string): Promis
 
 async function checkText({ name, text, cwd, input }: Text, root: string): Promise<EditAnswer> {
   const settings = await loadSettings(cwd, root)
-  if (!name.startsWith('@')) throw new Error('rulebook text checks a message by its @-name, such as @reply or @inbox/<id>.md.')
+  if (!name.startsWith('@')) throw new Error('The text question checks a message by its @-name, such as @reply or @inbox/<id>.md.')
   const { rules } = await loadRules(settings)
   const report = await checkFile(settings, rules, name, text, { scope: 'edit', imported: async () => new Set(), ...(input === undefined ? {} : { input }) })
   return editAnswer(report)
@@ -94,14 +94,14 @@ async function listRules(cwd: string, root: string): Promise<unknown> {
 }
 
 function toolCall(input: unknown): ToolCall {
-  if (!isRecord(input) || typeof input.tool_name !== 'string' || !isRecord(input.tool_input) || typeof input.cwd !== 'string') throw new Error('rulebook edit reads {"tool_name", "tool_input", "cwd"}.')
+  if (!isRecord(input) || typeof input.tool_name !== 'string' || !isRecord(input.tool_input) || typeof input.cwd !== 'string') throw new Error('A tool call is {"tool_name", "tool_input", "cwd"}.')
   return { tool_name: input.tool_name, tool_input: input.tool_input, cwd: input.cwd }
 }
 
 function textOf(input: unknown): Text {
-  if (!isRecord(input) || typeof input.name !== 'string' || typeof input.cwd !== 'string') throw new Error('rulebook text reads {"name", "text" or "input", "cwd"}.')
+  if (!isRecord(input) || typeof input.name !== 'string' || typeof input.cwd !== 'string') throw new Error('The text question reads {"name", "text" or "input", "cwd"}.')
   if (isRecord(input.input)) return { name: input.name, text: textsOf(input.input).join('\n\n'), cwd: input.cwd, input: input.input }
-  if (typeof input.text !== 'string') throw new Error('rulebook text reads {"name", "text" or "input", "cwd"}.')
+  if (typeof input.text !== 'string') throw new Error('The text question reads {"name", "text" or "input", "cwd"}.')
   return { name: input.name, text: input.text, cwd: input.cwd }
 }
 
@@ -113,6 +113,6 @@ function textsOf(value: unknown): readonly string[] {
 }
 
 function cwdOf(input: unknown): string {
-  if (!isRecord(input) || typeof input.cwd !== 'string') throw new Error('rulebook rules reads {"cwd"}.')
+  if (!isRecord(input) || typeof input.cwd !== 'string') throw new Error('The rules question reads {"cwd"}.')
   return input.cwd
 }

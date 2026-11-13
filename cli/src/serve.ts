@@ -91,10 +91,10 @@ export async function serve(): Promise<never> {
     idleTimeout: 0,
     async fetch(request: Request) {
       const question = new URL(request.url).pathname.slice(1)
-      if (request.method !== 'POST' || !isQuestion(question)) return new Response('rulebook serve answers POST /edit, /text, and /rules.', { status: 404 })
+      if (request.method !== 'POST' || !isQuestion(question)) return new Response('The rulebook server answers POST /edit, /text, and /rules.', { status: 404 })
       try {
         const body: unknown = await request.json()
-        if (!isRecord(body)) throw new Error('rulebook serve reads {"input", "environment"}.')
+        if (!isRecord(body)) throw new Error('The rulebook server reads {"input", "environment"}.')
         const root = projectOf(question, body.input)
         const environment = environmentOf(body.environment)
         const key = `${root}\0${JSON.stringify(environment)}`
@@ -126,6 +126,6 @@ function isStale({ watched, startedAt }: Project): boolean {
 }
 
 function environmentOf(sent: unknown): Environment {
-  if (!isRecord(sent)) throw new Error('rulebook serve reads {"input", "environment"}.')
+  if (!isRecord(sent)) throw new Error('The rulebook server reads {"input", "environment"}.')
   return Object.fromEntries(ENVIRONMENT.flatMap((name) => (typeof sent[name] === 'string' ? [[name, sent[name]]] : [])))
 }

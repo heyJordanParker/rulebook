@@ -4,6 +4,7 @@ import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'nod
 import { dirname, join } from 'node:path'
 
 const MAIN = join(import.meta.dir, '..', 'src', 'main.ts')
+const ASK = join(import.meta.dir, 'ask.ts')
 const EM_DASH = String.fromCharCode(0x2014)
 
 const EM_DASH_RULE = `import { defineRule } from '@cmodjs/rulebook'
@@ -59,7 +60,7 @@ function write(file: string, text: string): string {
 }
 
 async function served() {
-  const child = Bun.spawn([process.execPath, MAIN, 'serve'], { cwd: home, env: environment, stdout: 'pipe', stderr: 'inherit' })
+  const child = Bun.spawn([process.execPath, MAIN, '__run_server'], { cwd: home, env: environment, stdout: 'pipe', stderr: 'inherit' })
   const { value } = await child.stdout.getReader().read()
   const address = new TextDecoder().decode(value).trim()
   expect(address).toMatch(/^unix:\/.+\.sock$/)
@@ -79,8 +80,8 @@ async function ask(question: string, input: unknown): Promise<{ readonly status:
   return { status: response.status, answer: response.ok ? JSON.parse(text) : text }
 }
 
-function rulebook(args: readonly string[], stdin: string, cwd = project): unknown {
-  const run = Bun.spawnSync([process.execPath, MAIN, ...args], { cwd, stdin: new Blob([stdin]), env: environment })
+function rulebook(args: readonly string[], stdin: string, cwd = project, entry = MAIN): unknown {
+  const run = Bun.spawnSync([process.execPath, entry, ...args], { cwd, stdin: new Blob([stdin]), env: environment })
   expect(run.stderr.toString()).toBe('')
   return JSON.parse(run.stdout.toString())
 }
@@ -97,7 +98,7 @@ async function idleFootprintKilobytes(pid: number): Promise<number> {
   return Number(usage[9]) / 1024
 }
 
-test("rulebook serve answers edit, text, and rules with the same JSON the rulebook command prints for the same input", async () => {
+test("the rulebook server answers edit, text, and rules with the same JSON a fresh process answers, and rules as rulebook inspect rules prints it", async () => {
   write(join(project, 'rulebook.config.ts'), "export default { messages: { inbox: { tools: ['mcp__inbox__*'] } } }\n")
   const file = write(join(project, 'Claude.md'), `Old line ${EM_DASH} here.\nSecond line.\n`)
   const edits = [
@@ -106,11 +107,11 @@ test("rulebook serve answers edit, text, and rules with the same JSON the rulebo
     written(join(project, 'notes.md'), `Run it ${EM_DASH} now.\n`),
     { tool_name: 'Edit', tool_input: { file_path: file, old_string: 'Second line.', new_string: 'Second line, now edited.' }, cwd: project },
   ]
-  for (const edit of edits) expect(await ask('edit', edit)).toEqual({ status: 200, answer: rulebook(['edit'], JSON.stringify(edit)) })
+  for (const edit of edits) expect(await ask('edit', edit)).toEqual({ status: 200, answer: rulebook(['edit'], JSON.stringify(edit), project, ASK) })
   for (const [name, text] of [['@reply', `It probably works.\nRun it ${EM_DASH} now.`], ['@inbox', 'Shipped.']]) {
-    expect(await ask('text', { name, text, cwd: project })).toEqual({ status: 200, answer: rulebook(['text', name ?? ''], text ?? '') })
+    expect(await ask('text', { name, text, cwd: project })).toEqual({ status: 200, answer: rulebook(['text'], JSON.stringify({ name, text, cwd: project }), project, ASK) })
   }
-  expect(await ask('rules', { cwd: project })).toEqual({ status: 200, answer: rulebook(['rules'], '') })
+  expect(await ask('rules', { cwd: project })).toEqual({ status: 200, answer: rulebook(['inspect', 'rules'], '') })
 })
 
 test('a rule file edited on disk takes effect on the next request, and a new rulebook config on the walk does too', async () => {
@@ -141,10 +142,10 @@ test('a rule that fails to load is listed by one rules answer across every sessi
   write(rule, 'export default { check: () => [] }\n')
   expect(await failuresOf(other)).toEqual([broken])
   expect(await failuresOf(project)).toEqual([])
-  expect((rulebook(['rules'], '') as { failures: readonly string[] }).failures).toEqual([broken])
+  expect((rulebook(['inspect', 'rules'], '') as { failures: readonly string[] }).failures).toEqual([broken])
 })
 
-test.if(process.platform === 'darwin')("rulebook serve's physical footprint stops growing: idle after edit 500 of a rule file, each edit followed by a request and a worker replacement, it stays under 1.5 times its idle footprint after edit 100", async () => {
+test.if(process.platform === 'darwin')("the rulebook server's physical footprint stops growing: idle after edit 500 of a rule file, each edit followed by a request and a worker replacement, it stays under 1.5 times its idle footprint after edit 100", async () => {
   const rule = join(home, 'config', 'rulebook', 'rules', 'block-em-dashes.ts')
   const idle: number[] = []
   for (let edit = 1; edit <= 500; edit += 1) {
@@ -153,7 +154,7 @@ test.if(process.platform === 'darwin')("rulebook serve's physical footprint stop
     if (edit === 100 || edit === 500) idle.push(await idleFootprintKilobytes(server.pid))
   }
   const [settled = 0, later = 0] = idle
-  console.log(`idle physical footprint of rulebook serve: ${Math.round(settled)} KB after edit 100, ${Math.round(later)} KB after edit 500`)
+  console.log(`idle physical footprint of the rulebook server: ${Math.round(settled)} KB after edit 100, ${Math.round(later)} KB after edit 500`)
   expect(later).toBeLessThan(settled * 1.5)
 })
 
@@ -349,5 +350,5 @@ test('a config that fails on a missing plugin folder, a missing extends file, or
 
 test('a question that sends no environment fails, and never runs in the environment of the server', async () => {
   const response = await fetch('http://localhost/edit', { unix: server.socket, method: 'POST', body: JSON.stringify({ input: written(join(project, 'Claude.md'), 'A fact.\n') }) })
-  expect({ status: response.status, text: await response.text() }).toEqual({ status: 500, text: 'rulebook serve reads {"input", "environment"}.' })
+  expect({ status: response.status, text: await response.text() }).toEqual({ status: 500, text: 'The rulebook server reads {"input", "environment"}.' })
 })

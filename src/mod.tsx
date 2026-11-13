@@ -40,7 +40,7 @@ export const rulebook = defineMod({
   setup(mod) {
     const page = mod.sidebar.add(resultsPage)
     const everyAgent = sessions.current.goal
-    const server = mod.use(program({ command: ['rulebook', 'serve'], singleInstance: true }))
+    const server = mod.use(program({ command: ['rulebook', '__run_server'], singleInstance: true }))
 
     let environment: Promise<string> | undefined
     const asked = async <Answer,>(question: string, input: object, signal?: AbortSignal): Promise<Answer> => {
@@ -163,7 +163,7 @@ export const rulebook = defineMod({
 
 async function checkProject(mod: Mod<RulebookState>, files: readonly string[]): Promise<void> {
   try {
-    const checked = await process.run(['rulebook', '--json', ...files], { cwd: sessions.current.cwd, timeoutMs: longestMs })
+    const checked = await process.run(['rulebook', 'check', '--reporter=json', ...files], { cwd: sessions.current.cwd, timeoutMs: longestMs })
     if (checked.exitCode > 1) throw new Error(checked.stderr.trim())
     const { reports, failures } = JSON.parse(checked.stdout) as { readonly reports: readonly Report[]; readonly failures: readonly string[] }
     mod.state.memory.run = { status: 'done', reports, failures }

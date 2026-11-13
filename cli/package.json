@@ -1,6 +1,6 @@
 {
   "name": "@cmodjs/rulebook",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Checks every file, reply, tool call, and commit against your rules and linters before it lands.",
   "license": "MIT",
   "type": "module",
