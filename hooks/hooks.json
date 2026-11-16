@@ -1,6 +1,0 @@
-{
-  "description": "rulebook hooks module",
-  "modules": [
-    "./register.ts"
-  ]
-}
