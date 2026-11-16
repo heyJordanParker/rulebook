@@ -12,6 +12,7 @@ rulebook checks every file and message a rule's `files` cover, on every Agent wr
 - `~/.config/rulebook/rulebook.config.ts` holds the rules that apply to every project.
 - The nearest `rulebook.config.ts` in a file's folder or a folder above it holds the rules of that folder's files, so a nested package holds its own. Only that one config applies to the file, merged over the global config.
 - `extends` pulls in other configs: paths relative to the config, with `~` read as the home folder, and config objects such as `recommended` from `@cmodjs/rulebook`. The global config merges first, then each `extends` entry from left to right, then the config's own keys, so a later `rules` setting turns an inherited rule off or down.
+- `rules` sets each rule by its name: `'off'`, `'warn'`, `'error'`, or an object that also overrides its `files`, `runs`, and, for an agentic rule, `timeout`, `agent`, `model`, `effort`, and `threshold`, such as `rules: { 'global/require-true-facts': { runs: 'manual', timeout: 600000 } }`.
 - rulebook turns on no rule by itself. `extends: [recommended]` turns on `rulebook/imports`. `rules: { 'rulebook/no-suppressions': 'error' }` turns on the rule that flags a comment that suppresses a linter's rule, such as `// oxlint-disable-next-line` or `# noqa`. A Claude Code plugin's rules apply only when a config extends the plugin's `rulebook.config.ts`.
 - `messages` tells rulebook where to find a message by itself: `tools` checks each matching tool call as `@<name>`, and `folder` makes a full run check each file under that folder as `@<name>/<path>`. A rule covers any `@` name without it. `@reply` and `@command` are built in.
 - `plugins` names each rule folder. A rule is one file at any depth of that folder, and its name is `<plugin>/<path in the folder, without the extension>`: with `plugins: { global: './rules' }`, `rules/writing/block-em-dashes.ts` is `global/writing/block-em-dashes`.
@@ -55,7 +56,7 @@ Example: `files: ['**', '@reply', '@inbox/**']`
 
 ## 4. Write a pattern rule when the code's shape decides
 
-A pattern rule flags each match of its ast-grep rule, at the match's first line. It never matches inside a comment or a string.
+A pattern rule flags each match of its ast-grep rule, at the match's first line. A `pattern` never matches inside a comment or a string.
 
 ```yaml
 description: Don't log to the console.
@@ -85,13 +86,15 @@ A script rule is laid out as an ESLint rule. `create` receives the `context` and
 ```ts
 import { defineRule } from '@cmodjs/rulebook'
 
+const EM_DASH = String.fromCharCode(0x2014)
+
 export default defineRule({
   description: "Don't write em dashes.",
   message: 'Split the sentence at the em dash.',
   create(context) {
     return {
       Line(line) {
-        if (!line.isInCodeBlock && line.text.includes('—')) context.report({ node: line })
+        if (!line.isInCodeBlock && line.text.includes(EM_DASH)) context.report({ node: line })
       },
     }
   },
@@ -123,9 +126,32 @@ export default defineRule({
 })
 ```
 
+IF the rule judges who makes the call, such as an agent that must never write:
+### Cover every file and `@command`, and decide in `Document` from `context.call`
+A write whose next text rulebook cannot compute, such as a NotebookEdit, a codex `apply_patch`, or an Edit whose `old_string` the file lacks, reaches the rule with no text and no lines. Only a `Document` visitor sees it, and its finding refuses the write whatever lines it changed.
+Example:
+```ts
+export default defineRule({
+  description: 'A reviewer never writes.',
+  files: ['**', '@command'],
+  create(context) {
+    return {
+      Document(document) {
+        if (context.call?.agentType === 'reviewer' && context.call.agentId !== undefined) context.report({ node: document })
+      },
+    }
+  },
+})
+```
+
+IF several rules share code:
+### Put the shared module beside the plugin folder and import it by relative path
+rulebook loads every `.ts` file at any depth of a plugin folder as a rule, and a rule can import only `@cmodjs/rulebook` by package name.
+Example: `rules/commands/block-git-stash.ts` imports `'../../lib/shell.ts'`, where `lib/` sits beside `rules/`.
+
 ## 6. Write an agentic rule when it takes judgment
 
-An agentic rule's frontmatter is Claude Code's Skill frontmatter, without `name` and `context`, plus rulebook's `message`, `files`, `severity`, `runs`, `timeout`, and `threshold`. Its body is the check. Each finding shows the text the subagent writes for it.
+An agentic rule's frontmatter takes `description`, `message`, `files`, `severity`, `runs`, `timeout`, `threshold`, and the Skill keys `agent`, `model`, `effort`, `allowed-tools`, and `disallowed-tools`. rulebook refuses any other key. Its body is the check. Each finding shows the text the subagent writes for it.
 
 ```md
 ---
@@ -163,6 +189,7 @@ Every kind of rule sets these keys at its top level:
 
 - `severity` is `error`, the default, or `warn`.
 - `runs` is `always`, the default, or `manual`. A manual rule never runs on an Agent's write or tool call. Every `rulebook check` runs it: a commit's `rulebook check --staged`, a full run, `/rulebook`, and CI.
+- An error refuses a write or a commit only on a line it writes. An error on a line the file held before shows as a warning, unless the config sets `existingErrors: 'error'`. A finding on the `Document` always refuses.
 
 ### Give an agentic rule the time it needs with `timeout`
 `timeout` is the milliseconds an agentic rule may take, the config's `timeout` by default, which is 30 000 unless the config sets it. Only an agentic rule has one, because the deadline stops only agentic sessions. rulebook refuses a `timeout` on a pattern or script rule.
@@ -188,4 +215,4 @@ A probe runs only the rules it pins. A pin works only in a probe file.
 
 ## 9. Run the rule
 
-Run `rulebook check <probe>` and `rulebook check <a Prompt the rule covers>`. A probe passes with no output above the count line. For a rule that covers a message, pipe a sample into `rulebook check --stdin-file-path=<@name>`, such as `printf 'Run it now.' | rulebook check --stdin-file-path=@reply`, or `printf 'herdr-app feedback hi' | rulebook check --stdin-file-path=@command`.
+Run `rulebook inspect rules` and find the rule's name in it, with no failure beside it. Then run `rulebook check <probe>` and `rulebook check <a file the rule covers>`. A probe passes with no output above the count line. For a rule that covers a message, write a sample to a file and send it as stdin, such as `rulebook check --stdin-file-path=@command < sample.txt` for a sample that holds `herdr-app feedback hi`. It exits 1 and prints the refusal when the rule flags the sample.
