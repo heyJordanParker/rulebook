@@ -89,7 +89,7 @@ export async function listedFiles(folder: string): Promise<readonly string[] | u
 
 export function projectFiles(settings: Settings, listed: readonly string[] | undefined): readonly string[] {
   const candidates = listed === undefined
-    ? settings.paths.flatMap((glob) => [...new Bun.Glob(glob).scanSync({ cwd: settings.root, absolute: true, dot: true })])
+    ? settings.files.flatMap((glob) => [...new Bun.Glob(glob).scanSync({ cwd: settings.root, absolute: true, dot: true })])
     : listed.map((path) => join(settings.root, path))
   return [...new Set(candidates)].sort()
 }

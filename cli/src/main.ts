@@ -17,13 +17,15 @@ const HELP = `rulebook ${packageJson.version}: checks any file, agent reply, and
 
 Usage:
   rulebook check [files...]                Check every file a rule covers, every Prompt, and every probe of this project, or only the files named, with every rule and linter.
-  rulebook check --staged                  Check what the next commit records, with every rule that runs always or on commit. Run it as the git pre-commit hook.
-  rulebook check --stdin-file-path=<path>  Check stdin as the text of the file or message at <path>, such as @reply, with every rule that runs always.
+  rulebook check --staged                  Check what the next commit records, on the lines it writes, with every rule and linter. Run it from a git pre-commit hook.
+  rulebook check --stdin-file-path=<path>  Check stdin as the text of the file or message at <path>, such as @reply or @command, with the rules that run always, as an agent's write is checked.
   rulebook check --reporter=json           Print the results as JSON.
   rulebook check --skip=<name>             Skip a rule, every rule of a plugin or folder, a linter, or every agentic rule, such as --skip=agentic. Repeat it to skip more.
-  rulebook inspect rules                   Print, for each folder that holds a rulebook.config.ts, each rule that is on there, with its description and the paths it covers, and each message with the tools that send it, as JSON.
-  rulebook claude-hook                     Check the tool call a Claude Code PreToolUse hook sends on stdin: an Edit, Write, or MultiEdit, or a call a message's tools match. An error refuses it.
+  rulebook inspect rules                   Print, for each folder that holds a rulebook.config.ts, each rule that is on there, with its description and the files it covers, and each message with the tools that send it, as JSON.
+  rulebook claude-hook                     Check the tool call a Claude Code or codex PreToolUse hook sends on stdin: a file write, a shell command as @command, or a call a message's tools match. An error refuses it.
   rulebook --version                       Print the version.
+
+An agent's write runs only the rules that run always. Every rulebook check runs the manual rules too, whatever starts it: a person, a git hook, or CI.
 
 A file's rules and settings come from ~/.config/rulebook/rulebook.config.ts and the nearest rulebook.config.ts in the file's folder or a folder above it, with every config they extend.`
 
@@ -111,7 +113,7 @@ async function check(named: readonly string[], skip: readonly string[], isJson: 
   const checked = await Promise.all(files.map(async (file) => {
     const own = displayPath(settings, file).startsWith('@') ? settings : await loadSettings(dirname(file), root)
     const report = await checkFile(own, await rulesOf(own), file, await Bun.file(file).text(), { scope: 'all', imported: async () => imported, skip })
-    if (report === undefined && named.length > 0) throw new Error(`${file} is not a Prompt, a probe, or a file a rule's paths cover.`)
+    if (report === undefined && named.length > 0) throw new Error(`${file} is not a Prompt, a probe, or a file a rule's files cover.`)
     return report
   }))
   const linted = new Map([...groups].map(([own, owned]) => [{ ...own, linters: own.linters.filter((name) => !isSkipped(skip, name)) }, owned]))

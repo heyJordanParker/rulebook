@@ -11,7 +11,8 @@ const EM_DASH_RULE = `import { defineRule } from '@cmodjs/rulebook'
 
 export default defineRule({
   description: "Don't write em dashes.",
-  check: ({ lines }) => lines.flatMap((text, index) => (text.includes('${EM_DASH}') ? [{ line: index + 1, message: 'Split the sentence at the em dash.' }] : [])),
+  message: 'Split the sentence at the em dash.',
+  create: (context) => ({ Line: (line) => { if (line.text.includes('${EM_DASH}')) context.report({ node: line }) } }),
 })
 `
 
@@ -19,10 +20,13 @@ const HEDGING_RULE = `import { defineRule } from '@cmodjs/rulebook'
 
 export default defineRule({
   description: 'State a claim only once you checked it.',
-  level: 'warning',
-  check: ({ lines }) => lines.flatMap((text, index) => (/\\bprobably\\b/.test(text) ? [{ line: index + 1, message: 'Check the claim, then state it.' }] : [])),
+  message: 'Check the claim, then state it.',
+  severity: 'warn',
+  create: (context) => ({ Line: (line) => { if (/\\bprobably\\b/.test(line.text)) context.report({ node: line }) } }),
 })
 `
+
+const NPM_RUN_RULE = "export default { description: 'Run just, never npm run.', create: (context) => ({ Line: (line) => { if (line.text.includes('npm run')) context.report({ node: line }) } }) }\n"
 
 setDefaultTimeout(120_000)
 
@@ -37,7 +41,7 @@ beforeEach(async () => {
   project = join(home, 'project')
   mkdirSync(project)
   Bun.spawnSync(['git', 'init', '-q'], { cwd: project })
-  write(join(home, 'config', 'rulebook', 'rulebook.config.ts'), "export default { plugins: { global: './rules' }, paths: ['**/Claude.md'] }\n")
+  write(join(home, 'config', 'rulebook', 'rulebook.config.ts'), "export default { plugins: { global: './rules' }, files: ['**/Claude.md'] }\n")
   write(join(home, 'config', 'rulebook', 'rules', 'block-em-dashes.ts'), EM_DASH_RULE)
   write(join(home, 'config', 'rulebook', 'rules', 'block-hedging.ts'), HEDGING_RULE)
   environment = { ...(process.env as Record<string, string>), HOME: home, XDG_CONFIG_HOME: join(home, 'config') }
@@ -131,15 +135,15 @@ test('a rule that fails to load is listed by one rules answer across every sessi
   const rule = join(home, 'config', 'rulebook', 'rules', 'block-x.ts')
   const broken = `${rule}: a rule needs a description: the Rule in one line of plain words, such as "Don't write em dashes." The rule global/block-x checks nothing until it loads.`
   const failuresOf = async (cwd: string) => ((await ask('rules', { cwd })).answer as { failures: readonly string[] }).failures
-  write(rule, 'export default { check: () => [] }\n')
+  write(rule, 'export default { create: () => ({}) }\n')
   expect(await failuresOf(project)).toEqual([broken])
   expect(await failuresOf(project)).toEqual([])
   expect(await failuresOf(other)).toEqual([])
   write(join(project, 'Claude.md'), 'A fact.\n')
   expect(await failuresOf(project)).toEqual([])
-  write(rule, "export default { description: 'Write x.', check: () => [] }\n")
+  write(rule, "export default { description: 'Write x.', create: () => ({}) }\n")
   expect(await failuresOf(project)).toEqual([])
-  write(rule, 'export default { check: () => [] }\n')
+  write(rule, 'export default { create: () => ({}) }\n')
   expect(await failuresOf(other)).toEqual([broken])
   expect(await failuresOf(project)).toEqual([])
   expect((rulebook(['inspect', 'rules'], '') as { failures: readonly string[] }).failures).toEqual([broken])
@@ -163,7 +167,7 @@ test('two projects with different configs, checked through one server, each get 
   mkdirSync(other)
   Bun.spawnSync(['git', 'init', '-q'], { cwd: other })
   write(join(project, 'rulebook.config.ts'), "export default { plugins: { app: './rules' }, rules: { 'global/block-hedging': 'off' } }\n")
-  write(join(project, 'rules', 'block-npm-run.ts'), "export default { description: 'Run just, never npm run.', check: ({ lines }) => lines.flatMap((text, index) => (text.includes('npm run') ? [{ line: index + 1 }] : [])) }\n")
+  write(join(project, 'rules', 'block-npm-run.ts'), NPM_RUN_RULE)
   write(join(other, 'rulebook.config.ts'), "export default { rules: { 'global/block-em-dashes': 'off' } }\n")
   const text = `It probably works.\nRun npm run ${EM_DASH} now.\n`
   const rulesOf = async (cwd: string) => ((await ask('edit', written(join(cwd, 'Claude.md'), text, cwd))).answer as { findings: { rule: string }[] }).findings.map(({ rule }) => rule)
@@ -184,7 +188,7 @@ test('an edited stylelint.config.mjs takes effect on the next request, though th
 
 test('a broken config fails the answer with its reason, and the fixed config answers on the next request', async () => {
   const config = write(join(project, 'rulebook.config.ts'), "export default { lint: true }\n")
-  expect(await ask('edit', written(join(project, 'Claude.md'), 'A fact.\n'))).toEqual({ status: 500, answer: `${config}: "lint" is not a rulebook config key. The keys are extends, plugins, paths, probes, timeout, existingErrors, rules, linters, programs, messages.` })
+  expect(await ask('edit', written(join(project, 'Claude.md'), 'A fact.\n'))).toEqual({ status: 500, answer: `${config}: "lint" is not a rulebook config key. The keys are extends, plugins, files, probes, timeout, existingErrors, rules, linters, programs, messages.` })
   write(config, 'export default {}\n')
   expect(await ask('edit', written(join(project, 'Claude.md'), 'A fact.\n'))).toEqual({ status: 200, answer: { failures: [], findings: [] } })
 })
@@ -253,7 +257,7 @@ test('a line Jev gives 0.8 passes at the default threshold of 0.7, and fails a r
   const edit = written(join(project, 'Claude.md'), 'Each step maybe runs.\n')
   jevRule('model: jev')
   expect(await ask('edit', edit)).toEqual({ status: 200, answer: { failures: [], findings: [] } })
-  jevRule('model: jev\nmetadata:\n  threshold: 0.9')
+  jevRule('model: jev\nthreshold: 0.9')
   expect(await ask('edit', edit)).toMatchObject({ status: 200, answer: { refuse: expect.stringContaining('1  error  global/block-domain-words') } })
   jevRule('model: jev')
   write(join(project, 'rulebook.config.ts'), "export default { rules: { 'global/block-domain-words': { threshold: 0.9 } } }\n")
@@ -327,7 +331,7 @@ test("a Claude.md that a checked write creates brings its imports in, even when 
 })
 
 test('a config that fails on a missing plugin folder, a missing extends file, or an extends file that does not parse answers on the next request once that path is fixed', async () => {
-  const npmRunRule = "export default { description: 'Run just, never npm run.', check: ({ lines }) => lines.flatMap((text, index) => (text.includes('npm run') ? [{ line: index + 1 }] : [])) }\n"
+  const npmRunRule = NPM_RUN_RULE
   const extending = "export default { extends: ['./shared.config.ts'] }\n"
   const cases = [
     { name: 'plugin', config: "export default { plugins: { app: './rules' } }\n", broken: undefined, fixed: ['rules/block-npm-run.ts', npmRunRule], rules: ['app/block-npm-run', 'global/block-em-dashes'] },

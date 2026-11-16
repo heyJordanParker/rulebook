@@ -16,8 +16,8 @@ const LISTED = {
   'mcp__inbox__*': { source: String.raw`(?!@)^(?:^(?:mcp__inbox__[^/]*?)$)$`, flags: '' },
   '**/*.md': { source: String.raw`(?!@)^(?:(?:(?!(?:^|\/)\.{1,2}(?:\/|$))(?:(?:(?!(?:^|\/)\.{1,2}(?:\/|$)).)*?)\/)?(?!\.{1,2}(?:\/|$))(?=.)[^/]*?\.md)$`, flags: '' },
 }
-const EM_DASHES = { id: 'global/block-em-dashes', description: "Don't write em dashes.", isEverywhere: true, paths: [LISTED['**'], LISTED['@reply']] }
-const TRUE_FACTS = { id: 'global/require-true-facts', description: "Don't state a Fact the code contradicts.", isEverywhere: false, paths: [LISTED['**/Claude.md']] }
+const EM_DASHES = { id: 'global/block-em-dashes', description: "Don't write em dashes.", isEverywhere: true, files: [LISTED['**'], LISTED['@reply']] }
+const TRUE_FACTS = { id: 'global/require-true-facts', description: "Don't state a Fact the code contradicts.", isEverywhere: false, files: [LISTED['**/Claude.md']] }
 const MESSAGES = [{ name: '@reply', tools: [] }, { name: '@inbox', tools: [LISTED['mcp__inbox__*']] }]
 const LISTING = { root: '/work', sources: ['/home/.config/rulebook/rulebook.config.ts', '/work/rulebook.config.ts', '/home/.config/rulebook/rules'], folders: [{ path: '', rules: [EM_DASHES, TRUE_FACTS] }], messages: MESSAGES, failures: [] as string[] }
 const FILES = { '/work/Claude.md': 'A fact.\n', '/work/packages/claude/Claude.md': 'A fact.\n', '/work/notes.md': 'A note.\n' }
@@ -108,7 +108,7 @@ test('a rule for some files reaches the agent with its first read of a file it c
 })
 
 test("a rule that packages/a/rulebook.config.ts turns on reaches the agent with its read of packages/a/x.md, and never with packages/b/x.md, which the root folder's rules cover", async () => {
-  const hedging = { id: 'global/block-hedging', description: 'State a claim only once you checked it.', isEverywhere: false, paths: [LISTED['**/*.md']] }
+  const hedging = { id: 'global/block-hedging', description: 'State a claim only once you checked it.', isEverywhere: false, files: [LISTED['**/*.md']] }
   const listing = { ...LISTING, folders: [{ path: '', rules: [EM_DASHES, TRUE_FACTS] }, { path: 'packages/a', rules: [EM_DASHES, TRUE_FACTS, hedging] }] }
   const tested = serving({ rules: listing }, { projectRoot: '/work', files: { '/work/packages/a/x.md': 'A note.\n', '/work/packages/b/x.md': 'A note.\n' } })
   await tested.raise.beforeSessionStart({ source: 'startup' })
@@ -138,7 +138,7 @@ test('the rules load again at the next check after a rulebook config or rule fil
   tested.fakes.fs.stat = async () => ({ kind: 'file', isLink: false, mtimeMs: modifiedAt, size: 1 })
   expect(await tested.raise.beforeSessionStart({ source: 'startup' })).toEqual({ note: "- Don't write em dashes." })
   await Bun.sleep(10)
-  listing = { ...LISTING, folders: [{ path: '', rules: [EM_DASHES, TRUE_FACTS, { id: 'global/block-hedging', description: 'State a claim only once you checked it.', isEverywhere: true, paths: [LISTED['**']] }] }] }
+  listing = { ...LISTING, folders: [{ path: '', rules: [EM_DASHES, TRUE_FACTS, { id: 'global/block-hedging', description: 'State a claim only once you checked it.', isEverywhere: true, files: [LISTED['**']] }] }] }
   modifiedAt = 2
   for (const tick of ticks) tick()
   await Bun.sleep(10)
@@ -152,7 +152,7 @@ test('an error from rulebook refuses the edit with its text', async () => {
   const tested = serving({ rules: LISTING, edit: { refuse: refusal, failures: [], findings: [SPLIT] } }, { projectRoot: '/work' })
   const input = { file_path: '/work/Claude.md', old_string: 'a', new_string: `Run it ${EM_DASH} now.` }
   expect(await tested.raise.beforeToolCall({ name: 'Edit', input })).toEqual({ refuse: refusal })
-  expect(asked(tested)).toEqual([{ url: 'http://localhost/edit', input: { tool_name: 'Edit', tool_input: input, cwd: '/work' }, environment: ENVIRONMENT, socketPath: SOCKET }])
+  expect(asked(tested)).toEqual([{ url: 'http://localhost/edit', input: { tool_name: 'Edit', tool_input: input, cwd: '/work', session_id: expect.any(String) }, environment: ENVIRONMENT, socketPath: SOCKET }])
 })
 
 test('warnings from rulebook reach the agent beside the edit', async () => {
@@ -195,7 +195,7 @@ test("a call to a tool a message's tools match is refused before it runs when it
   expect(await tested.raise.beforeToolCall({ name: 'mcp__inbox__propose', input: proposal })).toEqual({ refuse: `Inbox refused. Fix every error, then send it again.\n\n  1  error  global/block-em-dashes  Split the sentence at the em dash.\n     > Ship it ${EM_DASH} today.` })
   expect(await tested.raise.beforeToolCall({ name: 'mcp__notes__add', input: { text: `Ship it ${EM_DASH} today.` } })).toBeUndefined()
   expect(await tested.raise.beforeToolCall({ name: 'Read', input: { file_path: '/work/Claude.md' } })).toBeUndefined()
-  expect(asked(tested).map(({ url, input }) => ({ url, input }))).toEqual([{ url: 'http://localhost/text', input: { name: '@inbox', input: proposal, cwd: '/work' } }])
+  expect(asked(tested).map(({ url, input }) => ({ url, input }))).toEqual([{ url: 'http://localhost/text', input: { name: '@inbox', input: proposal, cwd: '/work', tool_name: 'mcp__inbox__propose', session_id: 'test-session' } }])
 })
 
 test('a reply that breaks a rule is refused once with the refusal, and the turn ends after its rewrite', async () => {

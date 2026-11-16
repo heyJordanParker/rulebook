@@ -1,16 +1,17 @@
 import { basename, dirname, join } from 'node:path'
-import { checkFile, globRegExp } from './check.ts'
+import type { Call } from './api.ts'
+import { checkFile, COMMAND, globRegExp } from './check.ts'
 import { CONFIG_FILE, globalConfigFile, isRecord, loadSettings, projectRoot } from './config.ts'
-import { checkEdit, editRoot, type ToolCall } from './edit.ts'
+import { checkEdit, EDIT_TOOLS, editRoot } from './edit.ts'
 import { listedFiles } from './files.ts'
 import { editAnswer, type EditAnswer } from './report.ts'
 import { loadRules } from './rules.ts'
 
 export type Question = 'edit' | 'text' | 'rules'
 
-type Text = { readonly name: string; readonly text: string; readonly cwd: string; readonly input?: Readonly<Record<string, unknown>> }
+type Text = { readonly name: string; readonly text: string; readonly cwd: string; readonly call?: Call }
 
-const EDIT_TOOLS = /^(Edit|Write|MultiEdit)$/
+const SHELLS = new Set(['sh', 'bash', 'zsh', 'dash', 'ksh', 'fish'])
 
 type Answerer = {
   root(input: unknown): string
@@ -19,8 +20,8 @@ type Answerer = {
 
 const QUESTIONS: Readonly<Record<Question, Answerer>> = {
   edit: {
-    root: (input) => editRoot(toolCall(input)),
-    answer: (input, root) => checkEdit(toolCall(input), root),
+    root: (input) => editRoot(callOf(input)),
+    answer: (input, root) => checkEdit(callOf(input), root),
   },
   text: {
     root: (input) => {
@@ -50,21 +51,21 @@ export function answer(question: Question, input: unknown, root: string): Promis
   return QUESTIONS[question].answer(input, root)
 }
 
-async function checkText({ name, text, cwd, input }: Text, root: string): Promise<EditAnswer> {
+async function checkText({ name, text, cwd, call }: Text, root: string): Promise<EditAnswer> {
   const settings = await loadSettings(cwd, root)
   if (!name.startsWith('@')) throw new Error('The text question checks a message by its @-name, such as @reply or @inbox/<id>.md.')
   const { rules } = await loadRules(settings)
-  const report = await checkFile(settings, rules, name, text, { scope: 'edit', imported: async () => new Set(), ...(input === undefined ? {} : { input }) })
+  const report = await checkFile(settings, rules, name, text, { scope: 'edit', imported: async () => new Set(), ...(call === undefined ? {} : { call }) })
   return editAnswer(report)
 }
 
 export async function checkToolCall(input: unknown): Promise<EditAnswer | undefined> {
-  const call = toolCall(input)
-  if (EDIT_TOOLS.test(call.tool_name)) return checkEdit(call, editRoot(call))
+  const call = callOf(input)
+  if (EDIT_TOOLS.has(call.tool)) return checkEdit(call, editRoot(call))
   const root = projectRoot(call.cwd, call.cwd)
   const messages = Object.entries((await loadSettings(call.cwd, root)).messages)
-  const name = messages.find(([, { tools }]) => tools.some((glob) => globRegExp(glob).test(call.tool_name)))?.[0]
-  return name === undefined ? undefined : checkText({ name: `@${name}`, text: textsOf(call.tool_input).join('\n\n'), cwd: call.cwd, input: call.tool_input }, root)
+  const name = messages.find(([, { tools }]) => tools.some((glob) => globRegExp(glob).test(call.tool)))?.[0]
+  return name === undefined ? undefined : checkText({ name: `@${name}`, text: messageText(`@${name}`, call.input), cwd: call.cwd, call }, root)
 }
 
 async function listRules(cwd: string, root: string): Promise<unknown> {
@@ -81,11 +82,11 @@ async function listRules(cwd: string, root: string): Promise<unknown> {
     sources: [...new Set([globalConfigFile(), join(root, CONFIG_FILE), ...folders.flatMap((folder) => folder.settings.configs.flatMap((config) => [config.file, ...Object.values(config.plugins)]))])],
     folders: folders.map((folder) => ({
       path: folder.path,
-      rules: folder.rules.filter(({ level }) => level !== 'off').map(({ id, description, paths = folder.settings.paths }) => ({
+      rules: folder.rules.filter(({ level }) => level !== 'off').map(({ id, description, files = folder.settings.files }) => ({
         id,
         description,
-        isEverywhere: paths.some((glob) => glob === (folder.path === '' ? '**' : `${folder.path}/**`) || glob.startsWith('@')),
-        paths: regExpsOf(paths),
+        isEverywhere: files.some((glob) => glob === (folder.path === '' ? '**' : `${folder.path}/**`) || glob.startsWith('@')),
+        files: regExpsOf(files),
       })),
     })),
     messages: Object.entries(settings.messages).map(([name, { tools }]) => ({ name: `@${name}`, tools: regExpsOf(tools) })),
@@ -93,16 +94,35 @@ async function listRules(cwd: string, root: string): Promise<unknown> {
   }
 }
 
-function toolCall(input: unknown): ToolCall {
-  if (!isRecord(input) || typeof input.tool_name !== 'string' || !isRecord(input.tool_input) || typeof input.cwd !== 'string') throw new Error('A tool call is {"tool_name", "tool_input", "cwd"}.')
-  return { tool_name: input.tool_name, tool_input: input.tool_input, cwd: input.cwd }
+function callOf(input: unknown): Call {
+  if (!isRecord(input) || typeof input.tool_name !== 'string' || !isRecord(input.tool_input) || typeof input.cwd !== 'string') throw new Error('A tool call is {"tool_name", "tool_input", "cwd"}, with "session_id", "agent_type", "agent_id", and "transcript_path" when Claude Code sends them.')
+  return { tool: input.tool_name, input: input.tool_input, cwd: input.cwd, ...whoCalls(input) }
+}
+
+function whoCalls(input: Readonly<Record<string, unknown>>): Omit<Call, 'tool' | 'input' | 'cwd'> {
+  const fields = { session: input.session_id, agentType: input.agent_type, agentId: input.agent_id, transcriptPath: input.transcript_path }
+  return Object.fromEntries(Object.entries(fields).filter(([, value]) => typeof value === 'string' && value !== ''))
 }
 
 function textOf(input: unknown): Text {
   if (!isRecord(input) || typeof input.name !== 'string' || typeof input.cwd !== 'string') throw new Error('The text question reads {"name", "text" or "input", "cwd"}.')
-  if (isRecord(input.input)) return { name: input.name, text: textsOf(input.input).join('\n\n'), cwd: input.cwd, input: input.input }
+  if (isRecord(input.input)) {
+    const call = typeof input.tool_name === 'string' ? { call: { tool: input.tool_name, input: input.input, cwd: input.cwd, ...whoCalls(input) } } : {}
+    return { name: input.name, text: messageText(input.name, input.input), cwd: input.cwd, ...call }
+  }
   if (typeof input.text !== 'string') throw new Error('The text question reads {"name", "text" or "input", "cwd"}.')
   return { name: input.name, text: input.text, cwd: input.cwd }
+}
+
+function messageText(name: string, input: Readonly<Record<string, unknown>>): string {
+  return name === COMMAND ? commandText(input.command ?? input.cmd) : textsOf(input).join('\n\n')
+}
+
+function commandText(command: unknown): string {
+  if (typeof command === 'string') return command
+  if (!Array.isArray(command) || !command.every((word) => typeof word === 'string')) return ''
+  const [shell = '', flag = '', script] = command
+  return command.length === 3 && SHELLS.has(basename(shell)) && /^-[a-z]*c$/.test(flag) && script !== undefined ? script : command.join(' ')
 }
 
 function textsOf(value: unknown): readonly string[] {
