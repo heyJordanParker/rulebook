@@ -19,7 +19,7 @@ type Listing = {
   readonly sources: readonly string[]
   readonly folders: readonly {
     readonly path: string
-    readonly rules: readonly { readonly id: string; readonly description: string; readonly isEverywhere: boolean; readonly paths: readonly ListedRegExp[] }[]
+    readonly rules: readonly { readonly id: string; readonly description: string; readonly isEverywhere: boolean; readonly files: readonly ListedRegExp[] }[]
   }[]
   readonly messages: readonly { readonly name: string; readonly tools: readonly ListedRegExp[] }[]
   readonly failures: readonly string[]
@@ -116,15 +116,15 @@ export const rulebook = defineMod({
     everyAgent.beforeToolResult((result) => show(result.task ?? result.session, [...result.files.read, ...result.files.changed], false))
 
     everyAgent.beforeToolCall(
-      { name: /^(Edit|Write|MultiEdit)$/ },
-      async (call, { signal }) => relayed(await asked<EditAnswer>('edit', { tool_name: call.name, tool_input: call.input, cwd: call.cwd }, signal)),
+      { name: /^(Edit|Write|MultiEdit|NotebookEdit)$/ },
+      async (call, { signal }) => relayed(await asked<EditAnswer>('edit', { tool_name: call.name, tool_input: call.input, cwd: call.cwd, ...whoCalls(call) }, signal)),
       { timeoutMs: longestMs },
     )
 
     everyAgent.beforeToolCall(
       async (call, { signal }) => {
         const message = (await listed()).messages.find(({ isSentBy }) => isSentBy(call.name))
-        return message === undefined ? undefined : relayed(await asked<EditAnswer>('text', { name: message.name, input: call.input, cwd: call.cwd }, signal))
+        return message === undefined ? undefined : relayed(await asked<EditAnswer>('text', { name: message.name, input: call.input, cwd: call.cwd, tool_name: call.name, ...whoCalls(call) }, signal))
       },
       { timeoutMs: longestMs },
     )
@@ -183,9 +183,13 @@ function listedOf({ root, sources, folders, messages, failures }: Listing): List
     root,
     sources,
     failures,
-    folders: [...folders].sort((a, b) => b.path.length - a.path.length).map(({ path, rules }) => ({ path, rules: rules.map((rule) => ({ ...rule, covers: anyOf(rule.paths) })) })),
+    folders: [...folders].sort((a, b) => b.path.length - a.path.length).map(({ path, rules }) => ({ path, rules: rules.map((rule) => ({ ...rule, covers: anyOf(rule.files) })) })),
     messages: messages.map((message) => ({ ...message, isSentBy: anyOf(message.tools) })),
   }
+}
+
+function whoCalls(call: { readonly session: string; readonly agentType?: string; readonly task?: string }): Readonly<Record<string, string>> {
+  return { session_id: call.session, ...(call.agentType === undefined ? {} : { agent_type: call.agentType }), ...(call.task === undefined ? {} : { agent_id: call.task }) }
 }
 
 function anyOf(listed: readonly ListedRegExp[]): (text: string) => boolean {
