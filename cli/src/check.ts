@@ -2,14 +2,15 @@ import { existsSync, readFileSync, realpathSync, statSync } from 'node:fs'
 import { relative } from 'node:path'
 import { diffArrays } from 'diff'
 import picomatch from 'picomatch/posix'
-import type { Finding, Level, LinterName, CheckedFile } from './api.ts'
+import { parseShell } from '@cmodjs/core/shell.js'
+import type { Call, LinterName } from './api.ts'
 import { runAgentic } from './agent.ts'
 import { importedFile, isClaudeMd, readClaudeMd } from './claude-md.ts'
 import { isInside, type Settings } from './config.ts'
 import { isJev, runJev } from './jev.ts'
 import { coveringLinters, LINTERS, lintFolder, lintText, projectLinters, type Covering, type ProjectLinter } from './linters.ts'
 import { seconds } from './lsp.ts'
-import type { LoadedRule, StaticRule } from './rules.ts'
+import { levelOf, type CheckedFile, type Finding, type Level, type LoadedRule, type StaticRule } from './rules.ts'
 
 type Scope = 'edit' | 'commit' | 'all'
 
@@ -34,10 +35,11 @@ type CheckOptions = {
   readonly scope: Scope
   readonly previous?: string | undefined
   readonly imported: () => Promise<ReadonlySet<string>>
-  readonly input?: Readonly<Record<string, unknown>>
+  readonly call?: Call
   readonly skip?: readonly string[]
 }
 
+export const COMMAND = '@command'
 const PIN = /^\s*<!--\s*rulebook-expect\s+(\S+)\s*-->\s*$/
 const MAX_EDIT_LENGTH = 1_000
 
@@ -74,7 +76,7 @@ function isProbe(settings: Settings, file: string): boolean {
 }
 
 export function isPrompt(settings: Settings, file: string): boolean {
-  return isInside(settings.root, file) && matches(settings.paths, relative(settings.root, file))
+  return isInside(settings.root, file) && matches(settings.files, relative(settings.root, file))
 }
 
 export async function checkFile(settings: Settings, rules: readonly LoadedRule[], file: string, text: string, options: CheckOptions): Promise<FileReport | undefined> {
@@ -92,7 +94,13 @@ export async function checkFile(settings: Settings, rules: readonly LoadedRule[]
   const mayPin = text.includes('rulebook-expect')
   const claudeMd = isDoc || probe || (mayPin && written.some((line) => PIN.test(line))) ? readClaudeMd(text) : undefined
   const memory = isDoc ? claudeMd : undefined
-  const prompt: CheckedFile = { root: settings.root, path, ...(memory === undefined ? { text, lines: written } : { text: memory.lines.join('\n'), lines: memory.lines }), ...(options.input === undefined ? {} : { input: options.input }) }
+  const prompt: CheckedFile = {
+    root: settings.root,
+    path,
+    ...(memory === undefined ? { text, lines: written } : { text: memory.lines.join('\n'), lines: memory.lines }),
+    ...(path === COMMAND ? { shell: parseShell(text) } : {}),
+    ...(options.call === undefined ? {} : { call: options.call }),
+  }
   const doc = memory === undefined ? undefined : { file, imports: memory.imports }
   const pins = mayPin ? pinsOf(written, claudeMd?.lines ?? []) : []
   const pinned = new Set(pins.map(({ rule }) => rule))
@@ -115,18 +123,18 @@ export async function checkFile(settings: Settings, rules: readonly LoadedRule[]
 
   const lints = await linting
   const failures = [...runs.flatMap((run) => ('failure' in run ? [{ rule: run.rule.id, reason: run.failure }] : [])), ...lints.flatMap((lint) => lint.failures)]
-  const found = [...runs.flatMap((run) => ('found' in run ? run.found.map(({ line, message }) => ({ line, message: message ?? run.rule.description, rule: run.rule.id, level: run.rule.level === 'off' ? 'error' as const : run.rule.level })) : [])), ...lints.flatMap((lint) => lint.flags)]
+  const found = [...runs.flatMap((run) => ('found' in run ? run.found.map(({ line, message, isWhole }) => ({ line, message: message ?? run.rule.message ?? run.rule.description, rule: run.rule.id, level: run.rule.level === 'off' ? 'error' as const : run.rule.level, ...(isWhole === true ? { isWhole } : {}) })) : [])), ...lints.flatMap((lint) => lint.flags)]
   const unscoped = new Set(rules.filter((rule) => !inScope(rule, options)).map(({ id }) => id))
-  const flagged = probe ? probeFindings(found, pins.filter(({ rule }) => !unscoped.has(rule))) : [...found, ...pins.map((pin) => ({ rule: 'rulebook/pins', line: pin.line, level: 'error' as const, message: 'A rulebook-expect pin works only in a probe file. Remove it.' }))]
+  const flagged: readonly Flag[] = probe ? probeFindings(found, pins.filter(({ rule }) => !unscoped.has(rule))) : [...found, ...pins.map((pin) => ({ rule: 'rulebook/pins', line: pin.line, level: 'error' as const, message: 'A rulebook-expect pin works only in a probe file. Remove it.' }))]
 
   return {
     path,
     failures,
     findings: flagged
-      .map((finding) => {
+      .map(({ isWhole, ...finding }) => {
         const quote = written[finding.line - 1] ?? ''
-        const isExisting = wrote !== undefined && !wrote.has(finding.line)
-        return { ...finding, quote, isExisting, level: isExisting && finding.level === 'error' ? settings.existingErrors : finding.level }
+        const isExisting = wrote !== undefined && isWhole !== true && !wrote.has(finding.line)
+        return { ...finding, quote, isExisting, level: isExisting && finding.level === 'error' ? levelOf(settings.existingErrors) : finding.level }
       })
       .sort((a, b) => a.line - b.line || a.rule.localeCompare(b.rule)),
   }
@@ -181,14 +189,12 @@ async function linterFlags(linter: Covering, file: string, text: string, timeout
 }
 
 function covers(rule: LoadedRule, path: string, isPrompt: boolean): boolean {
-  return rule.level !== 'off' && (rule.paths === undefined ? isPrompt : matches(rule.paths, path))
+  return rule.level !== 'off' && (rule.files === undefined ? isPrompt : matches(rule.files, path))
 }
 
 function inScope(rule: LoadedRule, { scope, skip }: CheckOptions): boolean {
   if (isSkipped(skip, rule.id) || (rule.kind === 'agentic' && isSkipped(skip, 'agentic'))) return false
-  if (scope === 'all') return true
-  if (scope === 'commit') return rule.runs !== 'manual'
-  return rule.runs === 'always'
+  return scope !== 'edit' || rule.runs === 'always'
 }
 
 export function isSkipped(skip: readonly string[] | undefined, name: string): boolean {
@@ -252,9 +258,10 @@ export function importsRule(settings: Settings): StaticRule {
     source: 'rulebook',
     kind: 'static',
     description: 'Import only files that exist.',
+    message: undefined,
     level: 'off',
     runs: 'always',
-    paths: undefined,
+    files: undefined,
     check: (_, doc) => (doc === undefined ? [] : doc.imports.flatMap(({ path, line }) => {
       const target = importedFile(doc.file, path)
       if (target === undefined || statSync(target, { throwIfNoEntry: false })?.isFile() === true) return []
@@ -280,16 +287,17 @@ export const noSuppressionsRule: StaticRule = {
   source: 'rulebook',
   kind: 'static',
   description: 'Fix the code instead of suppressing the rule.',
+  message: undefined,
   level: 'off',
   runs: 'always',
-  paths: [`**/*.{${[...new Set(Object.values(LINTERS).flatMap(({ extensions }) => extensions.map((extension) => extension.slice(1))))].join(',')}}`, '**/!(*.*)'],
+  files: [`**/*.{${[...new Set(Object.values(LINTERS).flatMap(({ extensions }) => extensions.map((extension) => extension.slice(1))))].join(',')}}`, '**/!(*.*)'],
   check: ({ lines }) => lines.flatMap((text, index) => {
     const linter = Object.entries(SUPPRESSIONS).find(([, suppression]) => suppression.test(text))?.[0]
     return linter === undefined ? [] : [{ line: index + 1, message: `This comment suppresses ${linter}. Fix the code ${linter} flags, and remove the comment.` }]
   }),
 }
 
-type Flag = Omit<Reported, 'isExisting' | 'quote'>
+type Flag = Omit<Reported, 'isExisting' | 'quote'> & { readonly isWhole?: true }
 
 function probeFindings(found: readonly Flag[], pins: readonly Pin[]): readonly Flag[] {
   const open = [...pins]

@@ -2,6 +2,24 @@
 
 What changed in each version of rulebook, for the people who use it. cmod publish releases the section for the version, and Settings shows it.
 
+## [0.6.0]
+
+### Added
+- rulebook checks every shell command an agent runs, on Claude Code and on codex, as `@command`. A rule visits each program the command runs as a `Command`, with its `program`, `args`, and `folder`, even inside `sudo`, `env`, `bash -c`, `$(…)`, or a pipe, so it never parses the command text itself.
+- A script rule reads the tool call it checks as `context.call`: the tool, its input, its folder, and the session and agent that make it, so a rule can refuse a write by one agent and allow it for another.
+- rulebook checks NotebookEdit calls as it checks Edit, Write, and MultiEdit, and codex's `apply_patch` calls through `rulebook claude-hook`. A write whose result rulebook cannot compute, such as an Edit whose `old_string` the file does not hold, is checked with no text, so a rule that reads `context.call` judges every write.
+- A rule's `Line` knows `isInCodeBlock`, so a prose rule leaves Markdown code blocks alone.
+
+### Changed
+- A script rule is laid out as an ESLint rule. `create(context)` returns a visitor for each kind of node it checks, `Document`, `Line`, or `Command`, and a visitor flags a node with `context.report({ node })`. Change each rule:
+  - `check: ({ lines }) => lines.flatMap(…)` is `create(context) { return { Line(line) { if (…) context.report({ node: line }) } } }`.
+  - A finding's `message` moves to the rule's one `message`, and a rule without one shows its `description`. A rule that needs two messages is two rules.
+- The keys are ESLint's:
+  - a rule's and a config's `paths` is `files`
+  - `level` is `severity`, and `'warning'` is `'warn'`, in a rule, a config's `rules` setting, and `existingErrors`
+  - an agentic rule's `metadata` keys sit at the top of its frontmatter
+- `runs` is `always` or `manual`. `runs: 'commit'` is gone: an agent's write runs only the `always` rules, and every `rulebook check`, `--staged` included, runs both, so a slow rule runs `manual` and a pre-commit hook or CI runs it.
+
 ## [0.5.0]
 
 ### Changed

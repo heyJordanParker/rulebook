@@ -2,7 +2,8 @@ import { closeSync, existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, 
 import { homedir, tmpdir } from 'node:os'
 import { basename, dirname, extname, join, relative, resolve } from 'node:path'
 import packageJson from '../package.json' with { type: 'json' }
-import type { Level, LinterName } from './api.ts'
+import type { LinterName } from './api.ts'
+import type { Level } from './rules.ts'
 import { existingFolder, isStrings } from './config.ts'
 import { oneLine, openedDiagnostics, seconds, type Diagnostic, type Server } from './lsp.ts'
 

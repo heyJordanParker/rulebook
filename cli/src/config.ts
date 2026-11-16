@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, realpathSync, statSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, isAbsolute, join, posix, relative, resolve, sep } from 'node:path'
-import type { Config, Level, LinterName, RuleSettings, Runs } from './api.ts'
+import type { Config, LinterName, RuleSettings, Runs, Severity } from './api.ts'
 import { LINTERS } from './linters.ts'
 import { importDefault } from './modules.ts'
 
@@ -25,19 +25,23 @@ type Layer = { readonly loaded: LoadedConfig; readonly config: Config }
 export type Settings = {
   readonly root: string
   readonly configs: readonly LoadedConfig[]
-  readonly paths: readonly string[]
+  readonly files: readonly string[]
   readonly timeout: number
-  readonly existingErrors: Level
+  readonly existingErrors: Severity
   readonly rules: Readonly<Record<string, RuleSettings>>
   readonly linters: readonly LinterName[]
   readonly programs: Readonly<Partial<Record<LinterName, readonly string[]>>>
   readonly messages: Readonly<Record<string, MessageSource>>
 }
 
-const KEYS = new Set(['extends', 'plugins', 'paths', 'probes', 'timeout', 'existingErrors', 'rules', 'linters', 'programs', 'messages'])
-const RULE_KEYS = new Set(['level', 'runs', 'paths', 'timeout', 'agent', 'model', 'effort', 'threshold'])
+const KEYS = new Set(['extends', 'plugins', 'files', 'probes', 'timeout', 'existingErrors', 'rules', 'linters', 'programs', 'messages'])
+const RULE_KEYS = new Set(['severity', 'runs', 'files', 'timeout', 'agent', 'model', 'effort', 'threshold'])
 const MESSAGE_KEYS = new Set(['tools', 'folder'])
-const BUILT_IN: Pick<LoadedConfig, 'file' | 'plugins' | 'messages'> = { file: 'rulebook', plugins: {}, messages: { reply: { tools: [], folder: undefined } } }
+const BUILT_IN: Pick<LoadedConfig, 'file' | 'plugins' | 'messages'> = {
+  file: 'rulebook',
+  plugins: {},
+  messages: { reply: { tools: [], folder: undefined }, command: { tools: ['Bash', 'shell_command', 'exec_command'], folder: undefined } },
+}
 
 export function globalConfigFile(): string {
   return join(process.env.XDG_CONFIG_HOME || join(homedir(), '.config'), 'rulebook', CONFIG_FILE)
@@ -107,9 +111,9 @@ async function settingsOf(root: string, file: string | undefined): Promise<Setti
   return {
     root,
     configs: configs.map(({ loaded }) => loaded),
-    paths: [...new Set(configs.flatMap(({ loaded, config }) => rootRelative(loaded.basePath, config.paths ?? [])))],
+    files: [...new Set(configs.flatMap(({ loaded, config }) => rootRelative(loaded.basePath, config.files ?? [])))],
     timeout: latest.find(({ timeout }) => timeout !== undefined)?.timeout ?? 30_000,
-    existingErrors: latest.find(({ existingErrors }) => existingErrors !== undefined)?.existingErrors ?? 'warning',
+    existingErrors: latest.find(({ existingErrors }) => existingErrors !== undefined)?.existingErrors ?? 'warn',
     rules: overrides(configs.map(({ loaded, config }) => rootRelativeRules(loaded.basePath, config.rules ?? {}))),
     linters: [...new Set(configs.flatMap(({ config }) => config.linters ?? []))],
     programs: Object.assign({}, ...configs.map(({ config }) => config.programs ?? {})),
@@ -129,8 +133,8 @@ export function rootRelative(basePath: string, globs: readonly string[]): readon
 
 function rootRelativeRules(basePath: string, rules: NonNullable<Config['rules']>): Readonly<Record<string, RuleSettings>> {
   return Object.fromEntries(Object.entries(rules).map(([id, override]) => {
-    const settings = typeof override === 'string' ? { level: override } : override
-    return [id, settings.paths === undefined ? settings : { ...settings, paths: rootRelative(basePath, settings.paths) }]
+    const settings = typeof override === 'string' ? { severity: override } : override
+    return [id, settings.files === undefined ? settings : { ...settings, files: rootRelative(basePath, settings.files) }]
   }))
 }
 
@@ -178,10 +182,10 @@ function validConfig(file: string, value: unknown): Config {
   if (value.extends !== undefined && !(Array.isArray(value.extends) && value.extends.every((entry) => typeof entry === 'string' || isRecord(entry)))) fail('extends is a list of config paths, relative to the config, and config objects, such as [recommended].')
   if (value.plugins !== undefined && !(isRecord(value.plugins) && Object.values(value.plugins).every((folder) => typeof folder === 'string'))) fail('plugins maps each plugin name to a folder.')
   for (const name of Object.keys(value.plugins ?? {})) if (!/^[a-z][a-z0-9-]*$/.test(name)) fail(`"${name}" is not a plugin name: use lowercase letters, digits, and "-".`)
-  for (const key of ['paths', 'probes'] as const) if (value[key] !== undefined && !isStrings(value[key])) fail(`${key} is a list of globs.`)
+  for (const key of ['files', 'probes'] as const) if (value[key] !== undefined && !isStrings(value[key])) fail(`${key} is a list of globs.`)
   if (value.timeout !== undefined && !isTimeout(value.timeout)) fail('timeout is a whole number of milliseconds above 0.')
-  if (value.existingErrors !== undefined && !isLevel(value.existingErrors)) fail('existingErrors is "error" or "warning".')
-  if (value.rules !== undefined && !isRecord(value.rules)) fail('rules maps each rule name, such as "global/block-em-dashes", to a level or to settings.')
+  if (value.existingErrors !== undefined && !isSeverity(value.existingErrors)) fail('existingErrors is "error" or "warn".')
+  if (value.rules !== undefined && !isRecord(value.rules)) fail('rules maps each rule name, such as "global/block-em-dashes", to a severity or to settings.')
   for (const [id, override] of Object.entries(isRecord(value.rules) ? value.rules : {})) validOverride(file, id, override)
   if (value.linters !== undefined && !isStrings(value.linters)) fail(`linters is a list of the linters to run, such as ['oxlint', 'biome']. The linters are ${Object.keys(LINTERS).join(', ')}.`)
   for (const name of isStrings(value.linters) ? value.linters : []) if (!Object.hasOwn(LINTERS, name)) fail(`linters names "${name}", which is not a linter rulebook runs. The linters are ${Object.keys(LINTERS).join(', ')}.`)
@@ -210,12 +214,12 @@ function validOverride(file: string, id: string, override: unknown): void {
   const fail = (problem: string): never => {
     throw new Error(`${file}: rules["${id}"] ${problem}`)
   }
-  if (override === 'off' || isLevel(override)) return
-  if (!isRecord(override)) return fail('is "error", "warning", "off", or an object of rule settings.')
+  if (override === 'off' || isSeverity(override)) return
+  if (!isRecord(override)) return fail('is "error", "warn", "off", or an object of rule settings.')
   for (const key of Object.keys(override)) if (!RULE_KEYS.has(key)) fail(`sets "${key}", which no rule has. A rule's settings are ${[...RULE_KEYS].join(', ')}.`)
-  if (override.level !== undefined && override.level !== 'off' && !isLevel(override.level)) fail('level is "error", "warning", or "off".')
-  if (override.runs !== undefined && !isRuns(override.runs)) fail('runs is "always", "commit", or "manual".')
-  if (override.paths !== undefined && !isStrings(override.paths)) fail('paths is a list of globs.')
+  if (override.severity !== undefined && override.severity !== 'off' && !isSeverity(override.severity)) fail('severity is "error", "warn", or "off".')
+  if (override.runs !== undefined && !isRuns(override.runs)) fail('runs is "always" or "manual".')
+  if (override.files !== undefined && !isStrings(override.files)) fail('files is a list of globs.')
   if (override.timeout !== undefined && !isTimeout(override.timeout)) fail('timeout is a whole number of milliseconds above 0.')
   if (override.threshold !== undefined && !isThreshold(override.threshold)) fail('threshold is a probability above 0 and at most 1.')
   for (const key of ['agent', 'model', 'effort'] as const) if (override[key] !== undefined && typeof override[key] !== 'string') fail(`${key} is a string.`)
@@ -238,12 +242,12 @@ export function isStrings(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((item) => typeof item === 'string')
 }
 
-export function isLevel(value: unknown): value is Level {
-  return value === 'error' || value === 'warning'
+export function isSeverity(value: unknown): value is Severity {
+  return value === 'error' || value === 'warn'
 }
 
 export function isRuns(value: unknown): value is Runs {
-  return value === 'always' || value === 'commit' || value === 'manual'
+  return value === 'always' || value === 'manual'
 }
 
 export function isTimeout(value: unknown): value is number {

@@ -1,5 +1,5 @@
 import { join } from 'node:path'
-import type { Finding, CheckedFile } from './api.ts'
+import type { CheckedFile, Finding } from './rules.ts'
 import { isRecord } from './config.ts'
 import type { AgenticRule } from './rules.ts'
 

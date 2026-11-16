@@ -12,7 +12,7 @@ function findingLines(findings: readonly Reported[]): string {
   const levelWidth = Math.max(...findings.map(({ level }) => level.length))
   const ruleWidth = Math.max(...findings.map(({ rule }) => rule.length))
   return findings
-    .map(({ line, level, rule, message, quote }) => `  ${String(line).padStart(lineWidth)}  ${level.padEnd(levelWidth)}  ${rule.padEnd(ruleWidth)}  ${message}\n  ${' '.repeat(lineWidth)}  > ${quote.trim()}`.trimEnd())
+    .map(({ line, level, rule, message, quote }) => `  ${String(line).padStart(lineWidth)}  ${level.padEnd(levelWidth)}  ${rule.padEnd(ruleWidth)}  ${message}${quote.trim() === '' ? '' : `\n  ${' '.repeat(lineWidth)}  > ${quote.trim()}`}`.trimEnd())
     .join('\n')
 }
 

@@ -10,7 +10,14 @@ const EM_DASH_RULE = `import { defineRule } from '@cmodjs/rulebook'
 
 export default defineRule({
   description: "Don't write em dashes.",
-  check: ({ lines }) => lines.flatMap((text, index) => (text.includes('—') ? [{ line: index + 1, message: 'Split the sentence at the em dash.' }] : [])),
+  message: 'Split the sentence at the em dash.',
+  create(context) {
+    return {
+      Line(line) {
+        if (line.text.includes('—')) context.report({ node: line })
+      },
+    }
+  },
 })
 `
 
@@ -18,10 +25,21 @@ const HEDGING_RULE = `import { defineRule } from '@cmodjs/rulebook'
 
 export default defineRule({
   description: 'State a claim only once you checked it.',
-  level: 'warning',
-  check: ({ lines }) => lines.flatMap((text, index) => (/\\bprobably\\b/.test(text) ? [{ line: index + 1, message: 'Check the claim, then state it.' }] : [])),
+  message: 'Check the claim, then state it.',
+  severity: 'warn',
+  create(context) {
+    return {
+      Line(line) {
+        if (/\\bprobably\\b/.test(line.text)) context.report({ node: line })
+      },
+    }
+  },
 })
 `
+
+function lineRule(description: string, match: string, extra = ''): string {
+  return `export default { description: ${JSON.stringify(description)}, ${extra}create: (context) => ({ Line: (line) => { if (line.text.includes(${JSON.stringify(match)})) context.report({ node: line }) } }) }\n`
+}
 
 let home: string
 let project: string
@@ -34,7 +52,7 @@ beforeEach(() => {
   mkdirSync(project)
   Bun.spawnSync(['git', 'init', '-q'], { cwd: project })
   write(join(home, 'config', 'rulebook', 'rulebook.config.ts'), `import { defineConfig, recommended } from '@cmodjs/rulebook'
-export default defineConfig({ extends: [recommended], plugins: { global: './rules' }, paths: ['**/Claude.md'], probes: ['probes/*.md'] })
+export default defineConfig({ extends: [recommended], plugins: { global: './rules' }, files: ['**/Claude.md'], probes: ['probes/*.md'] })
 `)
   write(join(home, 'config', 'rulebook', 'rules', 'block-em-dashes.ts'), EM_DASH_RULE)
   write(join(home, 'config', 'rulebook', 'rules', 'block-hedging.ts'), HEDGING_RULE)
@@ -110,7 +128,7 @@ test('a warning lets the edit land and tells the agent', () => {
   })
 })
 
-test('a file outside every config paths is not checked', () => {
+test('a file outside every config files is not checked', () => {
   expect(edit('Write', { file_path: join(project, 'notes.md'), content: 'Run it — now.\n' })).toEqual(NOTHING)
 })
 
@@ -139,10 +157,10 @@ test('a MultiEdit is checked as the file reads after every replacement', () => {
 
 test("a project config turns a global rule off or changes its level, and adds the project's own rules", () => {
   write(join(project, 'rulebook.config.ts'), `import { defineConfig } from '@cmodjs/rulebook'
-export default defineConfig({ plugins: { app: './rules' }, rules: { 'global/block-em-dashes': 'warning', 'global/block-hedging': 'off' } })
+export default defineConfig({ plugins: { app: './rules' }, rules: { 'global/block-em-dashes': 'warn', 'global/block-hedging': 'off' } })
 `)
   const dash = String.fromCharCode(0x2014)
-  write(join(project, 'rules','block-npm-run.ts'), `export default { description: 'Run just, never npm run.', check: ({ lines }) => lines.flatMap((text, index) => (text.includes('npm run') ? [{ line: index + 1, message: 'Run just.' }] : [])) }\n`)
+  write(join(project, 'rules','block-npm-run.ts'), lineRule('Run just, never npm run.', 'npm run', "message: 'Run just.', "))
   const answer = edit('Write', { file_path: join(project, 'Claude.md'), content: `Run it ${dash} probably.\nRun npm run migrate.\n` })
   expect(answer.refuse).toBe(`Edit to Claude.md refused. Fix every error, then edit again.\n\n  2  error  app/block-npm-run  Run just.\n     > Run npm run migrate.\n\nWarnings:\n  1  warning  global/block-em-dashes  Split the sentence at the em dash.\n     > Run it ${dash} probably.`)
 })
@@ -150,7 +168,7 @@ export default defineConfig({ plugins: { app: './rules' }, rules: { 'global/bloc
 test("a file in packages/a/ with its own rulebook.config.ts uses that config plus the global config, and not the root's, unless it extends the root's", () => {
   const dash = String.fromCharCode(0x2014)
   write(join(project, 'rulebook.config.ts'), `export default { rules: { 'global/block-em-dashes': 'off' } }\n`)
-  write(join(project, 'packages', 'a', 'rulebook.config.ts'), `export default { paths: ['**/*.md'] }\n`)
+  write(join(project, 'packages', 'a', 'rulebook.config.ts'), `export default { files: ['**/*.md'] }\n`)
   const nested = join(project, 'packages', 'a', 'docs', 'x.md')
   expect(edit('Write', { file_path: join(project, 'Claude.md'), content: `Run it ${dash} now.\n` })).toEqual(NOTHING)
   expect(edit('Write', { file_path: nested, content: `Run it ${dash} now.\n` }).refuse).toBe(`Edit to packages/a/docs/x.md refused. Fix every error, then edit again.\n\n  1  error  global/block-em-dashes  Split the sentence at the em dash.\n     > Run it ${dash} now.`)
@@ -159,14 +177,14 @@ test("a file in packages/a/ with its own rulebook.config.ts uses that config plu
   write(join(project, 'notes', 'y.md'), `Run it ${dash} now.\n`)
   expect(rulebook(['check', '--skip=agentic']).stdout).toBe(`packages/a/docs/x.md\n  1  error  global/block-em-dashes  Split the sentence at the em dash.\n     > Run it ${dash} now.\n\n1 error, 0 warnings in 2 files\n`)
 
-  write(join(project, 'packages', 'a', 'rulebook.config.ts'), `export default { extends: ['../../rulebook.config.ts'], paths: ['**/*.md'] }\n`)
+  write(join(project, 'packages', 'a', 'rulebook.config.ts'), `export default { extends: ['../../rulebook.config.ts'], files: ['**/*.md'] }\n`)
   expect(edit('Write', { file_path: nested, content: `Run it ${dash} now.\n` })).toEqual(NOTHING)
   expect(rulebook(['check', '--skip=agentic']).stdout).toBe('0 errors, 0 warnings in 2 files\n')
 })
 
 test("a project with no config of its own, under a folder that holds one, uses that folder's config plus the global config, until the project holds its own", () => {
   const dash = String.fromCharCode(0x2014)
-  write(join(home, 'rulebook.config.ts'), `export default { rules: { 'global/block-em-dashes': 'warning' } }\n`)
+  write(join(home, 'rulebook.config.ts'), `export default { rules: { 'global/block-em-dashes': 'warn' } }\n`)
   const answer = edit('Write', { file_path: join(project, 'Claude.md'), content: `Run it ${dash} probably.\n` })
   expect(answer.refuse).toBeUndefined()
   expect(answer.findings).toEqual([
@@ -180,11 +198,11 @@ test("a project with no config of its own, under a folder that holds one, uses t
   expect(edit('Write', { file_path: join(project, 'Claude.md'), content: `Run it ${dash} again.\n` }).refuse).toBe(`Edit to Claude.md refused. Fix every error, then edit again.\n\n  1  error  global/block-em-dashes  Split the sentence at the em dash.\n     > Run it ${dash} again.`)
 })
 
-test("extends: ['../rulebook.config.ts'] merges the global config, then each extends entry, then the config's own keys, so a later rules setting turns an inherited rule to 'warning'", () => {
+test("extends: ['../rulebook.config.ts'] merges the global config, then each extends entry, then the config's own keys, so a later rules setting turns an inherited rule to 'warn'", () => {
   const dash = String.fromCharCode(0x2014)
   write(join(project, 'rulebook.config.ts'), `export default { plugins: { app: './rules' }, rules: { 'global/block-em-dashes': 'off', 'global/block-hedging': 'error' } }\n`)
-  write(join(project, 'rules','block-npm-run.ts'), `export default { description: 'Run just, never npm run.', check: ({ lines }) => lines.flatMap((text, index) => (text.includes('npm run') ? [{ line: index + 1, message: 'Run just.' }] : [])) }\n`)
-  write(join(project, 'a', 'rulebook.config.ts'), `export default { extends: ['../rulebook.config.ts'], rules: { 'global/block-em-dashes': 'warning' } }\n`)
+  write(join(project, 'rules','block-npm-run.ts'), lineRule('Run just, never npm run.', 'npm run', "message: 'Run just.', "))
+  write(join(project, 'a', 'rulebook.config.ts'), `export default { extends: ['../rulebook.config.ts'], rules: { 'global/block-em-dashes': 'warn' } }\n`)
   const answer = edit('Write', { file_path: join(project, 'a', 'Claude.md'), content: `Run it ${dash} probably.\nRun npm run migrate.\n` })
   expect(answer.findings).toEqual([
     { rule: 'global/block-em-dashes', line: 1, level: 'warning', message: 'Split the sentence at the em dash.', quote: `Run it ${dash} probably.`, isExisting: false },
@@ -200,11 +218,11 @@ test('a missing extends path fails and names it', () => {
   expect(run.stderr).toBe(`rulebook: ${join(project, 'rulebook.config.ts')}: extends "./shared/rulebook.config.ts", but ${join(project, 'shared', 'rulebook.config.ts')} is not a file.\n`)
 })
 
-test('a broken CLAUDE.md import is not flagged with no config, and is flagged once a config extends recommended, which needs no paths of its own', () => {
+test('a broken CLAUDE.md import is not flagged with no config, and is flagged once a config extends recommended, which needs no files of its own', () => {
   rmSync(join(home, 'config'), { recursive: true })
   expect(edit('Write', { file_path: join(project, 'CLAUDE.md'), content: '@gone.md\n' })).toEqual(NOTHING)
   write(join(home, 'config', 'rulebook', 'rulebook.config.ts'), `import { defineConfig, recommended } from '@cmodjs/rulebook'\nexport default defineConfig({ extends: [recommended], plugins: { global: './rules' } })\n`)
-  write(join(home, 'config', 'rulebook', 'rules', 'block-x.ts'), `export default { description: "Don't run x.", check: ({ lines }) => lines.flatMap((text, index) => (text.includes('Run x.') ? [{ line: index + 1 }] : [])) }\n`)
+  write(join(home, 'config', 'rulebook', 'rules', 'block-x.ts'), lineRule("Don't run x.", 'Run x.'))
   expect(edit('Write', { file_path: join(project, 'CLAUDE.md'), content: '@gone.md\n' }).refuse).toBe('Edit to CLAUDE.md refused. Fix every error, then edit again.\n\n  1  error  rulebook/imports  The import names gone.md, which is not a file. Fix the path or remove the import.\n     > @gone.md')
   expect(edit('Write', { file_path: join(project, '.claude', 'skills', 'deploy', 'SKILL.md'), content: 'Run x.\n' }).refuse).toBe("Edit to .claude/skills/deploy/SKILL.md refused. Fix every error, then edit again.\n\n  1  error  global/block-x  Don't run x.\n     > Run x.")
   expect(edit('Write', { file_path: join(project, 'docs', 'notes.md'), content: 'Run x.\n' })).toEqual(NOTHING)
@@ -278,7 +296,7 @@ test('a config that names a rule no plugin holds fails loudly', () => {
 })
 
 test('an agentic rule runs as a forked Skill with its own frontmatter, and its findings refuse the edit', () => {
-  agenticRule('block-domain-words-for-code', 'agent: explorer\nmodel: haiku\neffort: low\nallowed-tools: Read\npaths:\n  - "**/Claude.md"\nmetadata:\n  level: error')
+  agenticRule('block-domain-words-for-code', 'agent: explorer\nmodel: haiku\neffort: low\nallowed-tools: Read\nfiles:\n  - "**/Claude.md"\nseverity: error')
   const claude = fakeClaude('{"type":"result","is_error":false,"result":"{\\"findings\\": [{\\"line\\": 1, \\"message\\": \\"Slice names a commit here.\\"}]}"}')
   const answer = edit('Write', { file_path: join(project, 'Claude.md'), content: 'Each Slice is a commit.\n' }, claude)
   expect(answer.refuse).toContain('1  error  global/block-domain-words-for-code  Slice names a commit here.')
@@ -296,7 +314,7 @@ test("an agentic rule's findings count when its subagent answers through the Str
 })
 
 test('a manual rule never runs on an edit, and runs when rulebook runs', () => {
-  agenticRule('require-true-facts', 'metadata:\n  runs: manual')
+  agenticRule('require-true-facts', 'runs: manual')
   const claude = fakeClaude('{"type":"result","is_error":false,"structured_output":{"findings":[{"line":1,"message":"The code says otherwise."}]}}')
   expect(edit('Write', { file_path: join(project, 'Claude.md'), content: 'A fact.\n' }, claude)).toEqual(NOTHING)
   write(join(project, 'Claude.md'), 'A fact.\n')
@@ -319,10 +337,10 @@ test('a Jev rule that names an agent fails to load, and a config that sets model
 test('a threshold on a Claude rule or outside 0 to 1 fails to load, and a config that sets one on a Claude rule fails', () => {
   const source = join(home, 'config', 'rulebook', 'rules', 'require-true-facts.md')
   const failures = () => (JSON.parse(rulebook(['inspect', 'rules']).stdout) as { failures: string[] }).failures
-  agenticRule('require-true-facts', 'model: sonnet\nmetadata:\n  threshold: 0.9')
-  expect(failures()).toEqual([`${source}: metadata.threshold is the probability Jev must give a line to pass, so it needs model: jev. The rule global/require-true-facts checks nothing until it loads.`])
-  agenticRule('require-true-facts', 'model: jev\nmetadata:\n  threshold: 90')
-  expect(failures()).toEqual([`${source}: metadata.threshold is a probability above 0 and at most 1. The rule global/require-true-facts checks nothing until it loads.`])
+  agenticRule('require-true-facts', 'model: sonnet\nthreshold: 0.9')
+  expect(failures()).toEqual([`${source}: threshold is the probability Jev must give a line to pass, so it needs model: jev. The rule global/require-true-facts checks nothing until it loads.`])
+  agenticRule('require-true-facts', 'model: jev\nthreshold: 90')
+  expect(failures()).toEqual([`${source}: threshold is a probability above 0 and at most 1. The rule global/require-true-facts checks nothing until it loads.`])
   agenticRule('require-true-facts', 'model: sonnet')
   write(join(project, 'rulebook.config.ts'), `export default { rules: { 'global/require-true-facts': { threshold: 0.9 } } }\n`)
   const run = rulebook(['check', '--skip=agentic'])
@@ -333,7 +351,7 @@ test('a threshold on a Claude rule or outside 0 to 1 fails to load, and a config
 test('two agentic rules with timeouts of 300 and 600 ms end within one 600 ms deadline, and the edit lands', () => {
   write(join(project, 'rulebook.config.ts'), `export default { timeout: 300, rules: { 'global/require-true-facts': { timeout: 600 } } }\n`)
   agenticRule('block-domain-words-for-code', 'model: haiku')
-  agenticRule('require-true-facts', 'metadata:\n  timeout: 450')
+  agenticRule('require-true-facts', 'timeout: 450')
   const started = performance.now()
   const answer = edit('Write', { file_path: join(project, 'Claude.md'), content: 'Each Slice is a commit.\n' }, fakeClaude('{}', 5))
   expect(performance.now() - started).toBeLessThan(3_000)
@@ -352,7 +370,7 @@ test('a config that sets timeout on a static rule fails and names the rule', () 
 })
 
 test('a manual run over six files, each with one agentic rule, starts every session at once', () => {
-  agenticRule('require-true-facts', 'metadata:\n  runs: manual')
+  agenticRule('require-true-facts', 'runs: manual')
   for (const folder of ['a', 'b', 'c', 'd', 'e', 'f']) write(join(project, folder, 'Claude.md'), 'A fact.\n')
   const starts = join(home, 'claude-starts')
   const claude = write(join(home, 'bin', 'claude'), `#!${process.execPath}
@@ -370,21 +388,21 @@ console.log('{"type":"result","is_error":false,"structured_output":{"findings":[
 }, 30_000)
 
 test('a pattern rule flags each match of its ast-grep rule at its first line, and never a comment or a string', () => {
-  write(join(project, 'rulebook.config.ts'), `export default { paths: ['src/**/*.ts'] }\n`)
-  write(join(home, 'config', 'rulebook', 'rules', 'block-console-log.yml'), "description: Don't log to the console.\nlanguage: typescript\npaths: ['**/*.ts']\nrule:\n  pattern: console.log($$$ARGS)\n")
+  write(join(project, 'rulebook.config.ts'), `export default { files: ['src/**/*.ts'] }\n`)
+  write(join(home, 'config', 'rulebook', 'rules', 'block-console-log.yml'), "description: Don't log to the console.\nlanguage: typescript\nfiles: ['**/*.ts']\nrule:\n  pattern: console.log($$$ARGS)\n")
   write(join(project, 'src', 'app.ts'), "// console.log('in a comment')\nconst text = \"console.log('in a string')\"\nconsole.log(\n  text,\n)\n")
   expect(rulebook(['check', '--skip=agentic', 'src/app.ts']).stdout).toBe("src/app.ts\n  3  error  global/block-console-log  Don't log to the console.\n     > console.log(\n\n1 error, 0 warnings in 1 file\n")
 })
 
 test('a pattern rule in PHP flags a PHP file', () => {
-  write(join(project, 'rulebook.config.ts'), `export default { paths: ['**/*.php'] }\n`)
+  write(join(project, 'rulebook.config.ts'), `export default { files: ['**/*.php'] }\n`)
   write(join(home, 'config', 'rulebook', 'rules', 'block-var-dump.yml'), "description: Don't leave var_dump in the code.\nlanguage: php\nrule:\n  pattern:\n    context: '<?php var_dump($$$ARGS);'\n    selector: function_call_expression\n")
   write(join(project, 'debug.php'), '<?php\n$user = load();\nvar_dump($user);\n')
   expect(rulebook(['check', '--skip=agentic', 'debug.php']).stdout).toBe("debug.php\n  3  error  global/block-var-dump  Don't leave var_dump in the code.\n     > var_dump($user);\n\n1 error, 0 warnings in 1 file\n")
 })
 
 test('a rule in a subfolder carries the folder in its name, and a config or pin that names it without the folder fails and names it', () => {
-  write(join(home, 'config', 'rulebook', 'rules', 'writing', 'block-x.ts'), `export default { description: "Don't write x.", check: ({ lines }) => lines.flatMap((text, index) => (text.includes('x') ? [{ line: index + 1, message: 'Remove the x.' }] : [])) }\n`)
+  write(join(home, 'config', 'rulebook', 'rules', 'writing', 'block-x.ts'), lineRule("Don't write x.", 'x', "message: 'Remove the x.', "))
   expect(edit('Write', { file_path: join(project, 'Claude.md'), content: 'Run x.\n' }).refuse).toContain('1  error  global/writing/block-x  Remove the x.')
 
   const probe = write(join(home, 'config', 'rulebook', 'probes', 'block-x.md'), '<!-- rulebook-expect global/block-x -->\nRun x.\n')
@@ -400,7 +418,7 @@ test('a rule of any kind without a description checks nothing, every other rule 
   const dash = String.fromCharCode(0x2014)
   const rules = join(home, 'config', 'rulebook', 'rules')
   const undescribed = {
-    'block-x.ts': `export default { check: () => [] }\n`,
+    'block-x.ts': `export default { create: () => ({}) }\n`,
     'block-y.md': '---\nmodel: haiku\n---\n\nReport each y.\n',
     'block-z.yml': 'language: typescript\nrule:\n  pattern: z\n',
   }
@@ -421,8 +439,8 @@ test('a rule of any kind without a description checks nothing, every other rule 
 
 test("a project's rule that fails to load leaves the global rules checking that project, and a config setting for it is no error", () => {
   const dash = String.fromCharCode(0x2014)
-  write(join(project, 'rulebook.config.ts'), `export default { plugins: { app: './rules' }, rules: { 'app/require-readme-sections': 'warning' } }\n`)
-  const rule = write(join(project, 'rules','require-readme-sections.ts'), `export default { check: () => [] }\n`)
+  write(join(project, 'rulebook.config.ts'), `export default { plugins: { app: './rules' }, rules: { 'app/require-readme-sections': 'warn' } }\n`)
+  const rule = write(join(project, 'rules','require-readme-sections.ts'), `export default { create: () => ({}) }\n`)
   const listing = rulebook(['inspect', 'rules'])
   expect(listing.stderr).toBe('')
   expect((JSON.parse(listing.stdout) as { failures: string[] }).failures).toEqual([`${rule}: a rule needs a description: the Rule in one line of plain words, such as "Don't write em dashes." The rule app/require-readme-sections checks nothing until it loads.`])
@@ -431,7 +449,7 @@ test("a project's rule that fails to load leaves the global rules checking that 
 
 test('rulebook inspect rules lists, for the project folder, each rule that is on with its id, description, whether it covers every file or a message, and a regular expression for each path it covers, each registered message with a regular expression for each tool that sends it, and the files and folders the rules come from', () => {
   write(join(project, 'rulebook.config.ts'), `export default { plugins: { app: './rules' }, messages: { inbox: { tools: ['mcp__inbox__*'] } }, rules: { 'global/block-hedging': 'off' } }\n`)
-  write(join(project, 'rules', 'block-npm-run.md'), '---\ndescription: Run just, never npm run.\npaths: ["**", "@reply"]\n---\n\nReport each npm run.\n')
+  write(join(project, 'rules', 'block-npm-run.md'), '---\ndescription: Run just, never npm run.\nfiles: ["**", "@reply"]\n---\n\nReport each npm run.\n')
   const run = rulebook(['inspect', 'rules'])
   const listed = { source: expect.any(String), flags: '' }
   expect(run.stderr).toBe('')
@@ -441,13 +459,14 @@ test('rulebook inspect rules lists, for the project folder, each rule that is on
     folders: [{
       path: '',
       rules: [
-        { id: 'rulebook/imports', description: 'Import only files that exist.', isEverywhere: false, paths: Array(5).fill(listed) },
-        { id: 'global/block-em-dashes', description: "Don't write em dashes.", isEverywhere: false, paths: Array(5).fill(listed) },
-        { id: 'app/block-npm-run', description: 'Run just, never npm run.', isEverywhere: true, paths: [listed, listed] },
+        { id: 'rulebook/imports', description: 'Import only files that exist.', isEverywhere: false, files: Array(5).fill(listed) },
+        { id: 'global/block-em-dashes', description: "Don't write em dashes.", isEverywhere: false, files: Array(5).fill(listed) },
+        { id: 'app/block-npm-run', description: 'Run just, never npm run.', isEverywhere: true, files: [listed, listed] },
       ],
     }],
     messages: [
       { name: '@reply', tools: [] },
+      { name: '@command', tools: [listed, listed, listed] },
       { name: '@inbox', tools: [listed] },
     ],
     failures: [],
@@ -456,12 +475,12 @@ test('rulebook inspect rules lists, for the project folder, each rule that is on
 
 test('rulebook inspect rules lets the mod tell that a rule from packages/a/rulebook.config.ts applies to packages/a/x.md and not to packages/b/x.md', () => {
   write(join(project, 'packages', 'a', 'rulebook.config.ts'), `export default { plugins: { a: './rules' } }\n`)
-  write(join(project, 'packages', 'a', 'rules', 'block-x.ts'), `export default { description: "Don't write x.", paths: ['**/*.md'], check: () => [] }\n`)
+  write(join(project, 'packages', 'a', 'rules', 'block-x.ts'), `export default { description: "Don't write x.", files: ['**/*.md'], create: () => ({}) }\n`)
   write(join(project, 'packages', 'b', 'rulebook.config.ts'), 'export default {}\n')
-  const { folders } = JSON.parse(rulebook(['inspect', 'rules']).stdout) as { folders: { path: string; rules: { id: string; paths: { source: string; flags: string }[] }[] }[] }
+  const { folders } = JSON.parse(rulebook(['inspect', 'rules']).stdout) as { folders: { path: string; rules: { id: string; files: { source: string; flags: string }[] }[] }[] }
   const rulesFor = (path: string) => {
     const folder = folders.filter((each) => each.path === '' || path.startsWith(`${each.path}/`)).sort((a, b) => b.path.length - a.path.length)[0]
-    return (folder?.rules ?? []).filter((rule) => rule.paths.some(({ source, flags }) => new RegExp(source, flags).test(path))).map(({ id }) => id)
+    return (folder?.rules ?? []).filter((rule) => rule.files.some(({ source, flags }) => new RegExp(source, flags).test(path))).map(({ id }) => id)
   }
   expect(folders.map(({ path }) => path)).toEqual(['', 'packages/a', 'packages/b'])
   expect(rulesFor('packages/a/x.md')).toEqual(['a/block-x'])
@@ -487,9 +506,9 @@ test('each regular expression rulebook inspect rules lists covers the paths and 
     ['@*', ['@reply', '@inbox']],
   ]
   const globs = covered.map(([glob]) => glob)
-  write(join(project, 'rulebook.config.ts'), `export default { messages: { inbox: { folder: '../inbox-items' } }, rules: { 'global/block-em-dashes': { paths: ${JSON.stringify(globs)} } } }\n`)
-  const { folders } = JSON.parse(rulebook(['inspect', 'rules']).stdout) as { folders: { rules: { id: string; paths: { source: string; flags: string }[] }[] }[] }
-  const listed = folders[0]?.rules.find(({ id }) => id === 'global/block-em-dashes')?.paths ?? []
+  write(join(project, 'rulebook.config.ts'), `export default { messages: { inbox: { folder: '../inbox-items' } }, rules: { 'global/block-em-dashes': { files: ${JSON.stringify(globs)} } } }\n`)
+  const { folders } = JSON.parse(rulebook(['inspect', 'rules']).stdout) as { folders: { rules: { id: string; files: { source: string; flags: string }[] }[] }[] }
+  const listed = folders[0]?.rules.find(({ id }) => id === 'global/block-em-dashes')?.files ?? []
   expect(listed.map(({ source, flags }, index) => [globs[index], paths.filter((path) => new RegExp(source, flags).test(path))])).toEqual(covered)
 })
 
@@ -504,7 +523,7 @@ test('a probe passes while each pin fires, and fails on a pin that stops firing 
 })
 
 test("a probe skips each pin of a rule outside the run's scope, and still fails a pin that names no rule", () => {
-  agenticRule('require-true-facts', 'metadata:\n  runs: manual')
+  agenticRule('require-true-facts', 'runs: manual')
   const probe = write(join(home, 'config', 'rulebook', 'probes', 'require-true-facts.md'), '<!-- rulebook-expect global/require-true-facts -->\nThe sky is green.\n')
   expect(rulebook(['check', '--skip=agentic', probe])).toEqual({ code: 0, stdout: '0 errors, 0 warnings in 1 file\n', stderr: '' })
   expect(edit('Write', { file_path: probe, content: '<!-- rulebook-expect global/require-true-facts -->\nThe grass is blue.\n' })).toEqual(NOTHING)
@@ -581,7 +600,7 @@ test('a Claude.md under ~/.claude imports from anywhere', () => {
 })
 
 test('a .claude/rules file reads as Claude Code reads it: its frontmatter and comments are never checked, and its imports are', () => {
-  write(join(project, 'rulebook.config.ts'), `export default { paths: ['.claude/rules/style.md'] }\n`)
+  write(join(project, 'rulebook.config.ts'), `export default { files: ['.claude/rules/style.md'] }\n`)
   write(join(project, '.claude', 'rules', 'style.md'), '---\npaths:\n  - "src/**"\ndescription: Style — for src\n---\n<!-- a maintainer note — keep it short -->\n@extra.md\n@gone.md\n')
   write(join(project, '.claude', 'rules', 'extra.md'), 'Run it — now.\n')
   expect(rulebook(['check', '--skip=agentic']).stdout).toBe([
@@ -599,7 +618,7 @@ test('a .claude/rules file reads as Claude Code reads it: its frontmatter and co
 })
 
 test('a rules file that ~/.claude/rules links to reads as a user rules file, which imports from anywhere', () => {
-  write(join(project, 'rulebook.config.ts'), `export default { paths: ['**/rules/*.md'] }\n`)
+  write(join(project, 'rulebook.config.ts'), `export default { files: ['**/rules/*.md'] }\n`)
   const rule = write(join(project, 'packages', 'claude', 'rules', 'style.md'), '<!-- a maintainer note — keep it short -->\n@../../../../outside.md\n')
   mkdirSync(join(home, '.claude'))
   symlinkSync(join(project, 'packages', 'claude', 'rules'), join(home, '.claude', 'rules'))
@@ -610,7 +629,7 @@ test('a rules file that ~/.claude/rules links to reads as a user rules file, whi
 
 test('a write through ~/.claude/rules, a link into the project, is checked as a write to the file the link reaches, for an existing file, a new one, and one in a new folder', () => {
   const dash = String.fromCharCode(0x2014)
-  write(join(project, 'rulebook.config.ts'), `export default { paths: ['rules/**/*.md'] }\n`)
+  write(join(project, 'rulebook.config.ts'), `export default { files: ['rules/**/*.md'] }\n`)
   write(join(project, 'rules', 'scope.md'), 'Keep it short.\n')
   mkdirSync(join(home, '.claude'))
   symlinkSync(join(project, 'rules'), join(home, '.claude', 'rules'))
@@ -621,7 +640,7 @@ test('a write through ~/.claude/rules, a link into the project, is checked as a 
 })
 
 test('a rules file in a folder that a symlinked subfolder of ~/.claude/rules reaches reads as a user rules file in its own repository', () => {
-  write(join(project, 'rulebook.config.ts'), `export default { paths: ['rules/*.md'] }\n`)
+  write(join(project, 'rulebook.config.ts'), `export default { files: ['rules/*.md'] }\n`)
   linkedRule()
   expect(rulebook(['check', '--skip=agentic']).stdout).toBe('rules/style.md\n  2  error  rulebook/imports  The import names rules/gone.md, which is not a file. Fix the path or remove the import.\n     > @gone.md\n\n1 error, 0 warnings in 1 file\n')
 })
@@ -630,12 +649,12 @@ test('the repository that holds the symlinked subfolder lints each rules file be
   const { dotfiles, rule } = linkedRule()
   symlinkSync(join(project, 'rules'), join(project, 'rules', 'again'))
   Bun.spawnSync(['git', 'init', '-q'], { cwd: dotfiles })
-  write(join(dotfiles, 'rulebook.config.ts'), `export default { paths: ['rules/**/*.md'] }\n`)
+  write(join(dotfiles, 'rulebook.config.ts'), `export default { files: ['rules/**/*.md'] }\n`)
   expect(rulebook(['check', '--skip=agentic'], undefined, undefined, dotfiles).stdout).toBe(`${rule}\n  2  error  rulebook/imports  The import names ${join(project, 'rules', 'gone.md')}, which is not a file. Fix the path or remove the import.\n     > @gone.md\n\n1 error, 0 warnings in 1 file\n`)
 })
 
 test("a project .claude/rules folder's symlinked subfolder that leaves the project is linted only when ~/.claude.json approves it", () => {
-  write(join(project, 'rulebook.config.ts'), `export default { paths: ['.claude/rules/**/*.md'] }\n`)
+  write(join(project, 'rulebook.config.ts'), `export default { files: ['.claude/rules/**/*.md'] }\n`)
   const shared = write(join(home, 'shared', 'style.md'), '<!-- a maintainer note — keep it short -->\nRun it — now.\n')
   mkdirSync(join(project, '.claude', 'rules'), { recursive: true })
   symlinkSync(join(home, 'shared'), join(project, '.claude', 'rules', 'shared'))
@@ -645,13 +664,13 @@ test("a project .claude/rules folder's symlinked subfolder that leaves the proje
 })
 
 test("an edit refusal quotes the flagged line, and a finding without a message shows the rule's description", () => {
-  write(join(home, 'config', 'rulebook', 'rules', 'block-x.ts'), `export default { description: "Don't write x.", check: ({ lines }) => lines.flatMap((text, index) => (text.includes('x') ? [{ line: index + 1 }] : [])) }\n`)
+  write(join(home, 'config', 'rulebook', 'rules', 'block-x.ts'), lineRule("Don't write x.", 'x'))
   const answer = edit('Write', { file_path: join(project, 'Claude.md'), content: 'Keep it short.\nRun x.\n' })
   expect(answer.refuse).toBe("Edit to Claude.md refused. Fix every error, then edit again.\n\n  2  error  global/block-x  Don't write x.\n     > Run x.")
 })
 
-test('rulebook check --stdin-file-path=@reply checks a reply with each rule whose paths cover @reply, and its refusal quotes the line', () => {
-  write(join(project, 'rulebook.config.ts'), `export default { rules: { 'global/block-em-dashes': { paths: ['**', '@reply'] }, 'global/block-hedging': { paths: ['**'] } } }\n`)
+test('rulebook check --stdin-file-path=@reply checks a reply with each rule whose files cover @reply, and its refusal quotes the line', () => {
+  write(join(project, 'rulebook.config.ts'), `export default { rules: { 'global/block-em-dashes': { files: ['**', '@reply'] }, 'global/block-hedging': { files: ['**'] } } }\n`)
   const refusal = 'Reply refused. Fix every error, then write the whole reply again.\n\n  2  error  global/block-em-dashes  Split the sentence at the em dash.\n     > Run it — now.\n'
   expect(rulebook(['check', '--stdin-file-path=@reply'], 'It probably works.\nRun it — now.')).toEqual({ code: 1, stdout: refusal, stderr: '' })
   expect(JSON.parse(rulebook(['check', '--stdin-file-path=@reply', '--reporter=json'], 'It probably works.\nRun it — now.').stdout)).toEqual({
@@ -660,11 +679,11 @@ test('rulebook check --stdin-file-path=@reply checks a reply with each rule whos
   })
 })
 
-test('rulebook check --stdin-file-path checks any @-name with the rules whose paths cover it, with no config naming the message, and a file as the text it will hold', () => {
+test('rulebook check --stdin-file-path checks any @-name with the rules whose files cover it, with no config naming the message, and a file as the text it will hold', () => {
   const dash = String.fromCharCode(0x2014)
   expect(rulebook(['check', '--stdin-file-path=@inbox/proposal/x.md'], `Run it ${dash} now.`)).toEqual({ code: 0, stdout: '', stderr: '' })
 
-  write(join(project, 'rulebook.config.ts'), `export default { rules: { 'global/block-em-dashes': { paths: ['@inbox/**'] }, 'global/block-hedging': { paths: ['**'] } } }\n`)
+  write(join(project, 'rulebook.config.ts'), `export default { rules: { 'global/block-em-dashes': { files: ['@inbox/**'] }, 'global/block-hedging': { files: ['**'] } } }\n`)
   expect(rulebook(['check', '--stdin-file-path=@inbox/proposal/x.md'], `Run it ${dash} probably.`)).toEqual({ code: 1, stdout: `Inbox refused. Fix every error, then send it again.\n\n  1  error  global/block-em-dashes  Split the sentence at the em dash.\n     > Run it ${dash} probably.\n`, stderr: '' })
   expect(rulebook(['check', '--stdin-file-path=notes.md'], 'It probably works.\n')).toEqual({ code: 0, stdout: 'Edit to notes.md allowed with warnings:\n\n  1  warning  global/block-hedging  Check the claim, then state it.\n     > It probably works.\n', stderr: '' })
 })
@@ -692,16 +711,16 @@ test("a turned-on plugin's rulebook.config.ts registers no message until a confi
   write(join(home, '.claude', 'plugins', 'installed_plugins.json'), JSON.stringify({ version: 2, plugins: { 'inbox@market': [{ scope: 'user', installPath: join(home, 'cache', 'inbox@market') }] } }))
   write(join(home, 'cache', 'inbox@market', 'rulebook.config.ts'), `export default { messages: { inbox: { tools: ['mcp__inbox__*'] } } }\n`)
   const messages = () => (JSON.parse(rulebook(['inspect', 'rules']).stdout) as { messages: { name: string }[] }).messages.map(({ name }) => name)
-  expect(messages()).toEqual(['@reply'])
+  expect(messages()).toEqual(['@reply', '@command'])
 
   write(join(project, 'rulebook.config.ts'), `export default { extends: ['~/cache/inbox@market/rulebook.config.ts'] }\n`)
-  expect(messages()).toEqual(['@reply', '@inbox'])
+  expect(messages()).toEqual(['@reply', '@command', '@inbox'])
 })
 
 test("CLAUDE_CONFIG_DIR moves Claude Code's config folder: a file in its rules/ reads as a user rules file", () => {
   const dash = String.fromCharCode(0x2014)
   const claude = join(home, 'moved-claude')
-  write(join(claude, 'rulebook.config.ts'), `export default { paths: ['rules/*.md'], rules: { 'global/block-em-dashes': { paths: ['**'] } } }\n`)
+  write(join(claude, 'rulebook.config.ts'), `export default { files: ['rules/*.md'], rules: { 'global/block-em-dashes': { files: ['**'] } } }\n`)
   write(join(claude, 'rules', 'style.md'), `<!-- a maintainer note ${dash} keep it short -->\n@../../outside.md\n`)
   const outside = write(join(home, 'outside.md'), `Run it ${dash} now.\n`)
 
@@ -722,14 +741,14 @@ test("a legacy .config.json in Claude Code's config folder replaces ~/.claude.js
 
 test('a full run lists each flagged file in a registered message folder by its @-name', () => {
   const items = join(home, 'inbox-items')
-  write(join(project, 'rulebook.config.ts'), `export default { messages: { inbox: { folder: '${items}' } }, rules: { 'global/block-em-dashes': { paths: ['@inbox/**'] } } }\n`)
+  write(join(project, 'rulebook.config.ts'), `export default { messages: { inbox: { folder: '${items}' } }, rules: { 'global/block-em-dashes': { files: ['@inbox/**'] } } }\n`)
   write(join(items, 'proposal', 'a.md'), 'Run it — now.\n')
   write(join(items, 'report', 'b.md'), 'Run it now.\n')
   expect(rulebook(['check', '--skip=agentic']).stdout).toBe('@inbox/proposal/a.md\n  1  error  global/block-em-dashes  Split the sentence at the em dash.\n     > Run it \u2014 now.\n\n1 error, 0 warnings in 2 files\n')
 })
 
-test("a rule whose paths cover any file checks an edit to it, and a full run lists it, but never a binary file", () => {
-  write(join(project, 'rulebook.config.ts'), `export default { rules: { 'global/block-em-dashes': { paths: ['**'] } } }\n`)
+test("a rule whose files cover any file checks an edit to it, and a full run lists it, but never a binary file", () => {
+  write(join(project, 'rulebook.config.ts'), `export default { rules: { 'global/block-em-dashes': { files: ['**'] } } }\n`)
   const file = write(join(project, 'src', 'app.ts'), "const note = 'Run it now.'\n")
   expect(edit('Edit', { file_path: file, old_string: 'Run it now.', new_string: 'Run it — now.' }).refuse).toBe("Edit to src/app.ts refused. Fix every error, then edit again.\n\n  1  error  global/block-em-dashes  Split the sentence at the em dash.\n     > const note = 'Run it — now.'")
   write(file, "const note = 'Run it — now.'\n")
@@ -738,7 +757,7 @@ test("a rule whose paths cover any file checks an edit to it, and a full run lis
 })
 
 test('a rule that reads text flags the line it reads in a Claude.md whose frontmatter and comments Claude Code removes', () => {
-  write(join(home, 'config', 'rulebook', 'rules', 'block-x.ts'), `export default { description: "Don't write x.", check: ({ text }) => text.split('\\n').flatMap((line, index) => (line.includes('x') ? [{ line: index + 1 }] : [])) }\n`)
+  write(join(home, 'config', 'rulebook', 'rules', 'block-x.ts'), `export default { description: "Don't write x.", create: (context) => ({ Document: () => { context.text.split('\\n').forEach((line, index) => { if (line.includes('x')) context.report({ node: context.lines[index] }) }) } }) }\n`)
   const answer = edit('Write', { file_path: join(project, 'Claude.md'), content: '---\ntitle: Rules\n---\n<!-- a maintainer note -->\n\nRun x.\n' })
   expect(answer.refuse).toBe("Edit to Claude.md refused. Fix every error, then edit again.\n\n  6  error  global/block-x  Don't write x.\n     > Run x.")
 })
@@ -754,7 +773,7 @@ test('an edit that writes a line whose text the file already holds elsewhere rep
 
 test('a Write that rewrites every line of a 10,000-line file answers within 5 s, where a full line diff takes 18 s, and counts every line it holds as written', () => {
   const dash = String.fromCharCode(0x2014)
-  write(join(project, 'rulebook.config.ts'), `export default { rules: { 'global/block-em-dashes': { paths: ['**'] } } }\n`)
+  write(join(project, 'rulebook.config.ts'), `export default { rules: { 'global/block-em-dashes': { files: ['**'] } } }\n`)
   const lines = (word: string) => [`Run it ${dash} now.`, ...Array.from({ length: 10_000 }, (_, index) => `${word} line ${index}.`)].join('\n')
   const file = write(join(project, 'notes.txt'), lines('Old'))
   const started = performance.now()
@@ -763,16 +782,16 @@ test('a Write that rewrites every line of a 10,000-line file answers within 5 s,
   expect(answer.refuse).toBe(`Edit to notes.txt refused. Fix every error, then edit again.\n\n  1  error  global/block-em-dashes  Split the sentence at the em dash.\n     > Run it ${dash} now.`)
 }, 30_000)
 
-test('a later rules setting merges over an earlier one key by key, and a level written as a string sets only the level', () => {
+test('a later rules setting merges over an earlier one key by key, and a severity written as a string sets only the severity', () => {
   const dash = String.fromCharCode(0x2014)
   const levels = (global: string, local: string) => {
-    write(join(home, 'config', 'rulebook', 'rulebook.config.ts'), `export default { plugins: { global: './rules' }, paths: ['**/Claude.md'], rules: { 'global/block-em-dashes': ${global} } }\n`)
+    write(join(home, 'config', 'rulebook', 'rulebook.config.ts'), `export default { plugins: { global: './rules' }, files: ['**/Claude.md'], rules: { 'global/block-em-dashes': ${global} } }\n`)
     write(join(project, 'rulebook.config.ts'), `export default { rules: { 'global/block-em-dashes': ${local} } }\n`)
     return (edit('Write', { file_path: join(project, 'Claude.md'), content: `Run it ${dash} now.\n` }).findings as { level: string }[]).map(({ level }) => level)
   }
-  expect(levels("{ runs: 'manual' }", "'warning'")).toEqual([])
-  expect(levels("'warning'", "{ paths: ['**/Claude.md'] }")).toEqual(['warning'])
-  expect(levels("'off'", "{ paths: ['**/Claude.md'] }")).toEqual([])
+  expect(levels("{ runs: 'manual' }", "'warn'")).toEqual([])
+  expect(levels("'warn'", "{ files: ['**/Claude.md'] }")).toEqual(['warning'])
+  expect(levels("'off'", "{ files: ['**/Claude.md'] }")).toEqual([])
 })
 
 function git(...args: readonly string[]): void {
@@ -782,7 +801,7 @@ function git(...args: readonly string[]): void {
 
 test('rulebook check --staged checks each staged file of any kind as the commit records it, and refuses an error only on a line the commit wrote', () => {
   const dash = String.fromCharCode(0x2014)
-  write(join(home, 'config', 'rulebook', 'rules', 'block-console-log.yml'), "description: Don't log to the console.\nlanguage: typescript\npaths: ['**/*.ts']\nrule:\n  pattern: console.log($$$ARGS)\n")
+  write(join(home, 'config', 'rulebook', 'rules', 'block-console-log.yml'), "description: Don't log to the console.\nlanguage: typescript\nfiles: ['**/*.ts']\nrule:\n  pattern: console.log($$$ARGS)\n")
   write(join(project, 'Claude.md'), `# Facts\n\nOld ${dash} line.\n`)
   git('add', 'Claude.md')
   git('commit', '-q', '-m', 'first')
@@ -807,15 +826,13 @@ test('rulebook check --staged checks each staged file of any kind as the commit 
   expect(rulebook(['check', '--staged'])).toEqual({ code: 0, stdout: '0 errors, 0 warnings in 2 files\n\n1 finding in these files was there before this commit. `rulebook check Claude.md` lists it.\n', stderr: '' })
 })
 
-test('a rule that runs on commit checks a commit and never an edit, and a manual rule checks neither', () => {
-  const rule = (name: string, runs: string, word: string) => write(join(home, 'config', 'rulebook', 'rules', `${name}.ts`), `export default { description: "Don't leave ${word}.", runs: '${runs}', check: ({ lines }) => lines.flatMap((text, index) => (text.includes('${word}') ? [{ line: index + 1 }] : [])) }\n`)
-  rule('block-todo', 'commit', 'TODO')
-  rule('block-fixme', 'manual', 'FIXME')
-  expect(edit('Write', { file_path: join(project, 'Claude.md'), content: 'TODO here.\nFIXME here.\n' })).toEqual(NOTHING)
-  write(join(project, 'Claude.md'), 'TODO here.\nFIXME here.\n')
+test('a manual rule never checks an edit, and checks a commit and a full run', () => {
+  write(join(home, 'config', 'rulebook', 'rules', 'block-todo.ts'), lineRule("Don't leave TODO.", 'TODO', "runs: 'manual', "))
+  expect(edit('Write', { file_path: join(project, 'Claude.md'), content: 'TODO here.\n' })).toEqual(NOTHING)
+  write(join(project, 'Claude.md'), 'TODO here.\n')
   git('add', 'Claude.md')
   expect(rulebook(['check', '--staged']).stdout).toBe("Commit refused. Fix every error, stage the fix, then commit again.\n\nClaude.md\n  1  error  global/block-todo  Don't leave TODO.\n     > TODO here.\n\n1 error, 0 warnings in 1 file\n")
-  expect(rulebook(['check', '--skip=agentic']).stdout).toContain('2  error  global/block-fixme')
+  expect(rulebook(['check', '--skip=agentic']).stdout).toContain('1  error  global/block-todo')
 })
 
 test("rulebook check --staged refuses a type error the commit causes in a caller it never staged, with the project's own TypeScript", () => {
@@ -968,20 +985,39 @@ test("rulebook check --staged runs a linter when the commit changes only the lin
   expect(readFileSync(log, 'utf8').split('\n').filter((line) => line !== '').sort()).toEqual(['analyze', 'lint'])
 })
 
-test("rulebook claude-hook refuses a Claude Code tool call a message's rule flags, and a rule reads the call's input field by field", () => {
-  write(join(project, 'rulebook.config.ts'), "export default { plugins: { app: './rules' }, messages: { bash: { tools: ['Bash'] } } }\n")
-  write(join(project, 'rules', 'block-npx.ts'), "export default { description: 'Run the project scripts, never npx.', paths: ['@bash'], check: ({ input, lines }) => (String(input?.command ?? '').startsWith('npx ') ? [{ line: lines.indexOf(String(input?.command)) + 1 }] : []) }\n")
-  const hook = (input: Record<string, unknown>) => {
-    const run = Bun.spawnSync([process.execPath, MAIN, 'claude-hook'], { cwd: project, stdin: new Blob([JSON.stringify({ hook_event_name: 'PreToolUse', tool_name: 'Bash', tool_input: input, cwd: project })]), env: { ...process.env, HOME: home, XDG_CONFIG_HOME: join(home, 'config') } })
-    return { code: run.exitCode, stdout: run.stdout.toString(), stderr: run.stderr.toString() }
-  }
-  expect(hook({ command: 'npx tsc', description: 'Type-check' })).toEqual({ code: 2, stdout: '', stderr: 'Bash refused. Fix every error, then send it again.\n\n  1  error  app/block-npx  Run the project scripts, never npx.\n     > npx tsc\n' })
-  expect(hook({ command: 'bun run check', description: 'npx would be slower' })).toEqual({ code: 0, stdout: '', stderr: '' })
+function claudeHook(payload: Record<string, unknown>) {
+  const run = Bun.spawnSync([process.execPath, MAIN, 'claude-hook'], { cwd: project, stdin: new Blob([JSON.stringify({ hook_event_name: 'PreToolUse', cwd: project, ...payload })]), env: { ...process.env, HOME: home, XDG_CONFIG_HOME: join(home, 'config') } })
+  return { code: run.exitCode, stdout: run.stdout.toString(), stderr: run.stderr.toString() }
+}
+
+test('rulebook claude-hook checks each shell command as @command, so a rule sees every program the line runs, however a wrapper or a codex shell carries it', () => {
+  write(join(project, 'rulebook.config.ts'), "export default { plugins: { app: './rules' } }\n")
+  write(join(project, 'rules', 'block-npx.ts'), "export default { description: 'Run the project scripts, never npx.', files: ['@command'], create: (context) => ({ Command: (command) => { if (command.program === 'npx') context.report({ node: command }) } }) }\n")
+  const refusal = (line: string) => ({ code: 2, stdout: '', stderr: `Command refused. Fix every error, then send it again.\n\n  1  error  app/block-npx  Run the project scripts, never npx.\n     > ${line}\n` })
+  expect(claudeHook({ tool_name: 'Bash', tool_input: { command: 'npx tsc', description: 'Type-check' } })).toEqual(refusal('npx tsc'))
+  expect(claudeHook({ tool_name: 'Bash', tool_input: { command: 'sudo env CI=1 /usr/local/bin/npx tsc' } })).toEqual(refusal('sudo env CI=1 /usr/local/bin/npx tsc'))
+  expect(claudeHook({ tool_name: 'Bash', tool_input: { command: 'bash -c "npx tsc"' } })).toEqual(refusal('bash -c "npx tsc"'))
+  expect(claudeHook({ tool_name: 'shell_command', tool_input: { command: ['/bin/zsh', '-lc', 'npx tsc'] } })).toEqual(refusal('npx tsc'))
+  expect(claudeHook({ tool_name: 'Bash', tool_input: { command: 'bun run check', description: 'npx would be slower' } })).toEqual({ code: 0, stdout: '', stderr: '' })
+  expect(claudeHook({ tool_name: 'Bash', tool_input: { command: 'git commit -m "drop npx"' } })).toEqual({ code: 0, stdout: '', stderr: '' })
+})
+
+test('a rule reads who makes the call, and a finding on the whole document refuses an edit whatever lines it writes', () => {
+  write(join(project, 'rulebook.config.ts'), "export default { plugins: { app: './rules' } }\n")
+  write(join(project, 'rules', 'block-reviewer-writes.ts'), "export default { description: 'A reviewer never writes.', files: ['**', '@command'], create: (context) => ({ Document: (document) => { if (context.call?.agentType === 'reviewer' && context.call.agentId !== undefined) context.report({ node: document }) } }) }\n")
+  const file = write(join(project, 'notes.md'), 'One.\nTwo.\n')
+  const reviewer = { session_id: 'session', agent_type: 'reviewer', agent_id: 'agent-1' }
+  expect(claudeHook({ tool_name: 'Edit', tool_input: { file_path: file, old_string: 'Two.', new_string: 'Three.' }, ...reviewer }).code).toBe(2)
+  expect(claudeHook({ tool_name: 'NotebookEdit', tool_input: { notebook_path: join(project, 'book.ipynb'), new_source: 'x = 1' }, ...reviewer }).code).toBe(2)
+  expect(claudeHook({ tool_name: 'Edit', tool_input: { file_path: file, old_string: 'Four.', new_string: 'Five.' }, ...reviewer })).toEqual({ code: 2, stdout: '', stderr: 'Edit to notes.md refused. Fix every error, then edit again.\n\n  1  error  app/block-reviewer-writes  A reviewer never writes.\n' })
+  expect(claudeHook({ tool_name: 'Edit', tool_input: { file_path: join(project, 'missing.md'), old_string: 'One.', new_string: 'Two.' }, ...reviewer }).code).toBe(2)
+  expect(claudeHook({ tool_name: 'Bash', tool_input: { command: 'ls' }, ...reviewer }).code).toBe(2)
+  expect(claudeHook({ tool_name: 'Edit', tool_input: { file_path: file, old_string: 'Two.', new_string: 'Three.' }, session_id: 'session', agent_type: 'reviewer' })).toEqual({ code: 0, stdout: '', stderr: '' })
 })
 
 test('rulebook claude-hook refuses an Edit a rule flags and answers a warning as context for the agent', () => {
   const dash = String.fromCharCode(0x2014)
-  write(join(project, 'rulebook.config.ts'), "export default { rules: { 'global/block-em-dashes': 'warning' } }\n")
+  write(join(project, 'rulebook.config.ts'), "export default { rules: { 'global/block-em-dashes': 'warn' } }\n")
   const run = Bun.spawnSync([process.execPath, MAIN, 'claude-hook'], { cwd: project, stdin: new Blob([JSON.stringify({ hook_event_name: 'PreToolUse', tool_name: 'Write', tool_input: { file_path: join(project, 'Claude.md'), content: `Run it ${dash} now.\n` }, cwd: project })]), env: { ...process.env, HOME: home, XDG_CONFIG_HOME: join(home, 'config') } })
   expect(run.exitCode).toBe(0)
   expect(JSON.parse(run.stdout.toString())).toEqual({ hookSpecificOutput: { hookEventName: 'PreToolUse', additionalContext: expect.stringContaining('1  warning  global/block-em-dashes') } })
@@ -989,7 +1025,7 @@ test('rulebook claude-hook refuses an Edit a rule flags and answers a warning as
 
 test('a script rule reads the project root, so it can read any project file', () => {
   write(join(project, 'rulebook.config.ts'), "export default { plugins: { app: './rules' } }\n")
-  write(join(project, 'rules', 'require-changelog.ts'), "import { existsSync } from 'node:fs'\nimport { join } from 'node:path'\nexport default { description: 'Keep a CHANGELOG.md beside the code.', paths: ['src/**'], check: ({ root }) => (existsSync(join(root, 'CHANGELOG.md')) ? [] : [{ line: 1 }]) }\n")
+  write(join(project, 'rules', 'require-changelog.ts'), "import { existsSync } from 'node:fs'\nimport { join } from 'node:path'\nexport default { description: 'Keep a CHANGELOG.md beside the code.', files: ['src/**'], create: (context) => ({ Document: (document) => { if (!existsSync(join(context.root, 'CHANGELOG.md'))) context.report({ node: document }) } }) }\n")
   expect(edit('Write', { file_path: join(project, 'src', 'app.ts'), content: 'export const a = 1\n' }).refuse).toContain('1  error  app/require-changelog  Keep a CHANGELOG.md beside the code.')
   write(join(project, 'CHANGELOG.md'), '# Changelog\n')
   expect(edit('Write', { file_path: join(project, 'src', 'app.ts'), content: 'export const a = 1\n' })).toEqual(NOTHING)
@@ -1023,11 +1059,11 @@ test('rulebook check --staged checks a renamed file against its text at its old 
   expect(rulebook(['check', '--staged'])).toEqual({ code: 0, stdout: '0 errors, 0 warnings in 1 file\n\n1 finding in these files was there before this commit. `rulebook check b/Claude.md` lists it.\n', stderr: '' })
 })
 
-test('a rule with no paths, in a project whose configs list no paths, is named as checking no file', () => {
+test('a rule with no files, in a project whose configs list no files, is named as checking no file', () => {
   write(join(home, 'config', 'rulebook', 'rulebook.config.ts'), 'export default {}\n')
   write(join(project, 'rulebook.config.ts'), "export default { plugins: { app: './rules' } }\n")
-  write(join(project, 'rules', 'block-todo.ts'), "export default { description: \"Don't leave TODO.\", check: () => [] }\n")
-  expect(rulebook(['check', '--skip=agentic']).stdout).toBe("The rule app/block-todo has no paths, and no config lists paths, so it checks no file. Give the rule paths, such as paths: ['**/*.ts'].\n\n0 errors, 0 warnings in 0 files\n")
+  write(join(project, 'rules', 'block-todo.ts'), "export default { description: \"Don't leave TODO.\", create: () => ({}) }\n")
+  expect(rulebook(['check', '--skip=agentic']).stdout).toBe("The rule app/block-todo has no files, and no config lists files, so it checks no file. Give the rule files, such as files: ['**/*.ts'].\n\n0 errors, 0 warnings in 0 files\n")
 })
 
 test("existingErrors: 'error' refuses a commit for an error a staged file already had", () => {
@@ -1042,6 +1078,18 @@ test("existingErrors: 'error' refuses a commit for an error a staged file alread
 })
 
 test('a script rule with a key rulebook does not read fails to load and names the key', () => {
-  const rule = write(join(home, 'config', 'rulebook', 'rules', 'block-x.ts'), `export default { description: "Don't write x.", levle: 'warning', check: () => [] }\n`)
-  expect(rulebook(['check', '--skip=agentic'])).toEqual({ code: 1, stdout: `${rule}: rulebook does not read the key "levle". It reads description, level, runs, paths, check. The rule global/block-x checks nothing until it loads.\n\n0 errors, 0 warnings in 0 files\n`, stderr: '' })
+  const rule = write(join(home, 'config', 'rulebook', 'rules', 'block-x.ts'), `export default { description: "Don't write x.", severty: 'warn', create: () => ({}) }\n`)
+  expect(rulebook(['check', '--skip=agentic'])).toEqual({ code: 1, stdout: `${rule}: rulebook does not read the key "severty". It reads description, message, files, severity, runs, create. The rule global/block-x checks nothing until it loads.\n\n0 errors, 0 warnings in 0 files\n`, stderr: '' })
+})
+
+test('a rule that returns a visitor rulebook does not visit fails to load and names the visitors', () => {
+  const rule = write(join(home, 'config', 'rulebook', 'rules', 'block-x.ts'), `export default { description: "Don't write x.", create: () => ({ Paragraph: () => {} }) }\n`)
+  write(join(project, 'Claude.md'), 'Run it.\n')
+  expect(rulebook(['check', '--skip=agentic']).stdout).toContain(`global/block-x did not run on Claude.md: ${rule}: create returns the visitor "Paragraph". rulebook visits Document, Line, Command.`)
+})
+
+test('a line inside a Markdown code block is marked, so a prose rule can leave code alone', () => {
+  write(join(home, 'config', 'rulebook', 'rules', 'block-x.ts'), `export default { description: "Don't write x.", create: (context) => ({ Line: (line) => { if (!line.isInCodeBlock && line.text.includes('x')) context.report({ node: line }) } }) }\n`)
+  write(join(project, 'Claude.md'), 'Run x.\n\n```sh\nrun x\n```\n\n  ~~~\n  x\n  ~~~\nAfter x.\n')
+  expect(rulebook(['check', '--skip=agentic']).stdout).toBe("Claude.md\n   1  error  global/block-x  Don't write x.\n      > Run x.\n  10  error  global/block-x  Don't write x.\n      > After x.\n\n2 errors, 0 warnings in 1 file\n")
 })
