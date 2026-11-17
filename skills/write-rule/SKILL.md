@@ -104,7 +104,7 @@ export default defineRule({
 rulebook visits three kinds of node:
 - `Document`, the whole text, once. A finding on it refuses a write whatever lines the write changed.
 - `Line`, each line, with `lineNumber`, `text`, and `isInCodeBlock`.
-- `Command`, each program a `@command` runs, with `program`, `args`, `argv`, `folder`, and `input`, the index of the command whose output a pipe feeds it.
+- `Command`, each program a `@command` runs, with `program`, `args`, `argv`, `folder`, `input`, the index of the command whose output a pipe feeds it, and `runner`, the index of the command that runs it, such as `sudo`, `xargs`, `find -exec`, or `bash -c`, absent for a command the shell runs itself.
 
 `context` holds `root`, the project root's absolute path, `path`, the file's path from that root or its `@` name, `text`, `lines`, and `commands`, so a rule can read other project files, ask git, or run a program. A `@command` also holds `shell`, the files the command `reads` and `writes`, the URLs it `fetches`, and `isFullyParsed`. `context.call` is the tool call being checked: its `tool`, `input`, `cwd`, `session`, `agentType`, `agentId`, and `transcriptPath`.
 

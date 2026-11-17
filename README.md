@@ -192,7 +192,7 @@ export default defineRule({
 rulebook visits three kinds of node:
 - `Document`, the whole text, once. A finding on it refuses a write whatever lines the write changed.
 - `Line`, each line, with its `lineNumber`, its `text`, and `isInCodeBlock`, true inside a Markdown code block.
-- `Command`, each program a `@command` runs, with its `program`, the name without its folder, its `args`, its `argv`, the `folder` it runs in, and `input`, the index of the command whose output a pipe feeds it.
+- `Command`, each program a `@command` runs, with its `program`, the name without its folder, its `args`, its `argv`, the `folder` it runs in, `input`, the index of the command whose output a pipe feeds it, and `runner`, the index of the command that runs it, such as `sudo`, `xargs`, `find -exec`, or `bash -c`, absent for a command the shell runs itself.
 
 `context` holds the file as `root`, the project root's absolute path, `path`, the file's path from that root or its `@` name, `text`, `lines`, and `commands`. A `@command` also holds `shell`: the files the command `reads` and `writes`, the URLs it `fetches`, and `isFullyParsed`, false when a part of the command, such as a `$VAR` program, cannot be known before it runs. `context.call` is the tool call being checked, when there is one: its `tool`, its `input`, its `cwd`, and the `session`, `agentType`, `agentId`, and `transcriptPath` the harness sends. A script rule is any TypeScript, so with `root` it can read other project files, ask git about uncommitted work, or run a program, the way a git hook does.
 

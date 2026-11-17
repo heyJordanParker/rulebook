@@ -162,9 +162,9 @@ function linesOf({ path, lines }: CheckedFile): readonly Line[] {
 }
 
 function commandsOf({ shell, lines }: CheckedFile): readonly Command[] {
-  return (shell?.commands ?? []).map(({ argv, folder, input }) => {
+  return (shell?.commands ?? []).map(({ argv, folder, input, runner }) => {
     const index = lines.findIndex((line) => line.includes(argv[0]))
-    return { lineNumber: index === -1 ? 1 : index + 1, program: basename(argv[0]), args: argv.slice(1), argv, folder, ...(input === undefined ? {} : { input }) }
+    return { lineNumber: index === -1 ? 1 : index + 1, program: basename(argv[0]), args: argv.slice(1), argv, folder, ...(input === undefined ? {} : { input }), ...(runner === undefined ? {} : { runner }) }
   })
 }
 

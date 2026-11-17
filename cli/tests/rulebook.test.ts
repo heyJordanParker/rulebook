@@ -1002,6 +1002,13 @@ test('rulebook claude-hook checks each shell command as @command, so a rule sees
   expect(claudeHook({ tool_name: 'Bash', tool_input: { command: 'git commit -m "drop npx"' } })).toEqual({ code: 0, stdout: '', stderr: '' })
 })
 
+test('a Command names the command that runs it, so a rule tells an rm the shell runs from one sudo, xargs, or find runs', () => {
+  write(join(project, 'rulebook.config.ts'), "export default { plugins: { app: './rules' } }\n")
+  write(join(project, 'rules', 'block-run-rm.ts'), "export default { description: 'Run rm yourself.', files: ['@command'], create: (context) => ({ Command: (command) => { if (command.program === 'rm' && command.runner !== undefined) context.report({ node: command }) } }) }\n")
+  for (const line of ['sudo rm x', 'ls | xargs rm', 'find build -exec rm {} \\;', 'sudo bash -c "rm x"']) expect(claudeHook({ tool_name: 'Bash', tool_input: { command: line } }).code).toBe(2)
+  for (const line of ['rm x', 'echo $(rm x)', '(rm x)', 'cd build && rm x']) expect(claudeHook({ tool_name: 'Bash', tool_input: { command: line } })).toEqual({ code: 0, stdout: '', stderr: '' })
+})
+
 test('a rule reads who makes the call, and a finding on the whole document refuses an edit whatever lines it writes', () => {
   write(join(project, 'rulebook.config.ts'), "export default { plugins: { app: './rules' } }\n")
   write(join(project, 'rules', 'block-reviewer-writes.ts'), "export default { description: 'A reviewer never writes.', files: ['**', '@command'], create: (context) => ({ Document: (document) => { if (context.call?.agentType === 'reviewer' && context.call.agentId !== undefined) context.report({ node: document }) } }) }\n")
