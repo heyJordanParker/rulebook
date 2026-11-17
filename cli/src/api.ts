@@ -23,6 +23,7 @@ export type Command = {
   readonly argv: readonly [string, ...string[]]
   readonly folder: string
   readonly input?: number
+  readonly runner?: number
 }
 
 export type Shell = {
