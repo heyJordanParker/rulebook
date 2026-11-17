@@ -2,6 +2,11 @@
 
 What changed in each version of rulebook, for the people who use it. cmod publish releases the section for the version, and Settings shows it.
 
+## [0.7.0]
+
+### Added
+- A `Command` knows its `runner`, the index of the command that runs it, such as `sudo`, `xargs`, `find -exec`, or `bash -c`. It is absent for a command the shell runs itself, `$(…)` and `( … )` included, so a rule tells `rm x` from `sudo rm x`.
+
 ## [0.6.0]
 
 ### Added
