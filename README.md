@@ -86,15 +86,16 @@ export default defineConfig({
 ```ts
 import { defineRule } from '@cmodjs/rulebook'
 
+const EM_DASH = String.fromCharCode(0x2014)
+
 export default defineRule({
   description: "Don't write em dashes.",
   message: 'Split the sentence at the em dash.',
   create(context) {
-    return {
-      Line(line) {
-        if (line.text.includes('—')) context.report({ node: line })
-      },
-    }
+    context.sourceCode.lines.forEach((text, index) => {
+      if (text.includes(EM_DASH)) context.report({ loc: { start: { line: index + 1, column: text.indexOf(EM_DASH) } } })
+    })
+    return {}
   },
 })
 ```
@@ -161,7 +162,7 @@ A rule has one `message`, the text each finding shows, the way an ast-grep or Se
 
 The file's extension picks the kind of rule.
 
-A pattern rule is a `.yml` file. It matches the file's syntax tree with [ast-grep](https://ast-grep.github.io), so it never flags a comment or a string, and flags each match at its first line. Its keys are `description`, `message`, `files`, `severity`, `runs`, `language`, and `rule`. `language` is `typescript`, `tsx`, `javascript`, `html`, `css`, `php`, `python`, `bash`, `lua`, `json`, `yaml`, `toml`, or `markdown`, and `rule` is any ast-grep rule object.
+A pattern rule is a `.yml` file. It matches the file's syntax tree with [ast-grep](https://ast-grep.github.io), so it never flags a comment or a string, and flags each match at its first line. Its keys are `description`, `message`, `files`, `severity`, `runs`, `language`, and `rule`. `language` is `typescript`, `tsx`, `javascript`, `html`, `css`, `php`, `python`, `bash`, `lua`, `json`, `yaml`, `toml`, `markdown`, or `rust`, and `rule` is any ast-grep rule object.
 
 ```yaml
 description: Don't log to the console.
@@ -171,7 +172,28 @@ rule:
   pattern: console.log($$$ARGS)
 ```
 
-A script rule is a `.ts` file laid out as an ESLint rule. `create` receives the `context` and returns a visitor for each kind of node the rule checks, and a visitor reports a node it flags with `context.report({ node })`. Its keys are `description`, `message`, `files`, `severity`, `runs`, and `create`, and rulebook refuses to load a rule with any other key.
+A script rule is a `.ts` file laid out as an ESLint rule. `create` receives the `context` and returns a visitor for each kind of node the rule checks. A visitor reports a node it flags with `context.report({ node })`, and a rule reports a line with `context.report({ loc: { start: { line, column } } })`. Its keys are `description`, `message`, `files`, `severity`, `runs`, and `create`, and rulebook refuses to load a rule with any other key.
+
+```ts
+import { defineRule, type SgNode } from '@cmodjs/rulebook'
+
+export default defineRule({
+  description: "Don't sleep in a test.",
+  files: ['**/*.test.ts', '**/test_*.py'],
+  create(context) {
+    const check = (call: SgNode) => {
+      if (/sleep$/.test(call.field('function')?.text() ?? '')) context.report({ node: call })
+    }
+    return { call_expression: check, call: check }
+  },
+})
+```
+
+`context.sourceCode` is the file the way ESLint hands it to a rule: its `text`, its `lines`, and `ast`, the parsed file. rulebook parses a file by its extension with ast-grep, in TypeScript, TSX, JavaScript, HTML, CSS, PHP, Python, Bash, Lua, JSON, YAML, TOML, Markdown, or Rust, and every `@` message but `@command` as Markdown. Its `ast` is the root of the tree, an ast-grep `SgNode` with `kind()`, `text()`, `range()`, `field()`, `children()`, `parent()`, `find`, and `findAll`. A file no parser reads, such as a `.txt`, gets a `Document` that holds its `text`.
+
+A visitor named for a node kind runs for every node of that kind, in file order, from one ast-grep search. A kind the file's language lacks never runs, so the rule above checks a TypeScript `call_expression` and a Python `call` with one function. A visitor that names no node kind of any language rulebook parses stops the rule with an error that names it. rulebook offers no ESLint selectors and no `:exit` visitors, because visiting every node of a 5,470-line file took 265 ms, where one search took 5.8 ms.
+
+A `@command`'s `ast` is a `Shell`: its `commands`, the files the command `reads` and `writes`, the URLs it `fetches`, and `isFullyParsed`, false when a part of the command, such as a `$VAR` program, cannot be known before it runs. The `Command` visitor visits each program a `@command` runs, with its `program`, the name without its folder, its `args`, its `argv`, the `folder` it runs in, `input`, the index of the command whose output a pipe feeds it, and `runner`, the index of the command that runs it, such as `sudo`, `xargs`, `find -exec`, or `bash -c`, absent for a command the shell runs itself.
 
 ```ts
 import { defineRule } from '@cmodjs/rulebook'
@@ -189,12 +211,9 @@ export default defineRule({
 })
 ```
 
-rulebook visits three kinds of node:
-- `Document`, the whole text, once. A finding on it refuses a write whatever lines the write changed.
-- `Line`, each line, with its `lineNumber`, its `text`, and `isInCodeBlock`, true inside a Markdown code block.
-- `Command`, each program a `@command` runs, with its `program`, the name without its folder, its `args`, its `argv`, the `folder` it runs in, `input`, the index of the command whose output a pipe feeds it, and `runner`, the index of the command that runs it, such as `sudo`, `xargs`, `find -exec`, or `bash -c`, absent for a command the shell runs itself.
+A finding on `context.sourceCode.ast`, the root of the file, refuses a write whatever lines the write changed. A rule that judges the write as a whole, such as who makes it, reports the root inside `create`.
 
-`context` holds the file as `root`, the project root's absolute path, `path`, the file's path from that root or its `@` name, `text`, `lines`, and `commands`. A `@command` also holds `shell`: the files the command `reads` and `writes`, the URLs it `fetches`, and `isFullyParsed`, false when a part of the command, such as a `$VAR` program, cannot be known before it runs. `context.call` is the tool call being checked, when there is one: its `tool`, its `input`, its `cwd`, and the `session`, `agentType`, `agentId`, and `transcriptPath` the harness sends. A script rule is any TypeScript, so with `root` it can read other project files, ask git about uncommitted work, or run a program, the way a git hook does.
+`context` also holds `root`, the project root's absolute path, `filename`, the file's absolute path or its `@` name, and `call`, the tool call being checked, when there is one: its `tool`, its `input`, its `cwd`, and the `session`, `agentType`, `agentId`, and `transcriptPath` the harness sends. A script rule is any TypeScript, so with `root` it can read other project files, ask git about uncommitted work, or run a program, the way a git hook does.
 
 An agentic rule is a `.md` file. Its frontmatter is Claude Code's Skill frontmatter without `name` and `context`, plus rulebook's `message`, `files`, `severity`, `runs`, `timeout`, and `threshold`, and its body is the check. Each finding shows the text its subagent writes for it. Unless its `model` is `jev`, rulebook runs it the way Claude Code runs any `context: fork` Skill: in a subagent in the project, which reads the project's Claude.md files. `agent` picks the subagent, whose own frontmatter applies, its preloaded Skills included.
 
