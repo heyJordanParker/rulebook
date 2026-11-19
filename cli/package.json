@@ -1,6 +1,6 @@
 {
   "name": "@cmodjs/rulebook",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "Checks every file, reply, tool call, and commit against your rules and linters before it lands.",
   "license": "MIT",
   "type": "module",
@@ -42,6 +42,7 @@
     "@ast-grep/lang-markdown": "0.0.6",
     "@ast-grep/lang-php": "0.0.7",
     "@ast-grep/lang-python": "0.0.6",
+    "@ast-grep/lang-rust": "0.0.7",
     "@ast-grep/lang-toml": "0.0.9",
     "@ast-grep/lang-yaml": "0.0.6",
     "@ast-grep/napi": "0.51.1",

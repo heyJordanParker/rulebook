@@ -1,9 +1,9 @@
 import { existsSync, mkdirSync, renameSync } from 'node:fs'
-import { basename, join } from 'node:path'
-import type { NapiConfig } from '@ast-grep/napi'
+import { basename, extname, join, resolve } from 'node:path'
+import type { NapiConfig, SgNode } from '@ast-grep/napi'
 import type { ParsedShell } from '@cmodjs/core/shell.js'
-import type { Call, Command, Context, Document, Line, Rule, RuleSettings, Runs, Severity, Visitors } from './api.ts'
-import { importsRule, noSuppressionsRule } from './check.ts'
+import type { Call, Command, Context, Node, Rule, RuleSettings, Runs, Severity, Shell, SourceCode, Visitors } from './api.ts'
+import { COMMAND, importsRule, noSuppressionsRule } from './check.ts'
 import type { Import } from './claude-md.ts'
 import { isRecord, isRuns, isSeverity, isStrings, isThreshold, isTimeout, rootRelative, type Settings } from './config.ts'
 import { isJev } from './jev.ts'
@@ -62,9 +62,12 @@ const SCRIPT_KEYS = new Set([...COMMON_KEYS, 'create'])
 const FRONTMATTER_KEYS = new Set([...COMMON_KEYS, 'timeout', 'threshold', 'agent', 'model', 'effort', 'allowed-tools', 'disallowed-tools'])
 const CLAUDE_KEYS = ['agent', 'effort', 'allowed-tools', 'disallowed-tools'] as const
 const PATTERN_KEYS = new Set([...COMMON_KEYS, 'language', 'rule'])
-const VISITORS = new Set(['Document', 'Line', 'Command'])
-const LANGUAGES = ['typescript', 'tsx', 'javascript', 'html', 'css', 'php', 'python', 'bash', 'lua', 'json', 'yaml', 'toml', 'markdown']
-const CODE_FENCE = /^\s*(`{3,}|~{3,})(.*)$/
+const LANGUAGES = ['typescript', 'tsx', 'javascript', 'html', 'css', 'php', 'python', 'bash', 'lua', 'json', 'yaml', 'toml', 'markdown', 'rust']
+const EXTENSIONS: Readonly<Record<string, string>> = {
+  ts: 'typescript', mts: 'typescript', cts: 'typescript', tsx: 'tsx', js: 'javascript', mjs: 'javascript', cjs: 'javascript', jsx: 'javascript',
+  html: 'html', htm: 'html', css: 'css', php: 'php', phpt: 'php', py: 'python', pyi: 'python', sh: 'bash', bash: 'bash', zsh: 'bash', ksh: 'bash', bats: 'bash',
+  lua: 'lua', json: 'json', yaml: 'yaml', yml: 'yaml', toml: 'toml', md: 'markdown', mdx: 'markdown', markdown: 'markdown', rs: 'rust',
+}
 
 let astGrep: Promise<typeof import('@ast-grep/napi')> | undefined
 
@@ -122,50 +125,104 @@ async function scriptRule(id: string, source: string): Promise<StaticRule> {
 
 async function visited(source: string, create: Rule['create'], file: CheckedFile): Promise<readonly Finding[]> {
   const found: Finding[] = []
-  const lines = linesOf(file)
-  const commands = commandsOf(file)
-  const document: Document = { lineNumber: 1, text: file.text }
+  const language = languageOf(file.path)
+  const sourceCode = await sourceCodeOf(file, language)
   const context: Context = {
     root: file.root,
-    path: file.path,
-    text: file.text,
-    lines,
-    commands,
-    ...(file.shell === undefined ? {} : { shell: { reads: file.shell.reads, writes: file.shell.writes, fetches: file.shell.fetches, isFullyParsed: file.shell.isFullyParsed } }),
+    filename: file.path.startsWith('@') ? file.path : resolve(file.root, file.path),
+    sourceCode,
     ...(file.call === undefined ? {} : { call: file.call }),
-    report: ({ node }) => {
-      found.push(node === document ? { line: 1, isWhole: true } : { line: node.lineNumber })
+    report: (problem) => {
+      found.push('loc' in problem ? { line: problem.loc.start.line } : findingOf(problem.node))
     },
   }
   const visitors: Visitors = await create(context)
-  if (!isRecord(visitors)) throw new Error(`${source}: create returns an object of visitors, such as { Line(line) { … } }.`)
-  for (const key of Object.keys(visitors)) if (!VISITORS.has(key)) throw new Error(`${source}: create returns the visitor "${key}". rulebook visits ${[...VISITORS].join(', ')}.`)
-  await visitors.Document?.(document)
-  if (visitors.Line !== undefined) for (const line of lines) await visitors.Line(line)
-  if (visitors.Command !== undefined) for (const command of commands) await visitors.Command(command)
+  if (!isRecord(visitors)) throw new Error(`${source}: create returns an object of visitors, such as { call_expression(call) { … } }.`)
+  const kinds = Object.keys(visitors).filter((key) => key !== 'Command')
+  const unknown = await unknownKinds(kinds)
+  if (unknown.length > 0) throw new Error(`${source}: create returns the visitor "${unknown[0]}", which names no node. A visitor names Command or a node kind of ${LANGUAGES.join(', ')}.`)
+  const { ast } = sourceCode
+  if (isShell(ast)) {
+    if (visitors.Command !== undefined) for (const command of ast.commands) await visitors.Command(command)
+  } else if (language !== undefined) {
+    const own = await ownKinds(language, kinds)
+    if (own.length > 0) for (const node of (ast as SgNode).findAll({ rule: { any: own.map((kind) => ({ kind })) } })) await (visitors[node.kind()] as (node: SgNode) => void | Promise<void>)(node)
+  }
   return found
 }
 
-function linesOf({ path, lines }: CheckedFile): readonly Line[] {
-  const isMarkdown = (path.startsWith('@') && path !== '@command') || /\.(md|mdx|markdown)$/i.test(path)
-  let fence: { readonly marker: string; readonly length: number } | undefined
-  return lines.map((text, index) => {
-    const match = isMarkdown ? CODE_FENCE.exec(text) : null
-    const isInCodeBlock = fence !== undefined || match !== null
-    if (match !== null) {
-      const marker = match[1] ?? ''
-      if (fence === undefined) fence = { marker: marker[0] ?? '`', length: marker.length }
-      else if (marker[0] === fence.marker && marker.length >= fence.length && (match[2] ?? '').trim() === '') fence = undefined
-    }
-    return { lineNumber: index + 1, text, isInCodeBlock }
-  })
+function findingOf(node: Node): Finding {
+  if ('lineNumber' in node) return { line: node.lineNumber }
+  if (!('kind' in node) || node.parent() === null) return { line: 1, isWhole: true }
+  return { line: node.range().start.line + 1 }
 }
 
-function commandsOf({ shell, lines }: CheckedFile): readonly Command[] {
-  return (shell?.commands ?? []).map(({ argv, folder, input, runner }) => {
+function isShell(node: Node): node is Shell {
+  return 'commands' in node
+}
+
+const sourceCodes = new WeakMap<CheckedFile, Promise<SourceCode>>()
+
+function sourceCodeOf(file: CheckedFile, language: string | undefined): Promise<SourceCode> {
+  const known = sourceCodes.get(file)
+  if (known !== undefined) return known
+  const sourceCode = parsed(file, language)
+  sourceCodes.set(file, sourceCode)
+  return sourceCode
+}
+
+async function parsed({ text, lines, shell }: CheckedFile, language: string | undefined): Promise<SourceCode> {
+  if (shell !== undefined) return { text, lines, ast: { commands: commandsOf(shell, lines), reads: shell.reads, writes: shell.writes, fetches: shell.fetches, isFullyParsed: shell.isFullyParsed } }
+  if (language === undefined) return { text, lines, ast: { text } }
+  const { parse } = await (astGrep ??= loadAstGrep())
+  let root: SgNode | undefined
+  return {
+    text,
+    lines,
+    get ast() {
+      root ??= parse(language, text).root()
+      return root
+    },
+  }
+}
+
+function languageOf(path: string): string | undefined {
+  if (path === COMMAND) return undefined
+  if (path.startsWith('@')) return 'markdown'
+  return EXTENSIONS[extname(path).slice(1).toLowerCase()]
+}
+
+function commandsOf(shell: ParsedShell, lines: readonly string[]): readonly Command[] {
+  return shell.commands.map(({ argv, folder, input, runner }) => {
     const index = lines.findIndex((line) => line.includes(argv[0]))
     return { lineNumber: index === -1 ? 1 : index + 1, program: basename(argv[0]), args: argv.slice(1), argv, folder, ...(input === undefined ? {} : { input }), ...(runner === undefined ? {} : { runner }) }
   })
+}
+
+const kindsOfLanguages = new Map<string, boolean>()
+
+async function ownKinds(language: string, kinds: readonly string[]): Promise<readonly string[]> {
+  const { parse } = await (astGrep ??= loadAstGrep())
+  return kinds.filter((kind) => {
+    const key = `${language}\0${kind}`
+    let isOwn = kindsOfLanguages.get(key)
+    if (isOwn === undefined) {
+      try {
+        parse(language, '').root().findAll({ rule: { kind } })
+        isOwn = true
+      } catch {
+        isOwn = false
+      }
+      kindsOfLanguages.set(key, isOwn)
+    }
+    return isOwn
+  })
+}
+
+async function unknownKinds(kinds: readonly string[]): Promise<readonly string[]> {
+  if (kinds.length === 0) return []
+  const known = new Set((await Promise.all(LANGUAGES.map((language) => ownKinds(language, kinds)))).flat())
+  return kinds.filter((kind) => !known.has(kind))
 }
 
 async function agenticRule(id: string, source: string, timeout: number): Promise<AgenticRule> {
@@ -221,7 +278,7 @@ async function patternRule(id: string, source: string): Promise<StaticRule> {
 }
 
 async function loadAstGrep(): Promise<typeof import('@ast-grep/napi')> {
-  const [napi, php, python, bash, lua, json, yaml, toml, markdown] = await Promise.all([
+  const [napi, php, python, bash, lua, json, yaml, toml, markdown, rust] = await Promise.all([
     import('@ast-grep/napi'),
     import('@ast-grep/lang-php'),
     import('@ast-grep/lang-python'),
@@ -231,8 +288,9 @@ async function loadAstGrep(): Promise<typeof import('@ast-grep/napi')> {
     import('@ast-grep/lang-yaml'),
     import('@ast-grep/lang-toml'),
     import('@ast-grep/lang-markdown'),
+    import('@ast-grep/lang-rust'),
   ])
-  const packages = { php, python, bash, lua, json, yaml, toml, markdown }
+  const packages = { php, python, bash, lua, json, yaml, toml, markdown, rust }
   napi.registerDynamicLanguage(Object.fromEntries(await Promise.all(Object.entries(packages).map(async ([language, { default: registration }]) => {
     const { extensions, languageSymbol = `tree_sitter_${language}`, expandoChar = '$' } = registration
     return [language, { libraryPath: Bun.isStandaloneExecutable ? await embeddedParser(language) : registration.libraryPath, extensions, languageSymbol, expandoChar }] as const

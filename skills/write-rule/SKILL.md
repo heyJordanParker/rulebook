@@ -41,7 +41,7 @@ Example: `message: Split the sentence at the em dash.`
 The file's extension picks the kind:
 
 - `.yml` is a pattern rule, which matches the code's syntax tree with ast-grep
-- `.ts` is a script rule, which runs your own TypeScript
+- `.ts` is a script rule, which runs your own TypeScript on the file's text and syntax tree
 - `.md` is an agentic rule, which runs a Claude Code subagent, or Jev with `model: jev`
 
 A pattern or script rule checks a file in about a millisecond. A Jev rule takes under a second, and a Claude Code rule takes seconds to minutes, so write an agentic rule only when the check takes judgment.
@@ -66,7 +66,7 @@ rule:
   pattern: console.log($$$ARGS)
 ```
 
-`language` is one of `typescript`, `tsx`, `javascript`, `html`, `css`, `php`, `python`, `bash`, `lua`, `json`, `yaml`, `toml`, or `markdown`. `rule` is an ast-grep rule object, passed to ast-grep as written: `pattern`, `kind`, `regex`, `inside`, `has`, `not`, `all`, `any`, and the rest of ast-grep's rule keys.
+`language` is one of `typescript`, `tsx`, `javascript`, `html`, `css`, `php`, `python`, `bash`, `lua`, `json`, `yaml`, `toml`, `markdown`, or `rust`. `rule` is an ast-grep rule object, passed to ast-grep as written: `pattern`, `kind`, `regex`, `inside`, `has`, `not`, `all`, `any`, and the rest of ast-grep's rule keys.
 
 IF the language is PHP:
 ### Give the pattern a `<?php` context and a selector
@@ -81,7 +81,7 @@ rule:
 
 ## 5. Write a script rule when a program decides
 
-A script rule is laid out as an ESLint rule. `create` receives the `context` and returns a visitor for each kind of node the rule checks, and a visitor reports a node it flags with `context.report({ node })`.
+A script rule is laid out as an ESLint rule. `create` receives the `context` and returns a visitor for each kind of node the rule checks. A visitor reports a node it flags with `context.report({ node })`, and a rule reports a line with `context.report({ loc: { start: { line, column } } })`.
 
 ```ts
 import { defineRule } from '@cmodjs/rulebook'
@@ -92,21 +92,40 @@ export default defineRule({
   description: "Don't write em dashes.",
   message: 'Split the sentence at the em dash.',
   create(context) {
-    return {
-      Line(line) {
-        if (!line.isInCodeBlock && line.text.includes(EM_DASH)) context.report({ node: line })
-      },
-    }
+    context.sourceCode.lines.forEach((text, index) => {
+      if (text.includes(EM_DASH)) context.report({ loc: { start: { line: index + 1, column: text.indexOf(EM_DASH) } } })
+    })
+    return {}
   },
 })
 ```
 
-rulebook visits three kinds of node:
-- `Document`, the whole text, once. A finding on it refuses a write whatever lines the write changed.
-- `Line`, each line, with `lineNumber`, `text`, and `isInCodeBlock`.
-- `Command`, each program a `@command` runs, with `program`, `args`, `argv`, `folder`, `input`, the index of the command whose output a pipe feeds it, and `runner`, the index of the command that runs it, such as `sudo`, `xargs`, `find -exec`, or `bash -c`, absent for a command the shell runs itself.
+- `context.sourceCode` holds the file's `text`, its `lines`, and `ast`, the parsed file.
+- rulebook parses a file by its extension with ast-grep, and every `@` message but `@command` as Markdown. `ast` is then the root `SgNode` of the tree, with `kind()`, `text()`, `range()`, `field()`, `children()`, `parent()`, `find`, and `findAll`.
+- A `@command`'s `ast` is a `Shell`, with its `commands`, the files it `reads` and `writes`, the URLs it `fetches`, and `isFullyParsed`.
+- A file no parser reads, such as a `.txt`, gets a `Document` that holds its `text`.
+- A visitor named for a node kind, such as `call_expression`, runs for each node of that kind in file order. A kind the file's language lacks never runs. A name that is no node kind of any language stops the rule with an error.
+- `Command` visits each program a `@command` runs, with `program`, `args`, `argv`, `folder`, `input`, the index of the command whose output a pipe feeds it, and `runner`, the index of the command that runs it, such as `sudo`, `xargs`, `find -exec`, or `bash -c`, absent for a command the shell runs itself.
+- `context` also holds `root`, the project root's absolute path, `filename`, the file's absolute path or its `@` name, and `call`, the tool call being checked: its `tool`, `input`, `cwd`, `session`, `agentType`, `agentId`, and `transcriptPath`. A rule can read other project files, ask git, or run a program.
 
-`context` holds `root`, the project root's absolute path, `path`, the file's path from that root or its `@` name, `text`, `lines`, and `commands`, so a rule can read other project files, ask git, or run a program. A `@command` also holds `shell`, the files the command `reads` and `writes`, the URLs it `fetches`, and `isFullyParsed`. `context.call` is the tool call being checked: its `tool`, `input`, `cwd`, `session`, `agentType`, `agentId`, and `transcriptPath`.
+IF the rule checks the same code in several languages:
+### Write one script rule with a visitor for each language's node kind
+A pattern rule reads one language, so one script rule replaces a pattern rule per language. Each language names its nodes, such as a call: `call_expression` in TypeScript, JavaScript, and Rust, `call` in Python, and `function_call_expression`, `member_call_expression`, and `scoped_call_expression` in PHP.
+Example:
+```ts
+import { defineRule, type SgNode } from '@cmodjs/rulebook'
+
+export default defineRule({
+  description: "Don't sleep in a test.",
+  files: ['**/*.test.ts', '**/test_*.py'],
+  create(context) {
+    const check = (call: SgNode) => {
+      if (/sleep$/.test(call.field('function')?.text() ?? '')) context.report({ node: call })
+    }
+    return { call_expression: check, call: check }
+  },
+})
+```
 
 IF the rule checks shell commands:
 ### Cover `@command` and visit `Command`
@@ -127,19 +146,16 @@ export default defineRule({
 ```
 
 IF the rule judges who makes the call, such as an agent that must never write:
-### Cover every file and `@command`, and decide in `Document` from `context.call`
-A write whose next text rulebook cannot compute, such as a NotebookEdit, a codex `apply_patch`, or an Edit whose `old_string` the file lacks, reaches the rule with no text and no lines. Only a `Document` visitor sees it, and its finding refuses the write whatever lines it changed.
+### Cover every file and `@command`, and report the root inside `create` from `context.call`
+A write whose next text rulebook cannot compute, such as a NotebookEdit, a codex `apply_patch`, or an Edit whose `old_string` the file lacks, reaches the rule with no text, so no visitor finds a node in it. `create` still runs, and a finding on `context.sourceCode.ast` refuses the write whatever lines it changed.
 Example:
 ```ts
 export default defineRule({
   description: 'A reviewer never writes.',
   files: ['**', '@command'],
   create(context) {
-    return {
-      Document(document) {
-        if (context.call?.agentType === 'reviewer' && context.call.agentId !== undefined) context.report({ node: document })
-      },
-    }
+    if (context.call?.agentType === 'reviewer' && context.call.agentId !== undefined) context.report({ node: context.sourceCode.ast })
+    return {}
   },
 })
 ```
@@ -189,7 +205,7 @@ Every kind of rule sets these keys at its top level:
 
 - `severity` is `error`, the default, or `warn`.
 - `runs` is `always`, the default, or `manual`. A manual rule never runs on an Agent's write or tool call. Every `rulebook check` runs it: a commit's `rulebook check --staged`, a full run, `/rulebook`, and CI.
-- An error refuses a write or a commit only on a line it writes. An error on a line the file held before shows as a warning, unless the config sets `existingErrors: 'error'`. A finding on the `Document` always refuses.
+- An error refuses a write or a commit only on a line it writes. An error on a line the file held before shows as a warning, unless the config sets `existingErrors: 'error'`. A finding on the root of the file, `context.sourceCode.ast`, always refuses.
 
 ### Give an agentic rule the time it needs with `timeout`
 `timeout` is the milliseconds an agentic rule may take, the config's `timeout` by default, which is 30 000 unless the config sets it. Only an agentic rule has one, because the deadline stops only agentic sessions. rulebook refuses a `timeout` on a pattern or script rule.

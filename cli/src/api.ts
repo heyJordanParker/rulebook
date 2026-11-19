@@ -1,3 +1,5 @@
+import type { SgNode } from '@ast-grep/napi'
+
 export type Severity = 'error' | 'warn'
 
 export type Runs = 'always' | 'manual'
@@ -12,9 +14,9 @@ export type Call = {
   readonly transcriptPath?: string
 }
 
-export type Document = { readonly lineNumber: 1; readonly text: string }
+export type { SgNode }
 
-export type Line = { readonly lineNumber: number; readonly text: string; readonly isInCodeBlock: boolean }
+export type Document = { readonly text: string }
 
 export type Command = {
   readonly lineNumber: number
@@ -27,29 +29,36 @@ export type Command = {
 }
 
 export type Shell = {
+  readonly commands: readonly Command[]
   readonly reads: readonly string[]
   readonly writes: readonly string[]
   readonly fetches: readonly string[]
   readonly isFullyParsed: boolean
 }
 
-export type Node = Document | Line | Command
+export type Node = SgNode | Command | Shell | Document
+
+export type SourceCode = {
+  readonly text: string
+  readonly lines: readonly string[]
+  readonly ast: SgNode | Shell | Document
+}
+
+export type Position = { readonly line: number; readonly column: number }
+
+export type Problem = { readonly node: Node } | { readonly loc: { readonly start: Position; readonly end?: Position } }
 
 export type Context = {
   readonly root: string
-  readonly path: string
-  readonly text: string
-  readonly lines: readonly Line[]
-  readonly commands: readonly Command[]
-  readonly shell?: Shell
+  readonly filename: string
+  readonly sourceCode: SourceCode
   readonly call?: Call
-  report(finding: { readonly node: Node }): void
+  report(problem: Problem): void
 }
 
 export type Visitors = {
-  readonly Document?: (document: Document) => void | Promise<void>
-  readonly Line?: (line: Line) => void | Promise<void>
   readonly Command?: (command: Command) => void | Promise<void>
+  readonly [kind: string]: ((node: SgNode) => void | Promise<void>) | ((command: Command) => void | Promise<void>) | undefined
 }
 
 export type Rule = {

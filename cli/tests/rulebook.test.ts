@@ -12,11 +12,10 @@ export default defineRule({
   description: "Don't write em dashes.",
   message: 'Split the sentence at the em dash.',
   create(context) {
-    return {
-      Line(line) {
-        if (line.text.includes('—')) context.report({ node: line })
-      },
-    }
+    context.sourceCode.lines.forEach((text, index) => {
+      if (text.includes('\\u2014')) context.report({ loc: { start: { line: index + 1, column: text.indexOf('\\u2014') } } })
+    })
+    return {}
   },
 })
 `
@@ -28,17 +27,16 @@ export default defineRule({
   message: 'Check the claim, then state it.',
   severity: 'warn',
   create(context) {
-    return {
-      Line(line) {
-        if (/\\bprobably\\b/.test(line.text)) context.report({ node: line })
-      },
-    }
+    context.sourceCode.lines.forEach((text, index) => {
+      if (/\\bprobably\\b/.test(text)) context.report({ loc: { start: { line: index + 1, column: 0 } } })
+    })
+    return {}
   },
 })
 `
 
 function lineRule(description: string, match: string, extra = ''): string {
-  return `export default { description: ${JSON.stringify(description)}, ${extra}create: (context) => ({ Line: (line) => { if (line.text.includes(${JSON.stringify(match)})) context.report({ node: line }) } }) }\n`
+  return `export default { description: ${JSON.stringify(description)}, ${extra}create: (context) => { context.sourceCode.lines.forEach((text, index) => { if (text.includes(${JSON.stringify(match)})) context.report({ loc: { start: { line: index + 1, column: 0 } } }) }); return {} } }\n`
 }
 
 let home: string
@@ -757,7 +755,7 @@ test("a rule whose files cover any file checks an edit to it, and a full run lis
 })
 
 test('a rule that reads text flags the line it reads in a Claude.md whose frontmatter and comments Claude Code removes', () => {
-  write(join(home, 'config', 'rulebook', 'rules', 'block-x.ts'), `export default { description: "Don't write x.", create: (context) => ({ Document: () => { context.text.split('\\n').forEach((line, index) => { if (line.includes('x')) context.report({ node: context.lines[index] }) }) } }) }\n`)
+  write(join(home, 'config', 'rulebook', 'rules', 'block-x.ts'), `export default { description: "Don't write x.", create: (context) => { context.sourceCode.text.split('\\n').forEach((line, index) => { if (line.includes('x')) context.report({ loc: { start: { line: index + 1, column: line.indexOf('x') } } }) }); return {} } }\n`)
   const answer = edit('Write', { file_path: join(project, 'Claude.md'), content: '---\ntitle: Rules\n---\n<!-- a maintainer note -->\n\nRun x.\n' })
   expect(answer.refuse).toBe("Edit to Claude.md refused. Fix every error, then edit again.\n\n  6  error  global/block-x  Don't write x.\n     > Run x.")
 })
@@ -1009,9 +1007,9 @@ test('a Command names the command that runs it, so a rule tells an rm the shell 
   for (const line of ['rm x', 'echo $(rm x)', '(rm x)', 'cd build && rm x']) expect(claudeHook({ tool_name: 'Bash', tool_input: { command: line } })).toEqual({ code: 0, stdout: '', stderr: '' })
 })
 
-test('a rule reads who makes the call, and a finding on the whole document refuses an edit whatever lines it writes', () => {
+test('a rule reads who makes the call, and a finding on the root of the file refuses an edit whatever lines it writes', () => {
   write(join(project, 'rulebook.config.ts'), "export default { plugins: { app: './rules' } }\n")
-  write(join(project, 'rules', 'block-reviewer-writes.ts'), "export default { description: 'A reviewer never writes.', files: ['**', '@command'], create: (context) => ({ Document: (document) => { if (context.call?.agentType === 'reviewer' && context.call.agentId !== undefined) context.report({ node: document }) } }) }\n")
+  write(join(project, 'rules', 'block-reviewer-writes.ts'), "export default { description: 'A reviewer never writes.', files: ['**', '@command'], create: (context) => { if (context.call?.agentType === 'reviewer' && context.call.agentId !== undefined) context.report({ node: context.sourceCode.ast }); return {} } }\n")
   const file = write(join(project, 'notes.md'), 'One.\nTwo.\n')
   const reviewer = { session_id: 'session', agent_type: 'reviewer', agent_id: 'agent-1' }
   expect(claudeHook({ tool_name: 'Edit', tool_input: { file_path: file, old_string: 'Two.', new_string: 'Three.' }, ...reviewer }).code).toBe(2)
@@ -1032,7 +1030,7 @@ test('rulebook claude-hook refuses an Edit a rule flags and answers a warning as
 
 test('a script rule reads the project root, so it can read any project file', () => {
   write(join(project, 'rulebook.config.ts'), "export default { plugins: { app: './rules' } }\n")
-  write(join(project, 'rules', 'require-changelog.ts'), "import { existsSync } from 'node:fs'\nimport { join } from 'node:path'\nexport default { description: 'Keep a CHANGELOG.md beside the code.', files: ['src/**'], create: (context) => ({ Document: (document) => { if (!existsSync(join(context.root, 'CHANGELOG.md'))) context.report({ node: document }) } }) }\n")
+  write(join(project, 'rules', 'require-changelog.ts'), "import { existsSync } from 'node:fs'\nimport { join } from 'node:path'\nexport default { description: 'Keep a CHANGELOG.md beside the code.', files: ['src/**'], create: (context) => { if (!existsSync(join(context.root, 'CHANGELOG.md'))) context.report({ node: context.sourceCode.ast }); return {} } }\n")
   expect(edit('Write', { file_path: join(project, 'src', 'app.ts'), content: 'export const a = 1\n' }).refuse).toContain('1  error  app/require-changelog  Keep a CHANGELOG.md beside the code.')
   write(join(project, 'CHANGELOG.md'), '# Changelog\n')
   expect(edit('Write', { file_path: join(project, 'src', 'app.ts'), content: 'export const a = 1\n' })).toEqual(NOTHING)
@@ -1089,14 +1087,38 @@ test('a script rule with a key rulebook does not read fails to load and names th
   expect(rulebook(['check', '--skip=agentic'])).toEqual({ code: 1, stdout: `${rule}: rulebook does not read the key "severty". It reads description, message, files, severity, runs, create. The rule global/block-x checks nothing until it loads.\n\n0 errors, 0 warnings in 0 files\n`, stderr: '' })
 })
 
-test('a rule that returns a visitor rulebook does not visit fails to load and names the visitors', () => {
-  const rule = write(join(home, 'config', 'rulebook', 'rules', 'block-x.ts'), `export default { description: "Don't write x.", create: () => ({ Paragraph: () => {} }) }\n`)
+test('a rule whose visitor names no node kind of any language fails to run and names what a visitor names', () => {
+  const rule = write(join(home, 'config', 'rulebook', 'rules', 'block-x.ts'), `export default { description: "Don't write x.", create: () => ({ call_expresion: () => {} }) }\n`)
   write(join(project, 'Claude.md'), 'Run it.\n')
-  expect(rulebook(['check', '--skip=agentic']).stdout).toContain(`global/block-x did not run on Claude.md: ${rule}: create returns the visitor "Paragraph". rulebook visits Document, Line, Command.`)
+  expect(rulebook(['check', '--skip=agentic']).stdout).toContain(`global/block-x did not run on Claude.md: ${rule}: create returns the visitor "call_expresion", which names no node. A visitor names Command or a node kind of typescript, tsx, javascript, html, css, php, python, bash, lua, json, yaml, toml, markdown, rust.`)
 })
 
-test('a line inside a Markdown code block is marked, so a prose rule can leave code alone', () => {
-  write(join(home, 'config', 'rulebook', 'rules', 'block-x.ts'), `export default { description: "Don't write x.", create: (context) => ({ Line: (line) => { if (!line.isInCodeBlock && line.text.includes('x')) context.report({ node: line }) } }) }\n`)
+test("a rule reads a Markdown file's tree, so a prose rule can leave code blocks alone", () => {
+  write(join(home, 'config', 'rulebook', 'rules', 'block-x.ts'), `export default { description: "Don't write x.", create: (context) => {
+  const code = new Set(context.sourceCode.ast.findAll({ rule: { kind: 'fenced_code_block' } }).flatMap((block) => { const { start, end } = block.range(); return Array.from({ length: end.line - start.line + (end.column === 0 ? 0 : 1) }, (_, index) => start.line + 1 + index) }))
+  context.sourceCode.lines.forEach((text, index) => { if (!code.has(index + 1) && text.includes('x')) context.report({ loc: { start: { line: index + 1, column: text.indexOf('x') } } }) })
+  return {}
+} }\n`)
   write(join(project, 'Claude.md'), 'Run x.\n\n```sh\nrun x\n```\n\n  ~~~\n  x\n  ~~~\nAfter x.\n')
   expect(rulebook(['check', '--skip=agentic']).stdout).toBe("Claude.md\n   1  error  global/block-x  Don't write x.\n      > Run x.\n  10  error  global/block-x  Don't write x.\n      > After x.\n\n2 errors, 0 warnings in 1 file\n")
+})
+
+test("a rule's node kind visitors run on each language's tree, so one rule finds a call in TypeScript, PHP, Python, and Rust and passes a string that names it", () => {
+  write(join(project, 'rulebook.config.ts'), "export default { plugins: { app: './rules' } }\n")
+  write(join(project, 'rules', 'block-sleep.ts'), `export default { description: "Don't sleep.", files: ['src/**'], create: (context) => {
+  const check = (call) => { if (/sleep$/.test(call.text().split('(')[0])) context.report({ node: call }) }
+  return { call_expression: check, call: check, function_call_expression: check, program: () => {} }
+} }\n`)
+  write(join(project, 'src', 'pay.ts'), "const label = 'sleep(1)'\nawait Bun.sleep(500)\n")
+  write(join(project, 'src', 'Pay.php'), "<?php\n$label = 'sleep(1)';\nsleep(2);\n")
+  write(join(project, 'src', 'pay.py'), "label = 'sleep(1)'\ntime.sleep(1)\n")
+  write(join(project, 'src', 'pay.rs'), 'fn pay() {\n    let label = "sleep(1)";\n    thread::sleep(d);\n}\n')
+  write(join(project, 'src', 'notes.txt'), 'sleep(1)\n')
+  expect(rulebook(['check', '--skip=agentic']).stdout).toBe([
+    "src/Pay.php\n  3  error  app/block-sleep  Don't sleep.\n     > sleep(2);",
+    "src/pay.py\n  2  error  app/block-sleep  Don't sleep.\n     > time.sleep(1)",
+    "src/pay.rs\n  3  error  app/block-sleep  Don't sleep.\n     > thread::sleep(d);",
+    "src/pay.ts\n  2  error  app/block-sleep  Don't sleep.\n     > await Bun.sleep(500)",
+    '4 errors, 0 warnings in 5 files\n',
+  ].join('\n\n'))
 })

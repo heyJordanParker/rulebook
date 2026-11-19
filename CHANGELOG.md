@@ -2,6 +2,22 @@
 
 What changed in each version of rulebook, for the people who use it. cmod publish releases the section for the version, and Settings shows it.
 
+## [0.8.0]
+
+### Added
+- A script rule reads the file's syntax tree as `context.sourceCode.ast`, parsed by its extension in TypeScript, TSX, JavaScript, HTML, CSS, PHP, Python, Bash, Lua, JSON, YAML, TOML, Markdown, or Rust, so one rule can tell a call from a string that names it, in every language at once.
+- A visitor named for a node kind, such as `call_expression`, runs for each node of that kind in file order, and never runs in a language that lacks the kind. A visitor that names no node kind of any language stops the rule with an error that names it.
+- `context.report({ loc: { start: { line, column } } })` flags any line, as in ESLint.
+- Pattern rules and script rules read Rust.
+
+### Changed
+- A script rule reads the file the way an ESLint rule does. Change each rule:
+  - `context.text` and `context.lines` are `context.sourceCode.text` and `context.sourceCode.lines`, and each line is its text.
+  - A `Line(line)` visitor is a loop over `context.sourceCode.lines` inside `create` that reports `{ loc: { start: { line: index + 1, column } } }`. `isInCodeBlock` is gone: find a Markdown file's code blocks with `context.sourceCode.ast.findAll({ rule: { kind: 'fenced_code_block' } })`.
+  - A `Document(document)` visitor is a check inside `create` that reports `{ node: context.sourceCode.ast }`, which refuses a write whatever lines it changed.
+  - `context.commands` and `context.shell` are `context.sourceCode.ast`, a `Shell` with `commands`, `reads`, `writes`, `fetches`, and `isFullyParsed`, in a `@command`. The `Command` visitor is unchanged.
+  - `context.path` is `context.filename`, the file's absolute path or its `@` name.
+
 ## [0.7.0]
 
 ### Added

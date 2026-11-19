@@ -12,7 +12,10 @@ const EM_DASH_RULE = `import { defineRule } from '@cmodjs/rulebook'
 export default defineRule({
   description: "Don't write em dashes.",
   message: 'Split the sentence at the em dash.',
-  create: (context) => ({ Line: (line) => { if (line.text.includes('${EM_DASH}')) context.report({ node: line }) } }),
+  create: (context) => {
+    context.sourceCode.lines.forEach((text, index) => { if (text.includes('${EM_DASH}')) context.report({ loc: { start: { line: index + 1, column: 0 } } }) })
+    return {}
+  },
 })
 `
 
@@ -22,11 +25,14 @@ export default defineRule({
   description: 'State a claim only once you checked it.',
   message: 'Check the claim, then state it.',
   severity: 'warn',
-  create: (context) => ({ Line: (line) => { if (/\\bprobably\\b/.test(line.text)) context.report({ node: line }) } }),
+  create: (context) => {
+    context.sourceCode.lines.forEach((text, index) => { if (/\\bprobably\\b/.test(text)) context.report({ loc: { start: { line: index + 1, column: 0 } } }) })
+    return {}
+  },
 })
 `
 
-const NPM_RUN_RULE = "export default { description: 'Run just, never npm run.', create: (context) => ({ Line: (line) => { if (line.text.includes('npm run')) context.report({ node: line }) } }) }\n"
+const NPM_RUN_RULE = "export default { description: 'Run just, never npm run.', create: (context) => { context.sourceCode.lines.forEach((text, index) => { if (text.includes('npm run')) context.report({ loc: { start: { line: index + 1, column: 0 } } }) }); return {} } }\n"
 
 setDefaultTimeout(120_000)
 
