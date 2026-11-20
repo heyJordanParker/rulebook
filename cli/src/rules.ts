@@ -14,12 +14,12 @@ export type Level = 'error' | 'warning'
 
 export type Finding = { readonly line: number; readonly message?: string; readonly isWhole?: true }
 
-export type CheckedFile = {
+type Text = { readonly text: string; readonly lines: readonly string[]; readonly shell?: ParsedShell }
+
+export type CheckedFile = Text & {
   readonly root: string
   readonly path: string
-  readonly text: string
-  readonly lines: readonly string[]
-  readonly shell?: ParsedShell
+  readonly previous?: Text
   readonly call?: Call
 }
 
@@ -131,6 +131,7 @@ async function visited(source: string, create: Rule['create'], file: CheckedFile
     root: file.root,
     filename: file.path.startsWith('@') ? file.path : resolve(file.root, file.path),
     sourceCode,
+    ...(file.previous === undefined ? {} : { previous: await sourceCodeOf(file.previous, language) }),
     ...(file.call === undefined ? {} : { call: file.call }),
     report: (problem) => {
       found.push('loc' in problem ? { line: problem.loc.start.line } : findingOf(problem.node))
@@ -161,9 +162,9 @@ function isShell(node: Node): node is Shell {
   return 'commands' in node
 }
 
-const sourceCodes = new WeakMap<CheckedFile, Promise<SourceCode>>()
+const sourceCodes = new WeakMap<Text, Promise<SourceCode>>()
 
-function sourceCodeOf(file: CheckedFile, language: string | undefined): Promise<SourceCode> {
+function sourceCodeOf(file: Text, language: string | undefined): Promise<SourceCode> {
   const known = sourceCodes.get(file)
   if (known !== undefined) return known
   const sourceCode = parsed(file, language)
@@ -171,7 +172,7 @@ function sourceCodeOf(file: CheckedFile, language: string | undefined): Promise<
   return sourceCode
 }
 
-async function parsed({ text, lines, shell }: CheckedFile, language: string | undefined): Promise<SourceCode> {
+async function parsed({ text, lines, shell }: Text, language: string | undefined): Promise<SourceCode> {
   if (shell !== undefined) return { text, lines, ast: { commands: commandsOf(shell, lines), reads: shell.reads, writes: shell.writes, fetches: shell.fetches, isFullyParsed: shell.isFullyParsed } }
   if (language === undefined) return { text, lines, ast: { text } }
   const { parse } = await (astGrep ??= loadAstGrep())

@@ -40,7 +40,7 @@ export async function checkEdit(call: Call, root: string): Promise<EditAnswer> {
   const settings = await loadSettings(dirname(file), root)
   const { rules } = await loadRules(settings)
   const isWhole = next === ''
-  const report = await checkFile(settings, rules, file, next, { scope: 'edit', previous: isWhole ? '' : previous ?? '', imported: () => loadImportedFiles(root), call })
+  const report = await checkFile(settings, rules, file, next, { scope: 'edit', previous: isWhole ? '' : previous,imported: () => loadImportedFiles(root), call })
   return editAnswer(report)
 }
 

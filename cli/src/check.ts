@@ -94,10 +94,12 @@ export async function checkFile(settings: Settings, rules: readonly LoadedRule[]
   const mayPin = text.includes('rulebook-expect')
   const claudeMd = isDoc || probe || (mayPin && written.some((line) => PIN.test(line))) ? readClaudeMd(text) : undefined
   const memory = isDoc ? claudeMd : undefined
+  const before = options.previous === undefined || !isDoc ? options.previous : readClaudeMd(options.previous).lines.join('\n')
   const prompt: CheckedFile = {
     root: settings.root,
     path,
     ...(memory === undefined ? { text, lines: written } : { text: memory.lines.join('\n'), lines: memory.lines }),
+    ...(before === undefined ? {} : { previous: { text: before, lines: before.split('\n') } }),
     ...(path === COMMAND ? { shell: parseShell(text) } : {}),
     ...(options.call === undefined ? {} : { call: options.call }),
   }
@@ -125,7 +127,7 @@ export async function checkFile(settings: Settings, rules: readonly LoadedRule[]
   const failures = [...runs.flatMap((run) => ('failure' in run ? [{ rule: run.rule.id, reason: run.failure }] : [])), ...lints.flatMap((lint) => lint.failures)]
   const found = [...runs.flatMap((run) => ('found' in run ? run.found.map(({ line, message, isWhole }) => ({ line, message: message ?? run.rule.message ?? run.rule.description, rule: run.rule.id, level: run.rule.level === 'off' ? 'error' as const : run.rule.level, ...(isWhole === true ? { isWhole } : {}) })) : [])), ...lints.flatMap((lint) => lint.flags)]
   const unscoped = new Set(rules.filter((rule) => !inScope(rule, options)).map(({ id }) => id))
-  const flagged: readonly Flag[] = probe ? probeFindings(found, pins.filter(({ rule }) => !unscoped.has(rule))) : [...found, ...pins.map((pin) => ({ rule: 'rulebook/pins', line: pin.line, level: 'error' as const, message: 'A rulebook-expect pin works only in a probe file. Remove it.' }))]
+  const flagged: readonly Flag[] = probe ? probeFindings(found, pins.filter(({ rule }) => !unscoped.has(rule)), written.findLastIndex((line) => line.trim() !== '') + 1) :[...found, ...pins.map((pin) => ({ rule: 'rulebook/pins', line: pin.line, level: 'error' as const, message: 'A rulebook-expect pin works only in a probe file. Remove it.' }))]
 
   return {
     path,
@@ -299,17 +301,18 @@ export const noSuppressionsRule: StaticRule = {
 
 type Flag = Omit<Reported, 'isExisting' | 'quote'> & { readonly isWhole?: true }
 
-function probeFindings(found: readonly Flag[], pins: readonly Pin[]): readonly Flag[] {
+function probeFindings(found: readonly Flag[], pins: readonly Pin[], lastLine: number): readonly Flag[] {
   const open = [...pins]
+  const isWholePin = (pin: Pin): boolean => pin.target > lastLine
   const unexpected = found.filter((finding) => {
-    const index = open.findIndex((pin) => pin.rule === finding.rule && pin.target === finding.line)
+    const index = open.findIndex((pin) => pin.rule === finding.rule && (finding.isWhole === true ? isWholePin(pin) : !isWholePin(pin) && pin.target === finding.line))
     if (index === -1) return true
     open.splice(index, 1)
     return false
   })
   return [
     ...unexpected.map((finding) => ({ ...finding, level: 'error' as const, message: `${finding.message} (no pin expects this flag)` })),
-    ...open.map((pin) => ({ rule: pin.rule, line: pin.line, level: 'error' as const, message: `The pin expects ${pin.rule} to flag line ${pin.target}, and it does not.` })),
+    ...open.map((pin) => ({ rule: pin.rule, line: pin.line, level: 'error' as const, message: `The pin expects ${pin.rule} to flag ${isWholePin(pin) ? 'the whole file' : `line ${pin.target}`}, and it does not.` })),
   ]
 }
 

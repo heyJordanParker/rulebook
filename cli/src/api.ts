@@ -52,6 +52,7 @@ export type Context = {
   readonly root: string
   readonly filename: string
   readonly sourceCode: SourceCode
+  readonly previous?: SourceCode
   readonly call?: Call
   report(problem: Problem): void
 }

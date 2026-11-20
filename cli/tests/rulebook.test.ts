@@ -1020,6 +1020,39 @@ test('a rule reads who makes the call, and a finding on the root of the file ref
   expect(claudeHook({ tool_name: 'Edit', tool_input: { file_path: file, old_string: 'Two.', new_string: 'Three.' }, session_id: 'session', agent_type: 'reviewer' })).toEqual({ code: 0, stdout: '', stderr: '' })
 })
 
+const LONG_RULE = "export default { description: 'Keep a note under 20 characters.', files: ['**/*.md'], create: ({ sourceCode, previous, report }) => { const { length } = sourceCode.text; if (length >= 20 && length > (previous?.text.length ?? 0)) report({ node: sourceCode.ast }); return {} } }\n"
+
+test('a rule reads the file before the write, so a rule about the whole file refuses only a write that makes it worse', () => {
+  write(join(project, 'rulebook.config.ts'), "export default { plugins: { app: './rules' } }\n")
+  write(join(project, 'rules', 'block-long-notes.ts'), LONG_RULE)
+  const file = write(join(project, 'notes.md'), 'One two three four five.\n')
+  expect(edit('Edit', { file_path: file, old_string: 'five', new_string: 'six' })).toEqual(NOTHING)
+  expect(edit('Edit', { file_path: file, old_string: 'five', new_string: 'FIVE' })).toEqual(NOTHING)
+  expect(edit('Edit', { file_path: file, old_string: 'five', new_string: 'five six' }).refuse).toContain('1  error  app/block-long-notes  Keep a note under 20 characters.')
+  expect(edit('Write', { file_path: join(project, 'new.md'), content: 'One two three four five.\n' }).refuse).toContain('app/block-long-notes')
+  expect(rulebook(['check', 'notes.md']).stdout).toContain('1  error  app/block-long-notes  Keep a note under 20 characters.')
+
+  git('init', '-q')
+  git('add', '-A')
+  git('commit', '-q', '-m', 'first')
+  write(file, 'One two three.\n')
+  git('add', 'notes.md')
+  expect(rulebook(['check', '--staged']).code).toBe(0)
+  write(file, 'One two three four five six.\n')
+  git('add', 'notes.md')
+  expect(rulebook(['check', '--staged']).code).toBe(1)
+})
+
+test('a pin on the last line of a probe expects a flag on the whole file', () => {
+  write(join(home, 'config', 'rulebook', 'rules', 'block-long-notes.ts'), "export default { description: 'Keep a note under 4 lines.', files: ['**/*.md'], create: ({ sourceCode, report }) => { if (sourceCode.lines.length >= 4) report({ node: sourceCode.ast }); return {} } }\n")
+  const probe = write(join(home, 'config', 'rulebook', 'probes', 'block-long-notes.md'), 'One.\nTwo.\n\n<!-- rulebook-expect global/block-long-notes -->\n')
+  expect(rulebook(['check', '--skip=agentic', probe])).toEqual({ code: 0, stdout: '0 errors, 0 warnings in 1 file\n', stderr: '' })
+  write(probe, 'One.\n<!-- rulebook-expect global/block-long-notes -->\n')
+  expect(rulebook(['check', '--skip=agentic', probe]).stdout).toContain('The pin expects global/block-long-notes to flag the whole file, and it does not.')
+  write(probe, '<!-- rulebook-expect global/block-long-notes -->\nOne.\n')
+  expect(rulebook(['check', '--skip=agentic', probe]).stdout).toContain('The pin expects global/block-long-notes to flag line 2, and it does not.')
+})
+
 test('rulebook claude-hook refuses an Edit a rule flags and answers a warning as context for the agent', () => {
   const dash = String.fromCharCode(0x2014)
   write(join(project, 'rulebook.config.ts'), "export default { rules: { 'global/block-em-dashes': 'warn' } }\n")

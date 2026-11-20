@@ -117,10 +117,10 @@ function withAddedErrors(reports: readonly FileReport[], added: readonly FileRep
   return [...merged.values()]
 }
 
-async function committed(root: string, path: string): Promise<string> {
+async function committed(root: string, path: string): Promise<string | undefined> {
   const show = Bun.spawn(['git', 'show', `HEAD:${path}`], { cwd: root, env: process.env, stdout: 'pipe', stderr: 'ignore' })
   const [text, code] = await Promise.all([new Response(show.stdout).text(), show.exited])
-  return code === 0 ? text : ''
+  return code === 0 ? text : undefined
 }
 
 async function hasHead(root: string): Promise<boolean> {
