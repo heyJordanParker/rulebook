@@ -2,6 +2,12 @@
 
 What changed in each version of rulebook, for the people who use it. cmod publish releases the section for the version, and Settings shows it.
 
+## [0.9.0]
+
+### Added
+- A script rule reads the file before the write as `context.previous`, the text on disk before an edit and the `HEAD` text in a commit, in the shape of `context.sourceCode`. It is absent for a new file and in a full `rulebook check`. So a rule about the whole file, such as a length cap, refuses only a write that makes the file worse, and a file that already breaks it can still be shortened or reverted.
+- A probe pin with nothing after it but blank lines expects its rule to flag the whole file, so a probe proves a rule that reports `context.sourceCode.ast`.
+
 ## [0.8.0]
 
 ### Added

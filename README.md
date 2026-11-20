@@ -213,6 +213,19 @@ export default defineRule({
 
 A finding on `context.sourceCode.ast`, the root of the file, refuses a write whatever lines the write changed. A rule that judges the write as a whole, such as who makes it, reports the root inside `create`.
 
+`context.previous` is the file before the write, the text on disk before an edit and the `HEAD` text in a commit, in the same shape as `context.sourceCode`. It is absent for a new file and in a full `rulebook check`. So a rule about the whole file refuses only a write that makes the file worse, and a full run still flags every file that breaks it:
+
+```ts
+export default defineRule({
+  description: 'Keep a Prompt under 10,000 characters.',
+  create({ sourceCode, previous, report }) {
+    const { length } = sourceCode.text
+    if (length >= 10_000 && length > (previous?.text.length ?? 0)) report({ node: sourceCode.ast })
+    return {}
+  },
+})
+```
+
 `context` also holds `root`, the project root's absolute path, `filename`, the file's absolute path or its `@` name, and `call`, the tool call being checked, when there is one: its `tool`, its `input`, its `cwd`, and the `session`, `agentType`, `agentId`, and `transcriptPath` the harness sends. A script rule is any TypeScript, so with `root` it can read other project files, ask git about uncommitted work, or run a program, the way a git hook does.
 
 An agentic rule is a `.md` file. Its frontmatter is Claude Code's Skill frontmatter without `name` and `context`, plus rulebook's `message`, `files`, `severity`, `runs`, `timeout`, and `threshold`, and its body is the check. Each finding shows the text its subagent writes for it. Unless its `model` is `jev`, rulebook runs it the way Claude Code runs any `context: fork` Skill: in a subagent in the project, which reads the project's Claude.md files. `agent` picks the subagent, whose own frontmatter applies, its preloaded Skills included.
@@ -403,6 +416,8 @@ Run the tests — they take a minute.
 
 Run the tests. They take a minute.
 ```
+
+A pin with nothing after it but blank lines expects its rule to flag the whole file, the finding a rule reports on `context.sourceCode.ast`.
 
 ## Run it
 
