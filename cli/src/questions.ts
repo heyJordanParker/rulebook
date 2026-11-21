@@ -1,13 +1,15 @@
 import { basename, dirname, join } from 'node:path'
-import type { Call } from './api.ts'
+import type { Call, Severity } from './api.ts'
 import { checkFile, COMMAND, globRegExp } from './check.ts'
-import { CONFIG_FILE, globalConfigFile, isRecord, loadSettings, projectRoot } from './config.ts'
+import { CONFIG_FILE, globalConfigFile, isRecord, isSeverity, loadSettings, projectRoot } from './config.ts'
 import { checkEdit, EDIT_TOOLS, editRoot } from './edit.ts'
 import { listedFiles } from './files.ts'
 import { editAnswer, type EditAnswer } from './report.ts'
-import { loadRules } from './rules.ts'
+import { loadRules, severityOf, withSeverities } from './rules.ts'
 
 export type Question = 'edit' | 'text' | 'rules'
+
+type Severities = Readonly<Record<string, Severity | 'off'>>
 
 type Text = { readonly name: string; readonly text: string; readonly cwd: string; readonly call?: Call }
 
@@ -21,14 +23,14 @@ type Answerer = {
 const QUESTIONS: Readonly<Record<Question, Answerer>> = {
   edit: {
     root: (input) => editRoot(callOf(input)),
-    answer: (input, root) => checkEdit(callOf(input), root),
+    answer: (input, root) => checkEdit(callOf(input), root, severitiesOf(input)),
   },
   text: {
     root: (input) => {
       const { cwd } = textOf(input)
       return projectRoot(cwd, cwd)
     },
-    answer: (input, root) => checkText(textOf(input), root),
+    answer: (input, root) => checkText(textOf(input), root, severitiesOf(input)),
   },
   rules: {
     root: (input) => {
@@ -51,21 +53,28 @@ export function answer(question: Question, input: unknown, root: string): Promis
   return QUESTIONS[question].answer(input, root)
 }
 
-async function checkText({ name, text, cwd, call }: Text, root: string): Promise<EditAnswer> {
+async function checkText({ name, text, cwd, call }: Text, root: string, severities: Severities): Promise<EditAnswer> {
   const settings = await loadSettings(cwd, root)
   if (!name.startsWith('@')) throw new Error('The text question checks a message by its @-name, such as @reply or @inbox/<id>.md.')
   const { rules } = await loadRules(settings)
-  const report = await checkFile(settings, rules, name, text, { scope: 'edit', imported: async () => new Set(), ...(call === undefined ? {} : { call }) })
+  const report = await checkFile(settings, withSeverities(rules, severities), name, text, { scope: 'edit', imported: async () => new Set(), ...(call === undefined ? {} : { call }) })
   return editAnswer(report)
 }
 
 export async function checkToolCall(input: unknown): Promise<EditAnswer | undefined> {
   const call = callOf(input)
-  if (EDIT_TOOLS.has(call.tool)) return checkEdit(call, editRoot(call))
+  if (EDIT_TOOLS.has(call.tool)) return checkEdit(call, editRoot(call), {})
   const root = projectRoot(call.cwd, call.cwd)
   const messages = Object.entries((await loadSettings(call.cwd, root)).messages)
   const name = messages.find(([, { tools }]) => tools.some((glob) => globRegExp(glob).test(call.tool)))?.[0]
-  return name === undefined ? undefined : checkText({ name: `@${name}`, text: messageText(`@${name}`, call.input), cwd: call.cwd, call }, root)
+  return name === undefined ? undefined : checkText({ name: `@${name}`, text: messageText(`@${name}`, call.input), cwd: call.cwd, call }, root, {})
+}
+
+function severitiesOf(input: unknown): Severities {
+  const rules = isRecord(input) ? input.rules : undefined
+  if (rules === undefined) return {}
+  if (!isRecord(rules) || !Object.values(rules).every((severity) => severity === 'off' || isSeverity(severity))) throw new Error('"rules" maps each rule name to "error", "warn", "ask", or "off", as a config\'s rules do.')
+  return rules as Severities
 }
 
 async function listRules(cwd: string, root: string): Promise<unknown> {
@@ -82,12 +91,14 @@ async function listRules(cwd: string, root: string): Promise<unknown> {
     sources: [...new Set([globalConfigFile(), join(root, CONFIG_FILE), ...folders.flatMap((folder) => folder.settings.configs.flatMap((config) => [config.file, ...Object.values(config.plugins)]))])],
     folders: folders.map((folder) => ({
       path: folder.path,
-      rules: folder.rules.filter(({ level }) => level !== 'off').map(({ id, description, files = folder.settings.files }) => ({
+      rules: folder.rules.flatMap(({ id, description, level, metadata, files = folder.settings.files }) => (level === 'off' ? [] : [{
         id,
         description,
+        severity: severityOf(level),
+        metadata,
         isEverywhere: files.some((glob) => glob === (folder.path === '' ? '**' : `${folder.path}/**`) || glob.startsWith('@')),
         files: regExpsOf(files),
-      })),
+      }])),
     })),
     messages: Object.entries(settings.messages).map(([name, { tools }]) => ({ name: `@${name}`, tools: regExpsOf(tools) })),
     failures: [...new Set(folders.flatMap((folder) => folder.failures))],

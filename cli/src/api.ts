@@ -1,6 +1,6 @@
 import type { SgNode } from '@ast-grep/napi'
 
-export type Severity = 'error' | 'warn'
+export type Severity = 'error' | 'warn' | 'ask'
 
 export type Runs = 'always' | 'manual'
 
@@ -68,6 +68,7 @@ export type Rule = {
   readonly files?: readonly string[]
   readonly severity?: Severity
   readonly runs?: Runs
+  readonly metadata?: Readonly<Record<string, unknown>>
   create(context: Context): Visitors | Promise<Visitors>
 }
 
@@ -90,7 +91,7 @@ export type Config = {
   readonly files?: readonly string[]
   readonly probes?: readonly string[]
   readonly timeout?: number
-  readonly existingErrors?: Severity
+  readonly existingErrors?: 'error' | 'warn'
   readonly rules?: Readonly<Record<string, Severity | 'off' | RuleSettings>>
   readonly linters?: readonly LinterName[]
   readonly programs?: Readonly<Partial<Record<LinterName, readonly string[]>>>

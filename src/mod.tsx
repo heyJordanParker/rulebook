@@ -1,16 +1,20 @@
-import { defineMod, fs, http, longestMs, messageOf, process, Reply, sessions, type Mod, type Subscription } from '../node_modules/@cmodjs/core/mod.js'
+import { defineMod, fs, http, longestMs, messageOf, process, provide, Reply, sessions, type Mod, type Subscription } from '../node_modules/@cmodjs/core/mod.js'
 import { program } from '../node_modules/@cmodjs/core/jobs/program.js'
 import { slashCommand } from '../node_modules/@cmodjs/core/jobs/slash-command.js'
 import { isAbsolute, relative } from '../node_modules/@cmodjs/core/path.js'
-import { resultsPage } from './pages/results.js'
+import type { ListedRule as PublicRule, RulebookCheck, RuleSeverity } from '../types/index.js'
+import { resultsView } from './views/results.js'
 import { initialState, type Finding, type RulebookState, type Report } from './state.js'
 
 type EditAnswer = {
   readonly refuse?: string
+  readonly ask?: string
   readonly note?: string
   readonly failures: readonly string[]
   readonly findings: readonly Finding[]
 }
+
+type Severities = Readonly<Record<string, RuleSeverity | 'off'>>
 
 type ListedRegExp = { readonly source: string; readonly flags: string }
 
@@ -19,7 +23,7 @@ type Listing = {
   readonly sources: readonly string[]
   readonly folders: readonly {
     readonly path: string
-    readonly rules: readonly { readonly id: string; readonly description: string; readonly isEverywhere: boolean; readonly files: readonly ListedRegExp[] }[]
+    readonly rules: readonly (PublicRule & { readonly isEverywhere: boolean; readonly files: readonly ListedRegExp[] })[]
   }[]
   readonly messages: readonly { readonly name: string; readonly tools: readonly ListedRegExp[] }[]
   readonly failures: readonly string[]
@@ -38,7 +42,7 @@ export const rulebook = defineMod({
   state: initialState,
 
   setup(mod) {
-    const page = mod.sidebar.add(resultsPage)
+    const results = mod.views.add(resultsView)
     const everyAgent = sessions.current.goal
     const server = mod.use(program({ command: ['rulebook', '__run_server'], singleInstance: true }))
 
@@ -84,9 +88,23 @@ export const rulebook = defineMod({
     }
     const listed = (): Promise<Listed> => (listing !== undefined && project === sessions.current.project ? listing : load())
 
-    const relayed = (answer: EditAnswer): { readonly refuse: string } | { readonly note: string } | undefined => {
+    const rulesIn = async (path: string): Promise<readonly PublicRule[]> => {
+      const { root, folders } = await listed()
+      return (folderOf(folders, path.startsWith('@') ? path : displayPath(root, path))?.rules ?? []).map(({ id, description, severity, metadata }) => ({ id, description, severity, metadata }))
+    }
+    const rulebookRules = provide('rulebook/Rules', { rules: rulesIn })
+    const severitiesFor = async (check: Omit<RulebookCheck, 'rules'>): Promise<Severities> => {
+      const rules = await rulesIn(check.path)
+      if (rules.length === 0) return {}
+      const answers = await rulebookRules.ask('Check', { ...check, rules })
+      return Object.assign({}, ...answers.flatMap((answer) => (isRecord(answer) && isRecord(answer.rules) ? [answer.rules] : [])))
+    }
+
+    const asks = new Map<string, string>()
+    const relayed = (answer: EditAnswer, callId?: string): { readonly refuse: string } | { readonly note: string } | undefined => {
       for (const failure of answer.failures) mod.log(failure, { level: 'warning' })
       if (answer.refuse !== undefined) return { refuse: answer.refuse }
+      if (answer.ask !== undefined && callId !== undefined) asks.set(callId, answer.ask)
       if (answer.note !== undefined) return { note: answer.note }
       return undefined
     }
@@ -95,8 +113,7 @@ export const rulebook = defineMod({
       const { root, folders } = await listed()
       const shown = new Set(isNewContext ? [] : mod.state.memory.shown[agent])
       const told = (path: string, covers: (rule: ListedRule) => boolean): string => {
-        const folder = folders.find((each) => each.path === '' || path === each.path || path.startsWith(`${each.path}/`))
-        const unshown = (folder?.rules ?? []).filter((rule) => !shown.has(rule.id) && covers(rule))
+        const unshown = (folderOf(folders, path)?.rules ?? []).filter((rule) => !shown.has(rule.id) && covers(rule))
         for (const { id } of unshown) shown.add(id)
         return unshown.map(({ description }) => `- ${description}`).join('\n')
       }
@@ -113,27 +130,43 @@ export const rulebook = defineMod({
 
     everyAgent.beforeSessionStart((start) => show(start.task ?? start.session, [], true))
     everyAgent.beforePrompt({ task: /./ }, (prompt) => show(prompt.task ?? prompt.session, [], false))
-    everyAgent.beforeToolResult((result) => show(result.task ?? result.session, [...result.files.read, ...result.files.changed], false))
+    everyAgent.beforeToolResult((result) => {
+      asks.delete(result.callId)
+      return show(result.task ?? result.session, [...result.files.read, ...result.files.changed], false)
+    })
 
     everyAgent.beforeToolCall(
       { name: /^(Edit|Write|MultiEdit|NotebookEdit)$/ },
-      async (call, { signal }) => relayed(await asked<EditAnswer>('edit', { tool_name: call.name, tool_input: call.input, cwd: call.cwd, ...whoCalls(call) }, signal)),
+      async (call, { signal }) => {
+        const rules = await severitiesFor(checkOf(call, editedPath(call.input) ?? sessions.current.project))
+        return relayed(await asked<EditAnswer>('edit', { tool_name: call.name, tool_input: call.input, cwd: call.cwd, ...whoCalls(call), rules }, signal), call.callId)
+      },
       { timeoutMs: longestMs },
     )
 
     everyAgent.beforeToolCall(
       async (call, { signal }) => {
         const message = (await listed()).messages.find(({ isSentBy }) => isSentBy(call.name))
-        return message === undefined ? undefined : relayed(await asked<EditAnswer>('text', { name: message.name, input: call.input, cwd: call.cwd, tool_name: call.name, ...whoCalls(call) }, signal))
+        if (message === undefined) return undefined
+        const rules = await severitiesFor(checkOf(call, message.name))
+        return relayed(await asked<EditAnswer>('text', { name: message.name, input: call.input, cwd: call.cwd, tool_name: call.name, ...whoCalls(call), rules }, signal), call.callId)
       },
       { timeoutMs: longestMs },
     )
+
+    sessions.current.beforePermissionCheck(({ callId }) => {
+      const reason = callId === undefined ? undefined : asks.get(callId)
+      if (callId === undefined || reason === undefined) return undefined
+      asks.delete(callId)
+      return { ask: reason }
+    })
 
     sessions.current.beforeTurnEnd(
       async (turn, { signal }) => {
         const reply = (await turn.messages()).findLast((message) => message.type === Reply)
         if (reply === undefined) return undefined
-        const answer = await asked<EditAnswer>('text', { name: '@reply', text: reply.text, cwd: sessions.current.cwd }, signal)
+        const rules = await severitiesFor({ path: '@reply', session: sessions.current.id })
+        const answer = await asked<EditAnswer>('text', { name: '@reply', text: reply.text, cwd: sessions.current.cwd, rules }, signal)
         const relay = relayed(answer)
         if (answer.refuse !== undefined && mod.state.memory.refusedTurn !== turn.prompt.id) {
           mod.state.memory.refusedTurn = turn.prompt.id
@@ -153,7 +186,7 @@ export const rulebook = defineMod({
         reply: async ({ positionals }) => {
           mod.state.memory.run = { status: 'running', files: positionals }
           void checkProject(mod, positionals)
-          await page.open()
+          await results.open()
           return undefined
         },
       }),
@@ -190,6 +223,23 @@ function listedOf({ root, sources, folders, messages, failures }: Listing): List
 
 function whoCalls(call: { readonly session: string; readonly agentType?: string; readonly task?: string }): Readonly<Record<string, string>> {
   return { session_id: call.session, ...(call.agentType === undefined ? {} : { agent_type: call.agentType }), ...(call.task === undefined ? {} : { agent_id: call.task }) }
+}
+
+function checkOf(call: { readonly name: string; readonly session: string; readonly agentType?: string; readonly task?: string }, path: string): Omit<RulebookCheck, 'rules'> {
+  return { path, session: call.session, ...(call.task === undefined ? {} : { task: call.task }), ...(call.agentType === undefined ? {} : { agentType: call.agentType }), tool: call.name }
+}
+
+function editedPath(input: Readonly<Record<string, unknown>>): string | undefined {
+  const path = input.file_path ?? input.notebook_path
+  return typeof path === 'string' ? path : undefined
+}
+
+function folderOf<Folder extends { readonly path: string }>(folders: readonly Folder[], path: string): Folder | undefined {
+  return folders.find((each) => each.path === '' || path === each.path || path.startsWith(`${each.path}/`))
+}
+
+function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
 function anyOf(listed: readonly ListedRegExp[]): (text: string) => boolean {

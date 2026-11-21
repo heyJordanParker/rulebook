@@ -10,7 +10,7 @@ import { isJev } from './jev.ts'
 import { cacheFolder } from './linters.ts'
 import { importDefault } from './modules.ts'
 
-export type Level = 'error' | 'warning'
+export type Level = 'error' | 'warning' | 'ask'
 
 export type Finding = { readonly line: number; readonly message?: string; readonly isWhole?: true }
 
@@ -31,6 +31,7 @@ type Common = {
   readonly level: Level | 'off'
   readonly runs: Runs
   readonly files: readonly string[] | undefined
+  readonly metadata: Readonly<Record<string, unknown>>
 }
 
 type Doc = { readonly file: string; readonly imports: readonly Import[] }
@@ -57,7 +58,7 @@ export type LoadedRule = StaticRule | AgenticRule
 export type Rules = { readonly rules: readonly LoadedRule[]; readonly failures: readonly string[] }
 
 const RULE_FILES = new Bun.Glob('**/*.{ts,md,yml}')
-const COMMON_KEYS = ['description', 'message', 'files', 'severity', 'runs']
+const COMMON_KEYS = ['description', 'message', 'files', 'severity', 'runs', 'metadata']
 const SCRIPT_KEYS = new Set([...COMMON_KEYS, 'create'])
 const FRONTMATTER_KEYS = new Set([...COMMON_KEYS, 'timeout', 'threshold', 'agent', 'model', 'effort', 'allowed-tools', 'disallowed-tools'])
 const CLAUDE_KEYS = ['agent', 'effort', 'allowed-tools', 'disallowed-tools'] as const
@@ -316,11 +317,12 @@ function commonOf(id: string, source: string, keys: Readonly<Record<string, unkn
   const fail = (problem: string): never => {
     throw new Error(`${source}: ${problem}`)
   }
-  const { description, message, severity, runs } = keys
+  const { description, message, severity, runs, metadata = {} } = keys
   if (typeof description !== 'string' || description.trim() === '' || description.trim().includes('\n')) return fail('a rule needs a description: the Rule in one line of plain words, such as "Don\'t write em dashes."')
   if (message !== undefined && (typeof message !== 'string' || message.trim() === '')) fail('message is the text of each finding, a string. Leave it out to show the description.')
-  if (severity !== undefined && !isSeverity(severity)) fail('severity is "error" or "warn".')
+  if (severity !== undefined && !isSeverity(severity)) fail('severity is "error", "warn", or "ask".')
   if (runs !== undefined && !isRuns(runs)) fail('runs is "always" or "manual".')
+  if (!isRecord(metadata)) return fail('metadata is a map of keys, such as { mode: "propose" }, that rulebook passes on and never reads.')
   return {
     id,
     source,
@@ -329,11 +331,23 @@ function commonOf(id: string, source: string, keys: Readonly<Record<string, unkn
     level: levelOf((severity as Severity | undefined) ?? 'error'),
     runs: (runs as Runs | undefined) ?? 'always',
     files: filesOf(source, keys.files),
+    metadata,
   }
 }
 
 export function levelOf(severity: Severity): Level {
-  return severity === 'warn' ? 'warning' : 'error'
+  return severity === 'warn' ? 'warning' : severity
+}
+
+export function severityOf(level: Level): Severity {
+  return level === 'warning' ? 'warn' : level
+}
+
+export function withSeverities(rules: readonly LoadedRule[], severities: Readonly<Record<string, Severity | 'off'>>): readonly LoadedRule[] {
+  return rules.map((rule) => {
+    const severity = severities[rule.id]
+    return severity === undefined ? rule : overridden(rule, { severity })
+  })
 }
 
 function filesOf(source: string, files: unknown): readonly string[] | undefined {

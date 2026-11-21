@@ -2,7 +2,7 @@
 
 rulebook checks your files against your rules: any file a rule covers, code and docs alike, every CLAUDE.md, rule, Skill, and agent file, and every agent message a rule covers. A rule is an ast-grep pattern in any of 13 languages, a TypeScript check, or a check an agent runs, and rulebook runs your project's own linters beside them. When any agent writes a file with Edit, Write, MultiEdit, or NotebookEdit, rulebook checks it as the write will leave it. An error refuses the edit, and the agent reads why, with the line it wrote. A warning lets the edit land, and the agent reads it beside the result. As the git pre-commit hook, `rulebook check --staged` checks every commit, by an agent or a person, with the project's rules and linters and the committer's global config.
 
-rulebook checks what agents send you the same way. Before the main agent ends its turn, rulebook checks its final reply as `@reply`. An error keeps the agent from stopping once per turn, and the agent writes the whole reply again. A rewrite that still breaks a rule ends the turn, and its findings show as a warning toast. A subagent's answer is never checked. Before any agent runs a shell command, rulebook checks the command as `@command`, and a rule reads each program the command runs, even one inside `sudo`, `env`, `bash -c`, or `$(…)`. Before any agent calls a tool that a config's `messages` `tools` match, such as an inbox tool, rulebook checks the text of every field the call sends. An error refuses the call before it runs. A script rule also reads the call itself as `context.call`: the tool, its input, and the session and agent that make it.
+rulebook checks what agents send you the same way. Before the main agent ends its turn, rulebook checks its final reply as `@reply`. An error keeps the agent from stopping once per turn, and the agent writes the whole reply again. A rewrite that still breaks a rule ends the turn, and its findings show as a warning toast. A subagent's answer is never checked. Before any agent runs a shell command, rulebook checks the command as `@command`, and a rule reads each program the command runs, even one inside `sudo`, `env`, `bash -c`, or `$(…)`. Before any agent calls a tool that a config's `messages` `tools` match, such as an inbox tool, rulebook checks the text of every field the call sends. An error refuses the call before it runs, and an `ask` finding makes Claude Code ask you before it runs. A script rule also reads the call itself as `context.call`: the tool, its input, and the session and agent that make it.
 
 ```text
 Edit to .claude/rules/testing.md refused. Fix every error, then edit again.
@@ -158,11 +158,13 @@ A rule's `files` decide what it checks, as ESLint's `files` do. Each entry is a 
 files: ['**', '@reply', '@command', '@inbox/**']
 ```
 
-A rule has one `message`, the text each finding shows, the way an ast-grep or Semgrep rule carries one message. A rule without one shows its `description`. A rule that needs two messages is two rules, so each stays small. `severity` is `error`, the default, or `warn`.
+A rule has one `message`, the text each finding shows, the way an ast-grep or Semgrep rule carries one message. A rule without one shows its `description`. A rule that needs two messages is two rules, so each stays small. `severity` is `error`, the default, `warn`, or `ask`. An `ask` finding on an agent's write or tool call makes Claude Code ask you before the call runs, with the finding as the reason, the way Claude Code's own `ask` permission does. A commit, `rulebook check`, and a reply have nobody to ask, so there `ask` counts as `error`.
+
+A rule's `metadata` is a map of any keys, such as `{ mode: 'propose' }`. rulebook never reads it. It passes it to other mods with the rule, so a mod can group rules by its own keys.
 
 The file's extension picks the kind of rule.
 
-A pattern rule is a `.yml` file. It matches the file's syntax tree with [ast-grep](https://ast-grep.github.io), so it never flags a comment or a string, and flags each match at its first line. Its keys are `description`, `message`, `files`, `severity`, `runs`, `language`, and `rule`. `language` is `typescript`, `tsx`, `javascript`, `html`, `css`, `php`, `python`, `bash`, `lua`, `json`, `yaml`, `toml`, `markdown`, or `rust`, and `rule` is any ast-grep rule object.
+A pattern rule is a `.yml` file. It matches the file's syntax tree with [ast-grep](https://ast-grep.github.io), so it never flags a comment or a string, and flags each match at its first line. Its keys are `description`, `message`, `files`, `severity`, `runs`, `metadata`, `language`, and `rule`. `language` is `typescript`, `tsx`, `javascript`, `html`, `css`, `php`, `python`, `bash`, `lua`, `json`, `yaml`, `toml`, `markdown`, or `rust`, and `rule` is any ast-grep rule object.
 
 ```yaml
 description: Don't log to the console.
@@ -172,7 +174,7 @@ rule:
   pattern: console.log($$$ARGS)
 ```
 
-A script rule is a `.ts` file laid out as an ESLint rule. `create` receives the `context` and returns a visitor for each kind of node the rule checks. A visitor reports a node it flags with `context.report({ node })`, and a rule reports a line with `context.report({ loc: { start: { line, column } } })`. Its keys are `description`, `message`, `files`, `severity`, `runs`, and `create`, and rulebook refuses to load a rule with any other key.
+A script rule is a `.ts` file laid out as an ESLint rule. `create` receives the `context` and returns a visitor for each kind of node the rule checks. A visitor reports a node it flags with `context.report({ node })`, and a rule reports a line with `context.report({ loc: { start: { line, column } } })`. Its keys are `description`, `message`, `files`, `severity`, `runs`, `metadata`, and `create`, and rulebook refuses to load a rule with any other key.
 
 ```ts
 import { defineRule, type SgNode } from '@cmodjs/rulebook'
@@ -228,7 +230,7 @@ export default defineRule({
 
 `context` also holds `root`, the project root's absolute path, `filename`, the file's absolute path or its `@` name, and `call`, the tool call being checked, when there is one: its `tool`, its `input`, its `cwd`, and the `session`, `agentType`, `agentId`, and `transcriptPath` the harness sends. A script rule is any TypeScript, so with `root` it can read other project files, ask git about uncommitted work, or run a program, the way a git hook does.
 
-An agentic rule is a `.md` file. Its frontmatter is Claude Code's Skill frontmatter without `name` and `context`, plus rulebook's `message`, `files`, `severity`, `runs`, `timeout`, and `threshold`, and its body is the check. Each finding shows the text its subagent writes for it. Unless its `model` is `jev`, rulebook runs it the way Claude Code runs any `context: fork` Skill: in a subagent in the project, which reads the project's Claude.md files. `agent` picks the subagent, whose own frontmatter applies, its preloaded Skills included.
+An agentic rule is a `.md` file. Its frontmatter is Claude Code's Skill frontmatter without `name` and `context`, plus rulebook's `message`, `files`, `severity`, `runs`, `timeout`, and `threshold`, and its body is the check. `metadata` is the Skill frontmatter's own key. Each finding shows the text its subagent writes for it. Unless its `model` is `jev`, rulebook runs it the way Claude Code runs any `context: fork` Skill: in a subagent in the project, which reads the project's Claude.md files. `agent` picks the subagent, whose own frontmatter applies, its preloaded Skills included.
 
 ```md
 ---
@@ -406,6 +408,19 @@ Rules for docs/CLAUDE.md:
 
 An agent reads each description once, until its context compacts. The mod loads the rules once per session with the `rules` answer of the rulebook server, which lists the rules of each folder that holds a `rulebook.config.ts`, and again at the session's next check after a rulebook config or rule file it lists changes, so a session that sits idle asks nothing. The mod shows each file the rules of its nearest folder in that list, and the session start shows the rules of the session's own folder.
 
+## Other mods take part in each check
+
+The rulebook mod provides the cmod interface `rulebook/Rules` in each session. Another mod in the session lists the rules of a folder with `rules(folder)`, each with its `id`, `description`, `severity`, and `metadata`. Before the mod checks an agent's write, tool call, or reply, it asks each `beforeCheck` listener, and a listener answers rule settings the way a config's `rules` does. rulebook merges every answer over the configs, as a later config wins, for that one check. A commit and `rulebook check` ask nobody.
+
+```ts
+for (const rulebook of await providers('rulebook/Rules'))
+  rulebook.beforeCheck(({ task, rules }) => ({
+    rules: Object.fromEntries(rules.filter(({ metadata }) => metadata.mode !== undefined && metadata.mode !== modeOf(task)).map(({ id }) => [id, 'off'])),
+  }), { timeoutMs: 1000 })
+```
+
+Each check names its `path`, the `session`, and for a subagent its `task` and `agentType`, the `tool` it calls, and the `rules` of the path's folder. `types/index.d.ts` types the interface.
+
 ## Prove a rule with a probe
 
 A probe holds lines the rule must flag, each under a pin, and lines it must leave alone. rulebook fails on a pin that stops firing and on a flag with no pin. It skips each pin of a rule the run leaves out, such as a `runs: manual` rule's pin in an edit or a rule a `--skip` names, and fails a pin that names no rule. A pin works only in a probe.
@@ -430,7 +445,7 @@ rulebook check --stdin-file-path=<path>  Check stdin as the text of the file or 
 rulebook check --reporter=json           Print the results as JSON.
 rulebook check --skip=<name>             Skip a rule, every rule of a plugin or folder, a linter, or every agentic rule, such as --skip=agentic. Repeat it to skip more.
 rulebook inspect rules                   Print, for each folder that holds a rulebook.config.ts, each rule that is on there, with its description and the files it covers, and each message with the tools that send it, as JSON.
-rulebook claude-hook                     Check the tool call a Claude Code or codex PreToolUse hook sends on stdin: a file write, a shell command as @command, or a call a message's tools match. An error refuses it.
+rulebook claude-hook                     Check the tool call a Claude Code or codex PreToolUse hook sends on stdin: a file write, a shell command as @command, or a call a message's tools match. An error refuses it, and an ask asks the person first.
 rulebook --version                       Print the version.
 ```
 
@@ -450,7 +465,7 @@ The rulebook mod checks every session on a computer with cmod. A project can als
 { "hooks": { "PreToolUse": [{ "hooks": [{ "type": "command", "command": "rulebook claude-hook" }] }] } }
 ```
 
-`rulebook claude-hook` reads the tool call Claude Code sends, checks an Edit, Write, or MultiEdit as the write will leave the file, checks a shell command as `@command`, and checks any call a message's `tools` match as that message. A write whose result rulebook cannot compute, such as a NotebookEdit or a codex `apply_patch`, is checked with no text, so only a rule that reads `context.call` flags it. An error exits 2 with the refusal, which refuses the call, and a warning reaches the agent as context. It starts a fresh `rulebook` for each call, so each check pays a cold start the mod's server does not.
+`rulebook claude-hook` reads the tool call Claude Code sends, checks an Edit, Write, or MultiEdit as the write will leave the file, checks a shell command as `@command`, and checks any call a message's `tools` match as that message. A write whose result rulebook cannot compute, such as a NotebookEdit or a codex `apply_patch`, is checked with no text, so only a rule that reads `context.call` flags it. An error exits 2 with the refusal, which refuses the call, an `ask` finding answers `permissionDecision: ask`, and a warning reaches the agent as context. It starts a fresh `rulebook` for each call, so each check pays a cold start the mod's server does not.
 
 Codex reads the same hook from its `config.toml`, and sends its shell calls as `Bash`, `shell_command`, or `exec_command`, which `@command` covers:
 

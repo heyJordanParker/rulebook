@@ -10,7 +10,7 @@ description: Write or change a rulebook rule, a check rulebook runs on any file,
 - `~/.config/rulebook/rulebook.config.ts` applies to every project, and the nearest `rulebook.config.ts` at or above a file's folder merges over it.
 - `extends` merges config paths, `~` as home, and objects such as `recommended`, left to right, before the config's own keys.
 - `plugins` names each rule folder. A rule is a file at any depth, named `<plugin>/<path without extension>`: `rules/writing/block-em-dashes.ts` under `global` is `global/writing/block-em-dashes`.
-- `rules` sets a rule to `'off'`, `'warn'`, `'error'`, or an object that also overrides `files`, `runs`, and an agentic rule's `timeout`, `agent`, `model`, `effort`, and `threshold`.
+- `rules` sets a rule to `'off'`, a severity, or an object that also overrides `files`, `runs`, and an agentic rule's `timeout`, `agent`, `model`, `effort`, and `threshold`.
 - No rule is on by default. `extends: [recommended]` turns on `rulebook/imports`, and `'rulebook/no-suppressions': 'error'` flags comments that suppress a linter, such as `# noqa`. A Claude Code plugin's rules apply only when a config extends its `rulebook.config.ts`.
 - `files` lists the Prompts a rule without `files` checks, and `probes` the probe files, relative to the config's folder, or the project root for the global config.
 - `messages` registers a message: `tools` checks each matching tool call as `@<name>`, and `folder` makes a full run check its files as `@<name>/<path>`. `@reply` and `@command` are built in.
@@ -82,7 +82,7 @@ export default defineRule({
 
 - `context.sourceCode` holds `text`, `lines`, and `ast`, the root ast-grep `SgNode`, with `kind()`, `text()`, `range()`, `field()`, `parent()`, and `findAll`. Every `@` message but `@command` parses as Markdown, and a file no parser reads gets a `Document`.
 - A visitor named for a node kind runs on each node of that kind in file order, never in a language that lacks it, so one rule covers several languages: a call is `call_expression` in TypeScript and Rust, `call` in Python, and `function_call_expression` in PHP. A name that is no node kind stops the rule.
-- `context` also holds `root`, `filename`, `previous`, the file before the write, and `call`, the tool call: `tool`, `input`, `cwd`, `session`, `agentType`, `agentId`, and `transcriptPath`. A rule can read files, ask git, or run programs.
+- `context` also holds `root`, `filename`, `previous`, the file before the write, and `call`, the tool call: `tool`, `input`, `cwd`, `session`, `agentType`, `agentId`, and `transcriptPath`.
 
 IF the rule checks shell commands:
 ### Cover `@command` and visit `Command`
@@ -123,11 +123,12 @@ Report each sentence that names a file, method, or class with a Domain.md word.
 
 IF one line shows the mistake by itself, such as a metaphor or a hedge:
 ### Run the rule on Jev with `model: jev`
-Jev, TypeSafe's decision model, judges each line in under a second and flags each line below `threshold`, 0.7 by default. It reads only the rule and the file, so a check that needs the project stays on Claude Code. It takes no `agent`, `effort`, or tool keys, and needs a key from `cmod secret store rulebook jev`.
+Jev, TypeSafe's decision model, judges each line in under a second and flags each line below `threshold`, 0.7 by default. It reads only the rule and the file. It takes no `agent`, `effort`, or tool keys, and needs a key from `cmod secret store rulebook jev`.
 
 ## 7. Set when it runs
 
-- `severity` is `error`, the default, which refuses the write, tool call, or commit, or `warn`, which lands with a note. An error on a line the write did not write is a warning, unless the config sets `existingErrors: 'error'`.
+- `severity` is `error`, the default, which refuses the write, tool call, or commit, `warn`, which lands with a note, or `ask`, which asks the person first, and refuses where nobody can answer. An error on a line the write did not write is a warning, unless the config sets `existingErrors: 'error'`.
+- `metadata` is a map rulebook passes to other mods and never reads, such as `{ mode: 'propose' }`.
 - `runs` is `always`, the default, or `manual`, which never runs on an Agent's write or tool call, only in `rulebook check`: commits, full runs, `/rulebook`, and CI.
 - `timeout` is an agentic rule's milliseconds, 30 000 unless the config sets it. A file's agentic rules share the longest one, and a rule still running then stops with a note.
 

@@ -6,14 +6,16 @@
     "test": "bun test"
   },
   "cmod": {
-    "program": "rulebook"
+    "program": "rulebook",
+    "approve": true
   },
   "files": [
     "hooks",
     "src",
-    "skills"
+    "skills",
+    "types"
   ],
   "dependencies": {
-    "@cmodjs/core": "^6.0.2"
+    "@cmodjs/core": "^8.0.0"
   }
 }

@@ -125,7 +125,8 @@ export async function checkFile(settings: Settings, rules: readonly LoadedRule[]
 
   const lints = await linting
   const failures = [...runs.flatMap((run) => ('failure' in run ? [{ rule: run.rule.id, reason: run.failure }] : [])), ...lints.flatMap((lint) => lint.failures)]
-  const found = [...runs.flatMap((run) => ('found' in run ? run.found.map(({ line, message, isWhole }) => ({ line, message: message ?? run.rule.message ?? run.rule.description, rule: run.rule.id, level: run.rule.level === 'off' ? 'error' as const : run.rule.level, ...(isWhole === true ? { isWhole } : {}) })) : [])), ...lints.flatMap((lint) => lint.flags)]
+  const levelOfRule = ({ level }: LoadedRule): Level => (level === 'off' || (level === 'ask' && options.call === undefined) ? 'error' : level)
+  const found = [...runs.flatMap((run) => ('found' in run ? run.found.map(({ line, message, isWhole }) => ({ line, message: message ?? run.rule.message ?? run.rule.description, rule: run.rule.id, level: levelOfRule(run.rule), ...(isWhole === true ? { isWhole } : {}) })) : [])), ...lints.flatMap((lint) => lint.flags)]
   const unscoped = new Set(rules.filter((rule) => !inScope(rule, options)).map(({ id }) => id))
   const flagged: readonly Flag[] = probe ? probeFindings(found, pins.filter(({ rule }) => !unscoped.has(rule)), written.findLastIndex((line) => line.trim() !== '') + 1) :[...found, ...pins.map((pin) => ({ rule: 'rulebook/pins', line: pin.line, level: 'error' as const, message: 'A rulebook-expect pin works only in a probe file. Remove it.' }))]
 
@@ -136,7 +137,7 @@ export async function checkFile(settings: Settings, rules: readonly LoadedRule[]
       .map(({ isWhole, ...finding }) => {
         const quote = written[finding.line - 1] ?? ''
         const isExisting = wrote !== undefined && isWhole !== true && !wrote.has(finding.line)
-        return { ...finding, quote, isExisting, level: isExisting && finding.level === 'error' ? levelOf(settings.existingErrors) : finding.level }
+        return { ...finding, quote, isExisting, level: isExisting && finding.level !== 'warning' ? levelOf(settings.existingErrors) : finding.level }
       })
       .sort((a, b) => a.line - b.line || a.rule.localeCompare(b.rule)),
   }
@@ -264,6 +265,7 @@ export function importsRule(settings: Settings): StaticRule {
     level: 'off',
     runs: 'always',
     files: undefined,
+    metadata: {},
     check: (_, doc) => (doc === undefined ? [] : doc.imports.flatMap(({ path, line }) => {
       const target = importedFile(doc.file, path)
       if (target === undefined || statSync(target, { throwIfNoEntry: false })?.isFile() === true) return []
@@ -293,6 +295,7 @@ export const noSuppressionsRule: StaticRule = {
   level: 'off',
   runs: 'always',
   files: [`**/*.{${[...new Set(Object.values(LINTERS).flatMap(({ extensions }) => extensions.map((extension) => extension.slice(1))))].join(',')}}`, '**/!(*.*)'],
+  metadata: {},
   check: ({ lines }) => lines.flatMap((text, index) => {
     const linter = Object.entries(SUPPRESSIONS).find(([, suppression]) => suppression.test(text))?.[0]
     return linter === undefined ? [] : [{ line: index + 1, message: `This comment suppresses ${linter}. Fix the code ${linter} flags, and remove the comment.` }]

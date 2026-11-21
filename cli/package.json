@@ -1,6 +1,6 @@
 {
   "name": "@cmodjs/rulebook",
-  "version": "0.9.0",
+  "version": "0.10.0",
   "description": "Checks every file, reply, tool call, and commit against your rules and linters before it lands.",
   "license": "MIT",
   "type": "module",
@@ -47,7 +47,7 @@
     "@ast-grep/lang-yaml": "0.0.6",
     "@ast-grep/napi": "0.51.1",
     "@biomejs/biome": "2.6.4",
-    "@cmodjs/core": "6.2.0",
+    "@cmodjs/core": "8.0.0",
     "diff": "9.0.0",
     "marked": "15.0.0",
     "oxlint": "1.86.0",

@@ -1,7 +1,8 @@
 import { expect, test } from 'bun:test'
-import { Prompt, Reply, ToolCall } from '../node_modules/@cmodjs/core/mod.js'
+import { defineMod, Prompt, providers, Reply, sessions, ToolCall } from '../node_modules/@cmodjs/core/mod.js'
 import { testMod } from '../node_modules/@cmodjs/core/testing.js'
 import { rulebook } from '../src/mod.js'
+import type { RulebookCheck, RuleSeverity } from '../types/index.js'
 
 type Tested = ReturnType<typeof testMod>
 type Spawn = NonNullable<Tested['fakes']['process']['spawn']>
@@ -16,8 +17,8 @@ const LISTED = {
   'mcp__inbox__*': { source: String.raw`(?!@)^(?:^(?:mcp__inbox__[^/]*?)$)$`, flags: '' },
   '**/*.md': { source: String.raw`(?!@)^(?:(?:(?!(?:^|\/)\.{1,2}(?:\/|$))(?:(?:(?!(?:^|\/)\.{1,2}(?:\/|$)).)*?)\/)?(?!\.{1,2}(?:\/|$))(?=.)[^/]*?\.md)$`, flags: '' },
 }
-const EM_DASHES = { id: 'global/block-em-dashes', description: "Don't write em dashes.", isEverywhere: true, files: [LISTED['**'], LISTED['@reply']] }
-const TRUE_FACTS = { id: 'global/require-true-facts', description: "Don't state a Fact the code contradicts.", isEverywhere: false, files: [LISTED['**/Claude.md']] }
+const EM_DASHES = { id: 'global/block-em-dashes', description: "Don't write em dashes.", severity: 'error' as RuleSeverity, metadata: {}, isEverywhere: true, files: [LISTED['**'], LISTED['@reply']] }
+const TRUE_FACTS = { id: 'global/require-true-facts', description: "Don't state a Fact the code contradicts.", severity: 'error' as RuleSeverity, metadata: { mode: 'propose' }, isEverywhere: false, files: [LISTED['**/Claude.md']] }
 const MESSAGES = [{ name: '@reply', tools: [] }, { name: '@inbox', tools: [LISTED['mcp__inbox__*']] }]
 const LISTING = { root: '/work', sources: ['/home/.config/rulebook/rulebook.config.ts', '/work/rulebook.config.ts', '/home/.config/rulebook/rules'], folders: [{ path: '', rules: [EM_DASHES, TRUE_FACTS] }], messages: MESSAGES, failures: [] as string[] }
 const FILES = { '/work/Claude.md': 'A fact.\n', '/work/packages/claude/Claude.md': 'A fact.\n', '/work/notes.md': 'A note.\n' }
@@ -52,6 +53,22 @@ function served(tested: Tested, answers: () => Answers): void {
 function serving(answers: Answers, options: Parameters<typeof testMod>[1] = {}): Tested {
   const tested = testMod(rulebook, options)
   served(tested, () => answers)
+  return tested
+}
+
+async function answering(answers: Answers, answer: (check: RulebookCheck) => unknown): Promise<Tested> {
+  const tested = testMod(defineMod({
+    ...rulebook,
+    async setup(mod) {
+      await rulebook.setup(mod)
+      sessions.current.onSessionStart(async () => {
+        for (const rules of await providers('rulebook/Rules')) rules.beforeCheck(answer, { timeoutMs: 1000 })
+      })
+    },
+  }), { projectRoot: '/work' })
+  served(tested, () => answers)
+  await tested.startSession({ source: 'startup' })
+  await tested.settle()
   return tested
 }
 
@@ -108,7 +125,7 @@ test('a rule for some files reaches the agent with its first read of a file it c
 })
 
 test("a rule that packages/a/rulebook.config.ts turns on reaches the agent with its read of packages/a/x.md, and never with packages/b/x.md, which the root folder's rules cover", async () => {
-  const hedging = { id: 'global/block-hedging', description: 'State a claim only once you checked it.', isEverywhere: false, files: [LISTED['**/*.md']] }
+  const hedging = { id: 'global/block-hedging', description: 'State a claim only once you checked it.', severity: 'warn' as RuleSeverity, metadata: {}, isEverywhere: false, files: [LISTED['**/*.md']] }
   const listing = { ...LISTING, folders: [{ path: '', rules: [EM_DASHES, TRUE_FACTS] }, { path: 'packages/a', rules: [EM_DASHES, TRUE_FACTS, hedging] }] }
   const tested = serving({ rules: listing }, { projectRoot: '/work', files: { '/work/packages/a/x.md': 'A note.\n', '/work/packages/b/x.md': 'A note.\n' } })
   await tested.raise.beforeSessionStart({ source: 'startup' })
@@ -138,7 +155,7 @@ test('the rules load again at the next check after a rulebook config or rule fil
   tested.fakes.fs.stat = async () => ({ kind: 'file', isLink: false, mtimeMs: modifiedAt, size: 1 })
   expect(await tested.raise.beforeSessionStart({ source: 'startup' })).toEqual({ note: "- Don't write em dashes." })
   await Bun.sleep(10)
-  listing = { ...LISTING, folders: [{ path: '', rules: [EM_DASHES, TRUE_FACTS, { id: 'global/block-hedging', description: 'State a claim only once you checked it.', isEverywhere: true, files: [LISTED['**']] }] }] }
+  listing = { ...LISTING, folders: [{ path: '', rules: [EM_DASHES, TRUE_FACTS, { id: 'global/block-hedging', description: 'State a claim only once you checked it.', severity: 'warn' as RuleSeverity, metadata: {}, isEverywhere: true, files: [LISTED['**']] }] }] }
   modifiedAt = 2
   for (const tick of ticks) tick()
   await Bun.sleep(10)
@@ -152,7 +169,47 @@ test('an error from rulebook refuses the edit with its text', async () => {
   const tested = serving({ rules: LISTING, edit: { refuse: refusal, failures: [], findings: [SPLIT] } }, { projectRoot: '/work' })
   const input = { file_path: '/work/Claude.md', old_string: 'a', new_string: `Run it ${EM_DASH} now.` }
   expect(await tested.raise.beforeToolCall({ name: 'Edit', input })).toEqual({ refuse: refusal })
-  expect(asked(tested)).toEqual([{ url: 'http://localhost/edit', input: { tool_name: 'Edit', tool_input: input, cwd: '/work', session_id: expect.any(String) }, environment: ENVIRONMENT, socketPath: SOCKET }])
+  expect(asked(tested)).toEqual([{ url: 'http://localhost/edit', input: { tool_name: 'Edit', tool_input: input, cwd: '/work', session_id: expect.any(String), rules: {} }, environment: ENVIRONMENT, socketPath: SOCKET }])
+})
+
+test("a mod's beforeCheck answer turns a rule off for the one agent's edit it answers, and hears the agent and the rules of the file's folder", async () => {
+  const checks: RulebookCheck[] = []
+  const tested = await answering({ rules: LISTING, edit: { failures: [], findings: [] } }, (check) => (checks.push(check), check.task === undefined ? { rules: { 'global/require-true-facts': 'off' } } : undefined))
+  await tested.add({ type: Prompt, text: 'Fix the docs' })
+  await tested.raise.beforeToolCall({ name: 'Write', input: { file_path: '/work/Claude.md', content: 'x' } })
+  const task = await tested.startTask({ title: 'Fix the docs', agentType: 'Explore' })
+  await tested.raise.beforeToolCall({ name: 'Write', input: { file_path: '/work/Claude.md', content: 'x' } }, { task })
+  const rules = [EM_DASHES, TRUE_FACTS].map(({ id, description, severity, metadata }) => ({ id, description, severity, metadata }))
+  expect(checks).toEqual([{ path: '/work/Claude.md', session: 'test-session', tool: 'Write', rules }, { path: '/work/Claude.md', session: 'test-session', task, tool: 'Write', rules }])
+  expect(asked(tested, 'edit').map(({ input }) => input.rules)).toEqual([{ 'global/require-true-facts': 'off' }, {}])
+})
+
+test('rulebook/Rules lists the rules on in a folder, with their severity and metadata', async () => {
+  let listed: unknown
+  const tested = testMod(defineMod({
+    ...rulebook,
+    async setup(mod) {
+      await rulebook.setup(mod)
+      sessions.current.onSessionStart(async () => {
+        const [rules] = await providers('rulebook/Rules')
+        listed = await rules?.rules('/work/docs')
+      })
+    },
+  }), { projectRoot: '/work' })
+  served(tested, () => ({ rules: LISTING }))
+  await tested.startSession({ source: 'startup' })
+  await tested.settle()
+  expect(listed).toEqual([EM_DASHES, TRUE_FACTS].map(({ id, description, severity, metadata }) => ({ id, description, severity, metadata })))
+})
+
+test('an ask from rulebook asks the person through Claude Code’s permission check, only for the call it was found on', async () => {
+  const ask = 'Inbox needs your approval:\n\n  1  ask  global/ask-before-proposing  Ask before filing a proposal.'
+  const tested = serving({ rules: LISTING, text: { ask, failures: [], findings: [] } }, { projectRoot: '/work' })
+  const input = { title: 'Ship it.' }
+  expect(await tested.raise.beforeToolCall({ name: 'mcp__inbox__propose', input, callId: 'toolu_1' })).toBeUndefined()
+  expect(await tested.fire('tool.check', { tool: 'mcp__inbox__propose', input, tool_use_id: 'toolu_2' }, { decision: 'allow' })).toMatchObject({ decision: 'allow' })
+  expect(await tested.fire('tool.check', { tool: 'mcp__inbox__propose', input, tool_use_id: 'toolu_1' }, { decision: 'allow' })).toMatchObject({ decision: 'ask', reason: ask })
+  expect(await tested.fire('tool.check', { tool: 'mcp__inbox__propose', input, tool_use_id: 'toolu_1' }, { decision: 'allow' })).toMatchObject({ decision: 'allow' })
 })
 
 test('warnings from rulebook reach the agent beside the edit', async () => {
@@ -195,7 +252,7 @@ test("a call to a tool a message's tools match is refused before it runs when it
   expect(await tested.raise.beforeToolCall({ name: 'mcp__inbox__propose', input: proposal })).toEqual({ refuse: `Inbox refused. Fix every error, then send it again.\n\n  1  error  global/block-em-dashes  Split the sentence at the em dash.\n     > Ship it ${EM_DASH} today.` })
   expect(await tested.raise.beforeToolCall({ name: 'mcp__notes__add', input: { text: `Ship it ${EM_DASH} today.` } })).toBeUndefined()
   expect(await tested.raise.beforeToolCall({ name: 'Read', input: { file_path: '/work/Claude.md' } })).toBeUndefined()
-  expect(asked(tested).map(({ url, input }) => ({ url, input }))).toEqual([{ url: 'http://localhost/text', input: { name: '@inbox', input: proposal, cwd: '/work', tool_name: 'mcp__inbox__propose', session_id: 'test-session' } }])
+  expect(asked(tested).map(({ url, input }) => ({ url, input }))).toEqual([{ url: 'http://localhost/text', input: { name: '@inbox', input: proposal, cwd: '/work', tool_name: 'mcp__inbox__propose', session_id: 'test-session', rules: {} } }])
 })
 
 test('a reply that breaks a rule is refused once with the refusal, and the turn ends after its rewrite', async () => {
@@ -205,7 +262,7 @@ test('a reply that breaks a rule is refused once with the refusal, and the turn 
   expect(await tested.raise.beforeTurnEnd()).toEqual({ refuse: `Reply refused. Fix every error, then write the whole reply again.\n\n  1  error  global/block-em-dashes  Split the sentence at the em dash.\n     > Shipped ${EM_DASH} it works.` })
   await tested.add({ type: Reply, text: 'Shipped. It works.' })
   expect(await tested.raise.beforeTurnEnd()).toBeUndefined()
-  expect(asked(tested).map(({ input }) => input)).toEqual([{ name: '@reply', text: `Shipped ${EM_DASH} it works.`, cwd: '/work' }, { name: '@reply', text: 'Shipped. It works.', cwd: '/work' }])
+  expect(asked(tested).map(({ input }) => input)).toEqual([{ name: '@reply', text: `Shipped ${EM_DASH} it works.`, cwd: '/work', rules: {} }, { name: '@reply', text: 'Shipped. It works.', cwd: '/work', rules: {} }])
   expect(tested.shown.toasts.filter(({ type }) => type === 'warning')).toEqual([])
 })
 
@@ -231,7 +288,7 @@ test('/rulebook lists every finding in the Sidebar', async () => {
   tested.fakes.process.run = async () => printed(JSON.stringify({ reports, failures: [failure] }), 1)
   await tested.type('/rulebook')
   await Bun.sleep(10)
-  expect(await tested.shown.page.lines()).toEqual(['1 error, 0 warnings in 1 file', '', failure, '', 'Claude.md', '  3  error  global/block-em-dashes  Split the sentence at the em dash.'])
+  expect(await tested.shown.view.lines()).toEqual(['1 error, 0 warnings in 1 file', '', failure, '', 'Claude.md', '  3  error  global/block-em-dashes  Split the sentence at the em dash.'])
 })
 
 test('a rule that failed to load shows a warning toast when a rules listing names it, and a listing that the rulebook server already gave it to names it no more', async () => {

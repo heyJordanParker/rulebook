@@ -445,9 +445,9 @@ test("a project's rule that fails to load leaves the global rules checking that 
   expect(edit('Write', { file_path: join(project, 'Claude.md'), content: `Run it ${dash} now.\n` }).refuse).toBe(`Edit to Claude.md refused. Fix every error, then edit again.\n\n  1  error  global/block-em-dashes  Split the sentence at the em dash.\n     > Run it ${dash} now.`)
 })
 
-test('rulebook inspect rules lists, for the project folder, each rule that is on with its id, description, whether it covers every file or a message, and a regular expression for each path it covers, each registered message with a regular expression for each tool that sends it, and the files and folders the rules come from', () => {
-  write(join(project, 'rulebook.config.ts'), `export default { plugins: { app: './rules' }, messages: { inbox: { tools: ['mcp__inbox__*'] } }, rules: { 'global/block-hedging': 'off' } }\n`)
-  write(join(project, 'rules', 'block-npm-run.md'), '---\ndescription: Run just, never npm run.\nfiles: ["**", "@reply"]\n---\n\nReport each npm run.\n')
+test('rulebook inspect rules lists, for the project folder, each rule that is on with its id, description, severity, metadata, whether it covers every file or a message, and a regular expression for each path it covers, each registered message with a regular expression for each tool that sends it, and the files and folders the rules come from', () => {
+  write(join(project, 'rulebook.config.ts'), `export default { plugins: { app: './rules' }, messages: { inbox: { tools: ['mcp__inbox__*'] } }, rules: { 'global/block-hedging': 'off', 'global/block-em-dashes': 'warn' } }\n`)
+  write(join(project, 'rules', 'block-npm-run.md'), '---\ndescription: Run just, never npm run.\nfiles: ["**", "@reply"]\nseverity: ask\nmetadata:\n  mode: build\n---\n\nReport each npm run.\n')
   const run = rulebook(['inspect', 'rules'])
   const listed = { source: expect.any(String), flags: '' }
   expect(run.stderr).toBe('')
@@ -457,9 +457,9 @@ test('rulebook inspect rules lists, for the project folder, each rule that is on
     folders: [{
       path: '',
       rules: [
-        { id: 'rulebook/imports', description: 'Import only files that exist.', isEverywhere: false, files: Array(5).fill(listed) },
-        { id: 'global/block-em-dashes', description: "Don't write em dashes.", isEverywhere: false, files: Array(5).fill(listed) },
-        { id: 'app/block-npm-run', description: 'Run just, never npm run.', isEverywhere: true, files: [listed, listed] },
+        { id: 'rulebook/imports', description: 'Import only files that exist.', severity: 'error', metadata: {}, isEverywhere: false, files: Array(5).fill(listed) },
+        { id: 'global/block-em-dashes', description: "Don't write em dashes.", severity: 'warn', metadata: {}, isEverywhere: false, files: Array(5).fill(listed) },
+        { id: 'app/block-npm-run', description: 'Run just, never npm run.', severity: 'ask', metadata: { mode: 'build' }, isEverywhere: true, files: [listed, listed] },
       ],
     }],
     messages: [
@@ -1117,7 +1117,41 @@ test("existingErrors: 'error' refuses a commit for an error a staged file alread
 
 test('a script rule with a key rulebook does not read fails to load and names the key', () => {
   const rule = write(join(home, 'config', 'rulebook', 'rules', 'block-x.ts'), `export default { description: "Don't write x.", severty: 'warn', create: () => ({}) }\n`)
-  expect(rulebook(['check', '--skip=agentic'])).toEqual({ code: 1, stdout: `${rule}: rulebook does not read the key "severty". It reads description, message, files, severity, runs, create. The rule global/block-x checks nothing until it loads.\n\n0 errors, 0 warnings in 0 files\n`, stderr: '' })
+  expect(rulebook(['check', '--skip=agentic'])).toEqual({ code: 1, stdout: `${rule}: rulebook does not read the key "severty". It reads description, message, files, severity, runs, metadata, create. The rule global/block-x checks nothing until it loads.\n\n0 errors, 0 warnings in 0 files\n`, stderr: '' })
+})
+
+test('a rule in each of the three kinds carries metadata that rulebook lists and never reads, and metadata that is not a map fails the rule', () => {
+  write(join(project, 'rulebook.config.ts'), "export default { plugins: { app: './rules' } }\n")
+  write(join(project, 'rules', 'block-x.ts'), "export default { description: \"Don't write x.\", files: ['**/*.md'], metadata: { mode: 'propose', owner: { team: 'docs' } }, create: () => ({}) }\n")
+  write(join(project, 'rules', 'block-y.yml'), 'description: Don\'t log.\nfiles: ["**/*.ts"]\nlanguage: typescript\nrule:\n  pattern: console.log($$$A)\nmetadata:\n  mode: build\n')
+  const broken = write(join(project, 'rules', 'block-z.ts'), "export default { description: \"Don't write z.\", files: ['**/*.md'], metadata: 'propose', create: () => ({}) }\n")
+  const { folders, failures } = JSON.parse(rulebook(['inspect', 'rules']).stdout) as { folders: { rules: { id: string; metadata: unknown }[] }[]; failures: string[] }
+  expect(folders[0]?.rules.filter(({ id }) => id.startsWith('app/')).map(({ id, metadata }) => ({ id, metadata }))).toEqual([{ id: 'app/block-x', metadata: { mode: 'propose', owner: { team: 'docs' } } }, { id: 'app/block-y', metadata: { mode: 'build' } }])
+  expect(failures).toEqual([`${broken}: metadata is a map of keys, such as { mode: "propose" }, that rulebook passes on and never reads. The rule app/block-z checks nothing until it loads.`])
+})
+
+test("an ask rule asks the person before an agent's call, and counts as an error where nobody can answer: a commit, rulebook check, or a reply", () => {
+  write(join(project, 'rulebook.config.ts'), "export default { plugins: { app: './rules' } }\n")
+  write(join(project, 'rules', 'ask-before-pushing.ts'), "export default { description: 'Ask before pushing.', files: ['@command', '@reply', 'docs/**'], severity: 'ask', create: (context) => { context.sourceCode.lines.forEach((text, index) => { if (text.includes('git push')) context.report({ loc: { start: { line: index + 1, column: 0 } } }) }); return {} } }\n")
+  const ask = 'Command needs your approval:\n\n  1  ask  app/ask-before-pushing  Ask before pushing.\n     > git push'
+  expect(claudeHook({ tool_name: 'Bash', tool_input: { command: 'git push' } })).toEqual({ code: 0, stdout: `${JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'ask', permissionDecisionReason: ask } })}\n`, stderr: '' })
+  expect(claudeHook({ tool_name: 'Bash', tool_input: { command: 'git status' } })).toEqual({ code: 0, stdout: '', stderr: '' })
+  expect(edit('Write', { file_path: join(project, 'docs', 'deploy.md'), content: 'Run git push.\n' })).toMatchObject({ ask: 'Edit to docs/deploy.md needs your approval:\n\n  1  ask  app/ask-before-pushing  Ask before pushing.\n     > Run git push.' })
+  expect(rulebook(['check', '--stdin-file-path=@reply'], 'Then git push.\n')).toEqual({ code: 1, stdout: 'Reply refused. Fix every error, then write the whole reply again.\n\n  1  error  app/ask-before-pushing  Ask before pushing.\n     > Then git push.\n', stderr: '' })
+  write(join(project, 'docs', 'deploy.md'), 'Run git push.\n')
+  expect(rulebook(['check', 'docs/deploy.md'])).toMatchObject({ code: 1, stdout: expect.stringContaining('1  error  app/ask-before-pushing') })
+})
+
+test("the rules a question names override every config for that one check, as a later config would, and leave the next check alone", () => {
+  const dash = String.fromCharCode(0x2014)
+  const ask = (rules: Record<string, string>) => JSON.parse(rulebook(['edit'], JSON.stringify({ tool_name: 'Write', tool_input: { file_path: join(project, 'Claude.md'), content: `Run it ${dash} probably.\n` }, cwd: project, rules }), undefined, project, {}, ASK).stdout) as { refuse?: string; ask?: string; note?: string; failures: string[]; findings: unknown[] }
+  expect(ask({ 'global/block-em-dashes': 'off', 'global/block-hedging': 'off' })).toEqual(NOTHING)
+  expect(ask({ 'global/block-em-dashes': 'warn' }).note).toContain('1  warning  global/block-em-dashes')
+  expect(ask({ 'global/block-em-dashes': 'off', 'global/block-hedging': 'ask' }).ask).toContain('1  ask  global/block-hedging')
+  expect(ask({ 'app/not-a-rule': 'off' }).refuse).toContain('1  error  global/block-em-dashes')
+  expect(ask({}).refuse).toContain('1  error  global/block-em-dashes')
+  const bad = rulebook(['edit'], JSON.stringify({ tool_name: 'Write', tool_input: { file_path: join(project, 'Claude.md'), content: 'x\n' }, cwd: project, rules: { 'global/block-em-dashes': 'never' } }), undefined, project, {}, ASK)
+  expect(bad.stderr).toContain(`"rules" maps each rule name to "error", "warn", "ask", or "off", as a config's rules do.`)
 })
 
 test('a rule whose visitor names no node kind of any language fails to run and names what a visitor names', () => {

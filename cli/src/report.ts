@@ -2,6 +2,7 @@ import type { FileReport, Reported } from './check.ts'
 
 export type EditAnswer = {
   readonly refuse?: string
+  readonly ask?: string
   readonly note?: string
   readonly failures: readonly string[]
   readonly findings: readonly Reported[]
@@ -24,17 +25,18 @@ export function editAnswer(report: FileReport | undefined): EditAnswer {
   if (report === undefined) return { failures: [], findings: [] }
   const { findings } = report
   const written = findings.filter(({ isExisting }) => !isExisting)
-  const errors = written.filter(({ level }) => level === 'error')
+  const errors = written.filter(({ level }) => level !== 'warning')
   const warnings = written.filter(({ level }) => level === 'warning')
   const failures = failureLines(report)
   const isRefused = findings.some(({ level }) => level === 'error')
   const blocks = [
     ...(errors.length === 0 ? [] : [findingLines(errors)]),
-    ...(warnings.length === 0 ? [] : [isRefused ? `Warnings:\n${findingLines(warnings)}` : findingLines(warnings)]),
+    ...(warnings.length === 0 ? [] : [errors.length > 0 ? `Warnings:\n${findingLines(warnings)}` : findingLines(warnings)]),
     ...existingLine(report, written.length > 0),
     ...(failures.length === 0 ? [] : [failures.join('\n')]),
   ]
   if (isRefused) return { refuse: [refusal(report.path), ...blocks].join('\n\n'), failures, findings }
+  if (findings.some(({ level }) => level === 'ask')) return { ask: [`${subject(report.path)} needs your approval:`, ...blocks].join('\n\n'), failures, findings }
   if (findings.length > 0) return { note: [`${subject(report.path)} allowed with warnings:`, ...blocks].join('\n\n'), failures, findings }
   if (failures.length > 0) return { note: [`${subject(report.path)} allowed, but not every rule checked it:`, ...blocks].join('\n\n'), failures, findings }
   return { failures, findings }
