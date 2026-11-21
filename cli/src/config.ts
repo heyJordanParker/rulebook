@@ -27,7 +27,7 @@ export type Settings = {
   readonly configs: readonly LoadedConfig[]
   readonly files: readonly string[]
   readonly timeout: number
-  readonly existingErrors: Severity
+  readonly existingErrors: 'error' | 'warn'
   readonly rules: Readonly<Record<string, RuleSettings>>
   readonly linters: readonly LinterName[]
   readonly programs: Readonly<Partial<Record<LinterName, readonly string[]>>>
@@ -184,7 +184,7 @@ function validConfig(file: string, value: unknown): Config {
   for (const name of Object.keys(value.plugins ?? {})) if (!/^[a-z][a-z0-9-]*$/.test(name)) fail(`"${name}" is not a plugin name: use lowercase letters, digits, and "-".`)
   for (const key of ['files', 'probes'] as const) if (value[key] !== undefined && !isStrings(value[key])) fail(`${key} is a list of globs.`)
   if (value.timeout !== undefined && !isTimeout(value.timeout)) fail('timeout is a whole number of milliseconds above 0.')
-  if (value.existingErrors !== undefined && !isSeverity(value.existingErrors)) fail('existingErrors is "error" or "warn".')
+  if (value.existingErrors !== undefined && value.existingErrors !== 'error' && value.existingErrors !== 'warn') fail('existingErrors is "error" or "warn".')
   if (value.rules !== undefined && !isRecord(value.rules)) fail('rules maps each rule name, such as "global/block-em-dashes", to a severity or to settings.')
   for (const [id, override] of Object.entries(isRecord(value.rules) ? value.rules : {})) validOverride(file, id, override)
   if (value.linters !== undefined && !isStrings(value.linters)) fail(`linters is a list of the linters to run, such as ['oxlint', 'biome']. The linters are ${Object.keys(LINTERS).join(', ')}.`)
@@ -215,9 +215,9 @@ function validOverride(file: string, id: string, override: unknown): void {
     throw new Error(`${file}: rules["${id}"] ${problem}`)
   }
   if (override === 'off' || isSeverity(override)) return
-  if (!isRecord(override)) return fail('is "error", "warn", "off", or an object of rule settings.')
+  if (!isRecord(override)) return fail('is "error", "warn", "ask", "off", or an object of rule settings.')
   for (const key of Object.keys(override)) if (!RULE_KEYS.has(key)) fail(`sets "${key}", which no rule has. A rule's settings are ${[...RULE_KEYS].join(', ')}.`)
-  if (override.severity !== undefined && override.severity !== 'off' && !isSeverity(override.severity)) fail('severity is "error", "warn", or "off".')
+  if (override.severity !== undefined && override.severity !== 'off' && !isSeverity(override.severity)) fail('severity is "error", "warn", "ask", or "off".')
   if (override.runs !== undefined && !isRuns(override.runs)) fail('runs is "always" or "manual".')
   if (override.files !== undefined && !isStrings(override.files)) fail('files is a list of globs.')
   if (override.timeout !== undefined && !isTimeout(override.timeout)) fail('timeout is a whole number of milliseconds above 0.')
@@ -243,7 +243,7 @@ export function isStrings(value: unknown): value is string[] {
 }
 
 export function isSeverity(value: unknown): value is Severity {
-  return value === 'error' || value === 'warn'
+  return value === 'error' || value === 'warn' || value === 'ask'
 }
 
 export function isRuns(value: unknown): value is Runs {

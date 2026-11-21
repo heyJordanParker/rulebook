@@ -22,7 +22,7 @@ Usage:
   rulebook check --reporter=json           Print the results as JSON.
   rulebook check --skip=<name>             Skip a rule, every rule of a plugin or folder, a linter, or every agentic rule, such as --skip=agentic. Repeat it to skip more.
   rulebook inspect rules                   Print, for each folder that holds a rulebook.config.ts, each rule that is on there, with its description and the files it covers, and each message with the tools that send it, as JSON.
-  rulebook claude-hook                     Check the tool call a Claude Code or codex PreToolUse hook sends on stdin: a file write, a shell command as @command, or a call a message's tools match. An error refuses it.
+  rulebook claude-hook                     Check the tool call a Claude Code or codex PreToolUse hook sends on stdin: a file write, a shell command as @command, or a call a message's tools match. An error refuses it, and an ask asks the person first.
   rulebook --version                       Print the version.
 
 An agent's write runs only the rules that run always. Every rulebook check runs the manual rules too, whatever starts it: a person, a git hook, or CI.
@@ -72,6 +72,7 @@ async function claudeHook(input: unknown): Promise<number> {
     await Bun.write(Bun.stderr, `${answer.refuse}\n`)
     return 2
   }
+  if (answer?.ask !== undefined) return print(JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'ask', permissionDecisionReason: answer.ask } }))
   return answer?.note === undefined ? 0 : print(JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', additionalContext: answer.note } }))
 }
 

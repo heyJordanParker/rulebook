@@ -1,12 +1,12 @@
 import { existsSync, realpathSync } from 'node:fs'
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path'
-import type { Call } from './api.ts'
+import type { Call, Severity } from './api.ts'
 import { checkFile } from './check.ts'
 import { isClaudeMd } from './claude-md.ts'
 import { existingFolder, isRecord, loadSettings, projectRoot } from './config.ts'
 import { loadImportedFiles, watchImportSource } from './files.ts'
 import { editAnswer, type EditAnswer } from './report.ts'
-import { loadRules } from './rules.ts'
+import { loadRules, withSeverities } from './rules.ts'
 
 type Replacement = { readonly old_string: string; readonly new_string: string; readonly replace_all?: boolean }
 
@@ -30,7 +30,7 @@ export function fileRoot(file: string, cwd: string): string {
   return projectRoot(folder, file.startsWith(`${realpathSync(cwd)}/`) ? cwd : folder)
 }
 
-export async function checkEdit(call: Call, root: string): Promise<EditAnswer> {
+export async function checkEdit(call: Call, root: string, severities: Readonly<Record<string, Severity | 'off'>>): Promise<EditAnswer> {
   const path = editedPath(call)
   if (path === undefined) return editAnswer(undefined)
   const file = realFile(path, call.cwd)
@@ -40,7 +40,7 @@ export async function checkEdit(call: Call, root: string): Promise<EditAnswer> {
   const settings = await loadSettings(dirname(file), root)
   const { rules } = await loadRules(settings)
   const isWhole = next === ''
-  const report = await checkFile(settings, rules, file, next, { scope: 'edit', previous: isWhole ? '' : previous,imported: () => loadImportedFiles(root), call })
+  const report = await checkFile(settings, withSeverities(rules, severities), file, next, { scope: 'edit', previous: isWhole ? '' : previous, imported: () => loadImportedFiles(root), call })
   return editAnswer(report)
 }
 

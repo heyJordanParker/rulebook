@@ -1,8 +1,8 @@
-import type { PageInit } from '../../node_modules/@cmodjs/core/mod.js'
+import type { ViewInit } from '../../node_modules/@cmodjs/core/mod.js'
 import { Box, Text } from '../../node_modules/@cmodjs/core/ui/elements.js'
 import type { RulebookState, Report } from '../state.js'
 
-export const resultsPage: PageInit<RulebookState> = {
+export const resultsView: ViewInit<RulebookState> = {
   id: 'results',
   title: 'rulebook',
   render: (mod) => {

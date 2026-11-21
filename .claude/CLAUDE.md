@@ -18,9 +18,12 @@ You write a rule once, and no Agent's work breaks it again. Every decision passe
 - `Bun.spawn` and `Bun.which` read the process's environment, not a worker's, so every spawn passes `process.env`. Bun 1.4.4 closes a quiet request after 10 s, so `serve.ts` casts its options to pass `idleTimeout: 0`.
 - `sessions.current.beforeTurnEnd` hears only the main agent and has no `answer` yet, so the mod checks the turn's last `Reply`, once per turn through `memory.refusedTurn`.
 - The mod lists the rules once per session and drops the listing when `fs.onChange` sees its `sources` change, because asking at the change made every session ask at once. It tests files and tool names in process, against regular expressions from `globRegExp`, because Claude Code's hooks loader runs only relative ES modules and picomatch is CommonJS. `memory.shown` holds what each Agent has read, reset at its start and compaction.
+- The mod provides `rulebook/Rules`, typed in `types/index.d.ts`, and asks `Check` before each `edit` and `text` question, which carries the answers as `rules` for `withSeverities`. `providers()` lists nothing during `setup`.
+- cmod's `beforeToolCall` cannot ask, and Claude Code runs `tool.check` after PreToolUse, so the mod keeps an `ask` answer by `callId` for `beforePermissionCheck`, which needs `registerPermissionCheck` and `"approve": true`.
 
 ## Checks
-- The command line copies Biome's: `rulebook check` and its flags, `rulebook inspect rules`, `rulebook claude-hook` named for its protocol, and a hidden `rulebook __run_server`. `claude-hook` runs in a fresh process with no server: an error exits 2 on stderr, and a warning is `additionalContext`.
+- The command line copies Biome's: `rulebook check` and its flags, `rulebook inspect rules`, `rulebook claude-hook` named for its protocol, and a hidden `rulebook __run_server`. `claude-hook` runs in a fresh process with no server: an error exits 2 on stderr, an ask is `permissionDecision: ask`, and a warning is `additionalContext`.
+- An `ask` finding asks only in a check with a `call`, and is an `error` in any other.
 - `cli/tests/ask.ts` answers a question in a fresh process, so the tests compare the server's answers with it.
 - `inScope` drops `runs: manual` rules only from an Agent's write or tool call, as pre-commit's `manual` stage does.
 - A Claude.md, or a file one imports, reaches a rule as Claude Code reads it, with a blank line for each hidden line. `linesWritten` diffs whole lines with `diffArrays` and counts every line written past 1,000 changed lines, because the diff's cost grows with length times change. A finding on any other line is existing.

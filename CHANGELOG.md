@@ -2,6 +2,17 @@
 
 What changed in each version of rulebook, for the people who use it. cmod publish releases the section for the version, and Settings shows it.
 
+## [0.10.0]
+
+### Added
+- A rule's `severity` can be `ask`. An `ask` finding on an agent's write or tool call makes Claude Code ask you before the call runs, with the finding as the reason, the way Claude Code's own `ask` permission does. A commit, `rulebook check`, and a reply have nobody to ask, so there `ask` refuses as an error does. `rulebook claude-hook` answers it with `permissionDecision: ask`.
+- Every kind of rule takes `metadata`, a map of any keys, such as `{ mode: 'propose' }`. rulebook never reads it and passes it to other mods with the rule. `rulebook inspect rules` lists each rule's `severity` and `metadata`.
+- The rulebook mod provides the cmod interface `rulebook/Rules` in each session. Another mod lists the rules of a folder with `rules(folder)`. Its `beforeCheck` listener answers rule settings before each check of an agent's write, tool call, or reply, and rulebook merges them over your configs for that one check. So a mod such as Modes can run only the rules of the mode each agent is in.
+
+### Changed
+- The mod bundles `@cmodjs/core` 8.0.0 and needs cmod 8.0.0 or later. `/rulebook` shows its results as a view beside the session.
+- The mod declares `"approve": true`, which asking you before a call needs. Anthropic's plugin directory does not list a mod that can approve a call.
+
 ## [0.9.0]
 
 ### Added
