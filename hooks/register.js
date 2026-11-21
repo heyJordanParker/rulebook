@@ -1,55 +1,8912 @@
-var oa=/^[A-Za-z][A-Za-z0-9_]{0,63}$/;var ia=/^(?:(?:ctrl|alt|shift|meta)\+){1,2}(?:[a-z0-9]|f(?:[1-9]|1[0-2])|tab|enter|escape|space|backspace|delete|up|down|left|right|home|end|pageup|pagedown|[`\-=[\]\\;',./])$/;var rr=["ctrl","alt","shift","meta"];function aa(e){if(typeof e!=="string"||!ia.test(e))return false;const t=e.split("+").slice(0,-1);return t.every((n,s)=>s===0||rr.indexOf(n)>rr.indexOf(t[s-1]))}function fn(e,t){const n=new Map;for(const[s,o]of Object.entries(t)){const r=`${e}: hotkeys.${s}`;if(!oa.test(s))throw new Error(`${r} is not a hotkey name. Use letters, digits, and _, starting with a letter.`);if(o.title.trim()==="")throw new Error(`${r} needs a title, the label Settings shows beside its combo.`);if(o.default===undefined)continue;if(!aa(o.default))throw new Error(`${r} defaults to "${String(o.default)}", which is not a combo. Give one or two of ctrl, alt, shift, meta in that order, then a key, such as "ctrl+q" or "ctrl+shift+k".`);const a=n.get(o.default);if(a!==undefined)throw new Error(`${r} defaults to ${o.default}, which hotkeys.${a} has too. Give each hotkey its own combo.`);n.set(o.default,s)}return t}function ct(e){if(e.length<=1)return e.join("");return`${e.slice(0,-1).join(", ")} and ${e.at(-1)}`}function ln(e){return e.split(`
-`).find((t)=>t.trim()!=="")?.trim()??""}function re(e){return e instanceof Error?e.message:String(e)}function Ve(e,t){const n=e===null?"was stopped by a signal":`exited ${e}`;const s=t.trim().replace(/[.!?]+$/,"");return s?`${n}: ${s}`:n}var ca=["network","run","files","config"];var cr=["conversation","prompt","model","tasks","tools","approve"];var or=[...ca,...cr];var da=/^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*$/;var ua=/^[A-Za-z0-9][A-Za-z0-9._+-]*$/;var fa=/^\d+\.\d+\.\d+$/;var la=/^[A-Za-z][A-Za-z0-9]*(\.[A-Za-z0-9_@-]+)*$/;var pa={network:'a host alone, such as "api.github.com", or a socket path, such as "/var/run/docker.sock"',run:`a program's command, such as "gh"`,files:'a path that starts with ~/ or /, such as "~/.zshrc"',config:`a Claude Code setting's name, or a key path inside one, such as "cleanupPeriodDays" or "env.ANTHROPIC_BASE_URL"`};var pn=/^[A-Za-z0-9][A-Za-z0-9._-]*$/;function yt(e){const t=e["XDG_DATA_HOME"];const n=e["HOME"];if(t)return`${t}/cmod`;if(!n)throw new Error("Neither XDG_DATA_HOME nor HOME is set, so the cmod store has no folder. Set HOME.");return`${n}/.local/share/cmod`}function mn(e,t){return`${e}/records/${dt(t)}.json`}function Qn(e,t,n){return`${e}/bin/${dt(t)}/${n}/${t}`}function dr(e,t){return e.program!==null&&(t===undefined||t>Date.parse(e.installedAt))}async function ur(e,t){if(!await e.exists(`${t}/programs/cmod`))return;const n=(await e.list(`${t}/bin/cmod`)).filter((s)=>fa.test(s)).toSorted((s,o)=>yn(s,o)?-1:1);for(const s of n)if(await e.exists(Qn(t,"cmod",s)))return s;return}function Yn(e,t){return`${e}/data/${dt(t)}`}function ma(e,t){const n=e["CLAUDE_CONFIG_DIR"];const s=e["HOME"];if(n)return`${n}/cmods/${dt(t)}`;if(!s)throw new Error(`Neither CLAUDE_CONFIG_DIR nor HOME is set, so ${t} has no config folder. Set HOME.`);return`${s}/.claude/cmods/${dt(t)}`}function hn(e,t,n){return[{tier:"system",folder:ma(e,t)},{tier:"project",folder:`${n}/.claude/cmods/${dt(t)}`}]}function dt(e){if(!pn.test(e)||e.includes("..")){throw new Error(`"${e}" is not a plugin name: use letters, digits, ".", "_", and "-", starting with a letter or digit.`)}return e}async function fr(e,t,n){const s=mn(t,n);const o=await e(s);if(o===undefined)return;return ha(o,s)}function ha(e,t){const n=`Delete ${t} and run cmod setup on the plugin again.`;let s;try{s=JSON.parse(e)}catch(f){throw new Error(`${t} is not JSON (${re(f)}). ${n}`)}if(!Re(s))throw new Error(`${t} is not a cmod install record. ${n}`);for(const f of["name","version","root","installedAt","scriptsSha256"]){if(typeof s[f]!=="string")throw new Error(`${t} has no "${f}" text. ${n}`)}const o=s["uninstall"];if(o!==null&&typeof o!=="string")throw new Error(`${t} has an "uninstall" that is neither a path nor null. ${n}`);const r=s["program"];if(r!==null&&typeof r!=="string")throw new Error(`${t} has a "program" that is neither a command name nor null. ${n}`);const a=s["keys"]??{};if(!Re(a)||Object.values(a).some((f)=>typeof f!=="string"))throw new Error(`${t} has "keys" that are not key bindings. ${n}`);const d=s["permissions"]??null;if(d!==null&&!ar(d))throw new Error(`${t} has "permissions" that are not a list of permissions. ${n}`);const c=s["grantedOnUpdate"]??[];if(!ar(c))throw new Error(`${t} has a "grantedOnUpdate" that is not a list of permissions. ${n}`);return{name:s["name"],version:s["version"],root:s["root"],installedAt:s["installedAt"],scriptsSha256:s["scriptsSha256"],uninstall:o,program:r,keys:a,permissions:d,grantedOnUpdate:c}}function lr(e){if(e===undefined)return;if(!Re(e))throw new Error("package.json is not a JSON object.");const t=e["cmod"];if(t===undefined)return;if(!Re(t))throw new Error('package.json has a "cmod" key that is not an object. Write "cmod": { "install": "./setup/install.sh", "uninstall": "./setup/uninstall.sh" }.');const n=t["program"];if(n!==undefined&&(typeof n!=="string"||!pn.test(n)))throw new Error(`package.json "cmod.program" must be the program's command, such as "hello".`);const s=t["approve"];if(s!==undefined&&s!==true)throw new Error(`package.json "cmod.approve" is ${JSON.stringify(s)}. Write "approve": true, or leave it out.`);const o=ga(t);return{...ir(t,"install"),...ir(t,"uninstall"),...n===undefined?{}:{program:n},...ya(t["hotkeys"]),...s===true||o.includes("approve")?{approve:true}:{},...o.length===0?{}:{permissions:o}}}function ga(e){const t=e["permissions"];if(t===undefined)return[];const n='package.json "cmod.permissions"';if(!Re(t))throw new Error(`${n} must be an object, such as { "network": ["api.github.com"], "prompt": true }.`);const s=[];for(const[o,r]of Object.entries(t)){if(!or.includes(o))throw new Error(`${n} names "${o}", which is not a permission. Use ${ct(or.map((d)=>`"${d}"`))}.`);if(cr.includes(o)){if(r!==true)throw new Error(`${n} sets "${o}" to ${JSON.stringify(r)}. Write "${o}": true, or leave it out.`);s.push(o);continue}if(o==="run"&&r==="*"){s.push("run:*");continue}const a={network:'["api.github.com"]',run:'["gh"], or "*" for any program',files:'["~/.zshrc"]',config:'["cleanupPeriodDays"]'}[o];if(!Array.isArray(r)||r.length===0||!r.every((d)=>typeof d==="string"))throw new Error(`${n} sets "${o}" to ${JSON.stringify(r)}. Write a list, such as "${o}": ${a}.`);for(const d of r){const c=/^(~\/|\/)/.test(d)&&!d.split("/").includes("..");const f={network:da.test(d)||c,run:ua.test(d),files:c,config:la.test(d)}[o];if(f!==true)throw new Error(`${n} lists "${d}" under "${o}". Write ${pa[o]}.`);s.push(`${o}:${d}`)}}return s}var es="Install it in Plugins.";var _t="Set it in /config, where Claude Code keeps it in your keychain.";var pr="cmod:pendingSteps";var mr="cmod:finishSteps";function wa(e,t){return`${e}/instances/${dt(t)}`}function hr(e,t,n){return`${wa(e,t)}/${n}.json`}function gr(e,t){return`${e}/services/${dt(t)}`}function wr(e,t){if(e.browser==="true")return;if(e.browser)return[e.browser,t];if(e.sshConnection)return;if(e.os==="darwin")return["open",t];return e.display||e.waylandDisplay?["xdg-open",t]:undefined}function ya(e){if(e===undefined)return{};const t="cmod check writes it from the hotkeys defineMod declares, so run cmod check.";if(!Re(e)||!Object.values(e).every((n)=>Re(n)&&typeof n["title"]==="string"&&(n["default"]===undefined||typeof n["default"]==="string")))throw new Error(`package.json "cmod.hotkeys" is not a map of hotkeys to their title and optional default combo. ${t}`);return{hotkeys:fn('package.json "cmod"',e)}}var Gt="6.0.2";var Pt="6.0.0";function gn(e,t){return`${e}--${t}`}function yr(e){const t=Re(e)&&Array.isArray(e["bindings"])?e["bindings"]:[];const n=new Map;for(const s of t){if(!Re(s)||s["context"]!=="Chat"||!Re(s["bindings"]))continue;for(const[o,r]of Object.entries(s["bindings"]))if(typeof r==="string"&&r.startsWith("command:"))n.set(r.slice("command:".length),o)}return n}function ir(e,t){const n=e[t];if(n===undefined)return{};if(typeof n!=="string"||n.trim()==="")throw new Error(`package.json "cmod.${t}" must be a command, such as "./setup/${t}.sh".`);if(/[\n\t]/.test(n))throw new Error(`package.json "cmod.${t}" holds a line break or a tab. Write one command, such as "./setup/${t}.sh".`);const s=$r(n).find((o)=>xr(o)===".");if(s!==undefined)throw new Error(`package.json "cmod.${t}" names ${s}, a script at the plugin root. Move it into a folder, such as ./setup/${t}.sh: cmod runs the steps again whenever anything in a script's folder changes.`);return{[t]:n}}function $r(e){const t=e.split(/[\s;&|()<>]+/).map((n)=>n.replace(/^['"]|['"]$/g,"")).filter((n)=>n.includes("/")&&!n.startsWith("-")&&!n.startsWith("/")&&!n.startsWith("~")&&!n.startsWith("$")&&!n.includes("=")&&!n.split("/").includes(".."));return[...new Set(t)]}function xr(e){return e.slice(0,e.lastIndexOf("/"))}async function br(e,t){const n=new Set;for(const r of["install","uninstall"]){const a=e[r];if(a===undefined)continue;const d=[];for(const c of $r(a)){if(await t.read(c)!==undefined)d.push(xr(c))}if(d.length===0)throw new Error(`package.json "cmod.${r}" runs "${a}", which names no script file in the mod, so cmod cannot tell when what it runs changes. Put the commands in a script, such as ./setup/${r}.sh.`);for(const c of d)n.add(c)}let s=[e.install??"",e.uninstall??"",e.program??"",...e.hotkeys===undefined?[]:[JSON.stringify(Object.entries(e.hotkeys).sort())],...e.permissions===undefined?[]:[JSON.stringify([...e.permissions].sort())]].join("\x00");for(const r of[...n].sort()){for(const a of(await t.list(r)).sort()){const d=`${r}/${a}`;const c=await t.read(d);if(c===undefined)throw new Error(`${d} links to a folder or to nothing, so cmod cannot tell when it changes. Point the link at a file, or delete it.`);s+=`\x00${d}\x00${c}`}}const o=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(s));return[...new Uint8Array(o)].map((r)=>r.toString(16).padStart(2,"0")).join("")}function wn(e){const t=/^progress (\d+) (\d+)(?: (.*))?$/.exec(e);if(t!==null)return{type:"progress",done:Number(t[1]),total:Number(t[2]),label:t[3]??""};const n=/^needs-consent (\S+)\t([^\t]*)\t([^\t]*)(?:\t(.*))?$/.exec(e);if(n!==null){const[d="",...c]=(n[4]??"").split("\t");return{type:"needs-consent",sha256:n[1],install:n[2],uninstall:n[3],hotkeys:d,permissions:c.filter((f)=>f!=="")}}const s=/^done (\S+)(?: (\S+))?$/.exec(e);if(s!==null)return{type:"done",name:s[1],...s[2]===undefined?{}:{version:s[2]}};const o=/^missing (\S+)$/.exec(e);if(o!==null)return{type:"missing",name:o[1]};const r=/^failed (-?\d+)(?:\t(.*))?$/.exec(e);if(r!==null)return{type:"failed",code:Number(r[1]),message:r[2]??""};const a=/^retries (changed|later)$/.exec(e);if(a!==null)return{type:"retries",when:a[1]};return{type:"log",text:e.replace(/^log /,"")}}function yn(e,t){const n=e.split(".").map(Number);const s=t.split(".").map(Number);for(let o=0;o<Math.max(n.length,s.length);o+=1){const r=(n[o]??0)-(s[o]??0);if(r!==0)return r>0}return true}function Re(e){return typeof e==="object"&&e!==null&&!Array.isArray(e)}function ar(e){return Array.isArray(e)&&e.every((t)=>typeof t==="string")}var ut="task";var Ye="taskStart";var Rt="taskEnd";var $t="note";var $a=new RegExp(`<(${pn.source.slice(1,-1)})_mod>\\n([\\s\\S]*?)\\n</\\1_mod>`,"g");function et(e,t){return`<${e}_mod>
-${t}
-</${e}_mod>`}var Kt="reply";var ft="person";var $n="mod";var kr="schedule";var vr="channel";var Sr="sdk";var Or="engine";var xa=["human","composer","bridge","slack-ping"];var ba=["peer","peer-send-message","coordinator","projects-relay","observer","observer-activity"];function xn(e,t){const n=Re(e)?e:{};const s=typeof n["kind"]==="string"?n["kind"]:undefined;if(s===undefined)return{type:t?ut:ft};if(xa.includes(s))return{type:ft};if(ba.includes(s))return{type:"session"};if(s==="auto-continuation")return{type:Or};if(s==="plugin"&&typeof n["name"]==="string")return{type:$n,name:n["name"],...n["asUser"]===true?{as:ft}:{}};if(s==="scheduled-trigger")return{type:kr};if(s==="channel"&&typeof n["server"]==="string")return{type:vr,name:n["server"]};if(s==="sdk")return{type:Sr};if(s==="task-notification")return{type:ut};return{type:t?ut:ft}}var xt="toolCall";var bt="toolResult";var Ue="message";var bn="contextStart";var Jt="contextEnd";var Tt="turnStart";var kt="turnEnd";var kn="goalChange";var Pr="fork";var Rr=50;var vn="session";var vt={Message:"message",Prompt:"prompt",Note:"note",Reply:"reply",ToolCall:"toolCall",ToolResult:"toolResult",Skill:"skill",InstructionFile:"instructionFile",AttachedFile:"attachedFile",Notice:"notice",ContextStart:"contextStart",ContextEnd:"contextEnd",TurnStart:"turnStart",TurnEnd:"turnEnd",TaskStart:"taskStart",TaskEnd:"taskEnd",GoalChange:"goalChange",UsageChange:"usageChange"};var Tr=["Prompt","Note","Skill","InstructionFile","AttachedFile","Reply","ToolCall","ToolResult","Notice","TaskStart","TurnEnd","ContextEnd"];var ns={ProjectSetup:{on:"Setup",before:"Setup"},SessionStart:{on:"SessionStart",before:"SessionStart"},SessionEnd:{on:"SessionEnd"},ModelChange:{on:"PostModelSwitch",before:"PreModelSwitch"},CwdChange:{on:"CwdChanged"},DirectoryAdd:{on:"DirectoryAdded"},WorktreeCreate:{on:"WorktreeCreate",before:"WorktreeCreate"},WorktreeRemove:{on:"WorktreeRemove"},Notification:{on:"Notification"},Elicitation:{on:"Elicitation",before:"Elicitation"},ElicitationResponse:{on:"ElicitationResult",before:"ElicitationResult"},PermissionCheck:{on:"tool.check",before:"tool.check"},PermissionRequest:{on:"PermissionRequest",before:"PermissionRequest"},PermissionDenial:{on:"PermissionDenied",before:"PermissionDenied"},ToolBatch:{on:"PostToolBatch",before:"PostToolBatch"},TodoCreate:{on:"TaskCreated",before:"TaskCreated"},TodoComplete:{on:"TaskCompleted",before:"TaskCompleted"},ReplyDisplay:{on:"MessageDisplay",before:"MessageDisplay"}};function tt(e,t){if(t instanceof RegExp)return e!==undefined&&e!==null&&t.test(String(e));if(Array.isArray(t))return t.some((n)=>tt(e,n));if(typeof t!=="object"||t===null)return e===t;if(Array.isArray(e))return e.some((n)=>tt(n,t));if(typeof e!=="object"||e===null)return false;return Object.entries(t).every(([n,s])=>s===undefined||tt(e[n],s))}function Sn(e){if(e instanceof RegExp)return{regexp:e.source,flags:e.flags};if(Array.isArray(e))return e.map(Sn);if(typeof e!=="object"||e===null)return e;return Object.fromEntries(Object.entries(e).filter(([,t])=>t!==undefined).map(([t,n])=>[t,Sn(n)]))}var Aa=Object.create;var{getPrototypeOf:Ca,defineProperty:jr,getOwnPropertyNames:Ea}=Object;var Mr=Object.prototype.hasOwnProperty;function _a(e){return this[e]}var Pa;var Ra;var Ta=(e,t,n)=>{var s=e!=null&&typeof e==="object";if(s){var o=t?Pa??=new WeakMap:Ra??=new WeakMap,r=o.get(e);if(r)return r}n=e!=null?Aa(Ca(e)):{};let a=t||!e||!e.__esModule||!Mr.call(e,"default")?jr(n,"default",{value:e,enumerable:true}):n;if(e&&typeof e==="object"||typeof e==="function"){for(let d of Ea(e))if(!Mr.call(a,d))jr(a,d,{get:_a.bind(e,d),enumerable:true})}if(s)o.set(e,a);return a};var St=(e,t)=>()=>(t||e((t={exports:{}}).exports,t),t.exports);var On=St(function(e,t){var n={DOT_LITERAL:"\\.",PLUS_LITERAL:"\\+",QMARK_LITERAL:"\\?",SLASH_LITERAL:"\\/",ONE_CHAR:"(?=.)",QMARK:"[^/]",END_ANCHOR:"(?:\\/|$)",DOTS_SLASH:"\\.{1,2}(?:\\/|$)",NO_DOT:"(?!\\.)",NO_DOTS:"(?!(?:^|\\/)\\.{1,2}(?:\\/|$))",NO_DOT_SLASH:"(?!\\.{0,1}(?:\\/|$))",NO_DOTS_SLASH:"(?!\\.{1,2}(?:\\/|$))",QMARK_NO_DOT:"[^.\\/]",STAR:"[^/]*?",START_ANCHOR:"(?:^|\\/)",SEP:"/"},s={...n,SLASH_LITERAL:"[\\\\/]",QMARK:"[^\\\\/]",STAR:"[^\\\\/]*?",DOTS_SLASH:"\\.{1,2}(?:[\\\\/]|$)",NO_DOT:"(?!\\.)",NO_DOTS:"(?!(?:^|[\\\\/])\\.{1,2}(?:[\\\\/]|$))",NO_DOT_SLASH:"(?!\\.{0,1}(?:[\\\\/]|$))",NO_DOTS_SLASH:"(?!\\.{1,2}(?:[\\\\/]|$))",QMARK_NO_DOT:"[^.\\\\/]",START_ANCHOR:"(?:^|[\\\\/])",END_ANCHOR:"(?:[\\\\/]|$)",SEP:"\\"},o={__proto__:null,alnum:"a-zA-Z0-9",alpha:"a-zA-Z",ascii:"\\x00-\\x7F",blank:" \\t",cntrl:"\\x00-\\x1F\\x7F",digit:"0-9",graph:"\\x21-\\x7E",lower:"a-z",print:"\\x20-\\x7E ",punct:"\\-!\"#$%&'()\\*+,./:;<=>?@[\\]^_`{|}~",space:" \\t\\r\\n\\v\\f",upper:"A-Z",word:"A-Za-z0-9_",xdigit:"A-Fa-f0-9"};t.exports={DEFAULT_MAX_EXTGLOB_RECURSION:0,MAX_LENGTH:65536,POSIX_REGEX_SOURCE:o,REGEX_BACKSLASH:/\\(?![*+?^${}(|)[\]])/g,REGEX_NON_SPECIAL_CHARS:/^[^@![\].,$*+?^{}()|\\/]+/,REGEX_SPECIAL_CHARS:/[-*+?.^${}(|)[\]]/,REGEX_SPECIAL_CHARS_BACKREF:/(\\?)((\W)(\3*))/g,REGEX_SPECIAL_CHARS_GLOBAL:/([-*+?.^${}(|)[\]])/g,REGEX_REMOVE_BACKSLASH:/(?:\[.*?[^\\]\]|\\(?=.))/g,REPLACEMENTS:{__proto__:null,"***":"*","**/**":"**","**/**/**":"**"},CHAR_0:48,CHAR_9:57,CHAR_UPPERCASE_A:65,CHAR_LOWERCASE_A:97,CHAR_UPPERCASE_Z:90,CHAR_LOWERCASE_Z:122,CHAR_LEFT_PARENTHESES:40,CHAR_RIGHT_PARENTHESES:41,CHAR_ASTERISK:42,CHAR_AMPERSAND:38,CHAR_AT:64,CHAR_BACKWARD_SLASH:92,CHAR_CARRIAGE_RETURN:13,CHAR_CIRCUMFLEX_ACCENT:94,CHAR_COLON:58,CHAR_COMMA:44,CHAR_DOT:46,CHAR_DOUBLE_QUOTE:34,CHAR_EQUAL:61,CHAR_EXCLAMATION_MARK:33,CHAR_FORM_FEED:12,CHAR_FORWARD_SLASH:47,CHAR_GRAVE_ACCENT:96,CHAR_HASH:35,CHAR_HYPHEN_MINUS:45,CHAR_LEFT_ANGLE_BRACKET:60,CHAR_LEFT_CURLY_BRACE:123,CHAR_LEFT_SQUARE_BRACKET:91,CHAR_LINE_FEED:10,CHAR_NO_BREAK_SPACE:160,CHAR_PERCENT:37,CHAR_PLUS:43,CHAR_QUESTION_MARK:63,CHAR_RIGHT_ANGLE_BRACKET:62,CHAR_RIGHT_CURLY_BRACE:125,CHAR_RIGHT_SQUARE_BRACKET:93,CHAR_SEMICOLON:59,CHAR_SINGLE_QUOTE:39,CHAR_SPACE:32,CHAR_TAB:9,CHAR_UNDERSCORE:95,CHAR_VERTICAL_LINE:124,CHAR_ZERO_WIDTH_NOBREAK_SPACE:65279,extglobChars(r){return{"!":{type:"negate",open:"(?:(?!(?:",close:`))${r.STAR})`},"?":{type:"qmark",open:"(?:",close:")?"},"+":{type:"plus",open:"(?:",close:")+"},"*":{type:"star",open:"(?:",close:")*"},"@":{type:"at",open:"(?:",close:")"}}},globChars(r){return r===true?s:n}}});var ss=St(function(e){var{REGEX_BACKSLASH:t,REGEX_REMOVE_BACKSLASH:n,REGEX_SPECIAL_CHARS:s,REGEX_SPECIAL_CHARS_GLOBAL:o}=On();e.isObject=(r)=>r!==null&&typeof r==="object"&&!Array.isArray(r);e.hasRegexChars=(r)=>s.test(r);e.isRegexChar=(r)=>r.length===1&&e.hasRegexChars(r);e.escapeRegex=(r)=>r.replace(o,"\\$1");e.toPosixSlashes=(r)=>r.replace(t,"/");e.isWindows=()=>{if(typeof navigator<"u"&&navigator.platform){let r=navigator.platform.toLowerCase();return r==="win32"||r==="windows"}return false};e.removeBackslashes=(r)=>r.replace(n,(a)=>a==="\\"?"":a);e.escapeLast=(r,a,d)=>{let c=r.lastIndexOf(a,d);if(c===-1)return r;if(r[c-1]==="\\")return e.escapeLast(r,a,c-1);return`${r.slice(0,c)}\\${r.slice(c)}`};e.removePrefix=(r,a={})=>{let d=r;if(d.startsWith("./"))d=d.slice(2),a.prefix="./";return d};e.wrapOutput=(r,a={},d={})=>{let c=d.contains?"":"^",f=d.contains?"":"$",g=`${c}(?:${r})${f}`;if(a.negated===true)g=`(?:^(?!${g}).*$)`;return g};e.basename=(r,{windows:a}={})=>{let d=r.split(a?/[\\/]/:"/"),c=d[d.length-1];if(c==="")return d[d.length-2];return c}});var ja=St(function(e,t){var n=ss(),{CHAR_ASTERISK:s,CHAR_AT:o,CHAR_BACKWARD_SLASH:r,CHAR_COMMA:a,CHAR_DOT:d,CHAR_EXCLAMATION_MARK:c,CHAR_FORWARD_SLASH:f,CHAR_LEFT_CURLY_BRACE:g,CHAR_LEFT_PARENTHESES:y,CHAR_LEFT_SQUARE_BRACKET:E,CHAR_PLUS:v,CHAR_QUESTION_MARK:b,CHAR_RIGHT_CURLY_BRACE:S,CHAR_RIGHT_PARENTHESES:N,CHAR_RIGHT_SQUARE_BRACKET:z}=On(),J=(A)=>A===f||A===r,oe=(A)=>{if(A.isPrefix!==true)A.depth=A.isGlobstar?1/0:1},X=(A,W)=>{let x=W||{},Z=A.length-1,U=x.parts===true||x.tokens===true||x.scanToEnd===true,_=[],T=[],j=[],B=A,Q=-1,V=0,de=0,ne=false,k=false,F=false,G=false,K=false,ee=false,ie=false,ae=false,fe=false,be=false,we=0,_e,Y,ue={value:"",depth:0,isGlob:false},I=()=>Q>=Z,pe=()=>B.charCodeAt(Q+1),ve=()=>(_e=Y,B.charCodeAt(++Q));while(Q<Z){Y=ve();let le;if(Y===r){if(ie=ue.backslashes=true,Y=ve(),Y===g)ee=true;continue}if(ee===true||Y===g){we++;while(I()!==true&&(Y=ve())){if(Y===r){ie=ue.backslashes=true,ve();continue}if(Y===g){we++;continue}if(ee!==true&&Y===d&&(Y=ve())===d){if(ne=ue.isBrace=true,F=ue.isGlob=true,be=true,U===true)continue;break}if(ee!==true&&Y===a){if(ne=ue.isBrace=true,F=ue.isGlob=true,be=true,U===true)continue;break}if(Y===S){if(we--,we===0){ee=false,ne=ue.isBrace=true,be=true;break}}}if(U===true)continue;break}if(Y===f){if(_.push(Q),T.push(ue),ue={value:"",depth:0,isGlob:false},be===true)continue;if(_e===d&&Q===V+1){V+=2;continue}de=Q+1;continue}if(x.noext!==true){if((Y===v||Y===o||Y===s||Y===b||Y===c)===true&&pe()===y){if(F=ue.isGlob=true,G=ue.isExtglob=true,be=true,Y===c&&Q===V)fe=true;if(U===true){let xe=0;while(I()!==true&&(Y=ve())){if(Y===r){ie=ue.backslashes=true,ve();continue}if(Y===y){xe++;continue}if(Y===N&&--xe===0){be=true;break}}continue}break}}if(Y===s){if(_e===s)K=ue.isGlobstar=true;if(F=ue.isGlob=true,be=true,U===true)continue;break}if(Y===b){if(F=ue.isGlob=true,be=true,U===true)continue;break}if(Y===E){while(I()!==true&&(le=ve())){if(le===r){ie=ue.backslashes=true,ve();continue}if(le===z){k=ue.isBracket=true,F=ue.isGlob=true,be=true;break}}if(U===true)continue;break}if(x.nonegate!==true&&Y===c&&Q===V){ae=ue.negated=true,V++;continue}if(x.noparen!==true&&Y===y){if(F=ue.isGlob=true,U===true){let xe=1;while(I()!==true&&(Y=ve())){if(Y===r){ie=ue.backslashes=true,ve();continue}if(Y===y){xe++;continue}if(Y===N&&--xe===0){be=true;break}}continue}break}if(F===true){if(be=true,U===true)continue;break}}if(x.noext===true)G=false,F=false;let ge=B,R="",M="";if(V>0)R=B.slice(0,V),B=B.slice(V),de-=V;if(ge&&F===true&&de>0)ge=B.slice(0,de),M=B.slice(de);else if(F===true)ge="",M=B;else ge=B;if(ge&&ge!==""&&ge!=="/"&&ge!==B){if(J(ge.charCodeAt(ge.length-1)))ge=ge.slice(0,-1)}if(x.unescape===true){if(M)M=n.removeBackslashes(M);if(ge&&ie===true)ge=n.removeBackslashes(ge)}let Ae={prefix:R,input:A,start:V,base:ge,glob:M,isBrace:ne,isBracket:k,isGlob:F,isExtglob:G,isGlobstar:K,negated:ae,negatedExtglob:fe};if(x.tokens===true){if(Ae.maxDepth=0,!J(Y))T.push(ue);Ae.tokens=T}if(x.parts===true||x.tokens===true){let le;for(let Ee=0;Ee<_.length;Ee++){let Ie=le!==undefined?le+1:V,De=_[Ee],We=A.slice(Ie,De);if(x.tokens){if(Ee===0&&V!==0)T[Ee].isPrefix=true,T[Ee].value=R;else T[Ee].value=We;oe(T[Ee]),Ae.maxDepth+=T[Ee].depth}if(De>=V)j.push(We),le=De}let xe=le!==undefined?le+1:V,Me=A.slice(xe);if(j.push(Me),x.tokens&&le&&le+1<A.length)T[T.length-1].value=Me,oe(T[T.length-1]),Ae.maxDepth+=T[T.length-1].depth;Ae.slashes=_,Ae.parts=j}return Ae};t.exports=X});var Ma=St(function(e,t){var n=On(),s=ss(),{MAX_LENGTH:o,POSIX_REGEX_SOURCE:r,REGEX_NON_SPECIAL_CHARS:a,REGEX_SPECIAL_CHARS_BACKREF:d,REPLACEMENTS:c}=n,f=(A,W)=>{if(typeof W.expandRange==="function")return W.expandRange(...A,W);A.sort();let x=`[${A.join("-")}]`;try{new RegExp(x)}catch(Z){return A.map((U)=>s.escapeRegex(U)).join("..")}return x},g=(A,W)=>`Missing ${A}: "${W}" - use "\\\\${W}" to match literal characters`,y=(A)=>{let W=[],x=0,Z=0,U=0,_="",T=false;for(let j of A){if(T===true){_+=j,T=false;continue}if(j==="\\"){_+=j,T=true;continue}if(j==='"'){U=U===1?0:1,_+=j;continue}if(U===0){if(j==="[")x++;else if(j==="]"&&x>0)x--;else if(x===0){if(j==="(")Z++;else if(j===")"&&Z>0)Z--;else if(j==="|"&&Z===0){W.push(_),_="";continue}}}_+=j}return W.push(_),W},E=(A)=>{let W=false;for(let x of A){if(W===true){W=false;continue}if(x==="\\"){W=true;continue}if(/[?*+@!()[\]{}]/.test(x))return false}return true},v=(A)=>{let W=A.trim(),x=true;while(x===true)if(x=false,/^@\([^\\()[\]{}|]+\)$/.test(W))W=W.slice(2,-1),x=true;if(!E(W))return;return W.replace(/\\(.)/g,"$1")},b=(A)=>{let W=A.map(v).filter(Boolean);for(let x=0;x<W.length;x++)for(let Z=x+1;Z<W.length;Z++){let U=W[x],_=W[Z],T=U[0];if(!T||U!==T.repeat(U.length)||_!==T.repeat(_.length))continue;if(U===_||U.startsWith(_)||_.startsWith(U))return true}return false},S=(A,W=true)=>{if(A[0]!=="+"&&A[0]!=="*"||A[1]!=="(")return;let x=0,Z=0,U=0,_=false;for(let T=1;T<A.length;T++){let j=A[T];if(_===true){_=false;continue}if(j==="\\"){_=true;continue}if(j==='"'){U=U===1?0:1;continue}if(U===1)continue;if(j==="["){x++;continue}if(j==="]"&&x>0){x--;continue}if(x>0)continue;if(j==="("){Z++;continue}if(j===")"){if(Z--,Z===0){if(W===true&&T!==A.length-1)return;return{type:A[0],body:A.slice(2,T),end:T}}}}},N=(A)=>`${A.length===1?s.escapeRegex(A[0]):`[${A.map((W)=>s.escapeRegex(W)).join("")}]`}*`,z=(A)=>{let W=0,x=[];while(W<A.length){let Z=S(A.slice(W),false);if(!Z||Z.type!=="*")return;let U=y(Z.body).map((T)=>T.trim());if(U.length!==1)return;let _=v(U[0]);if(!_||_.length!==1)return;x.push(_),W+=Z.end+1}if(x.length<1)return;return x},J=(A)=>{let W=0,x=A.trim(),Z=S(x);while(Z)W++,x=Z.body.trim(),Z=S(x);return W},oe=(A,W)=>{if(W.maxExtglobRecursion===false)return{risky:false};let x=typeof W.maxExtglobRecursion==="number"?W.maxExtglobRecursion:n.DEFAULT_MAX_EXTGLOB_RECURSION,Z=y(A).map((j)=>j.trim());if(Z.length>1){if(Z.some((j)=>j==="")||Z.some((j)=>/^[*?]+$/.test(j))||b(Z))return{risky:true}}let U=[],_=false,T=true;for(let j of Z){let B=z(j);if(B){_=true,U.push(...B);continue}let Q=v(j);if(Q&&Q.length===1){U.push(Q);continue}if(T=false,J(j)>x)return{risky:true}}if(_)return T?{risky:true,safeOutput:N([...new Set(U)])}:{risky:true};return{risky:false}},X=(A,W)=>{if(typeof A!=="string")throw TypeError("Expected a string");A=c[A]||A;let x={...W},Z=typeof x.maxLength==="number"?Math.min(o,x.maxLength):o,U=A.length;if(U>Z)throw SyntaxError(`Input length: ${U}, exceeds maximum allowed length: ${Z}`);let _={type:"bos",value:"",output:x.prepend||""},T=[_],j=x.capture?"":"?:",B=n.globChars(x.windows),Q=n.extglobChars(B),{DOT_LITERAL:V,PLUS_LITERAL:de,SLASH_LITERAL:ne,ONE_CHAR:k,DOTS_SLASH:F,NO_DOT:G,NO_DOT_SLASH:K,NO_DOTS_SLASH:ee,QMARK:ie,QMARK_NO_DOT:ae,STAR:fe,START_ANCHOR:be}=B,we=(i)=>`(${j}(?:(?!${be}${i.dot?F:V}).)*?)`,_e=x.dot?"":G,Y=x.dot?ie:ae,ue=x.bash===true?we(x):fe;if(x.capture)ue=`(${ue})`;if(typeof x.noext==="boolean")x.noextglob=x.noext;let I={input:A,index:-1,start:0,dot:x.dot===true,consumed:"",output:"",prefix:"",backtrack:false,negated:false,brackets:0,braces:0,parens:0,quotes:0,globstar:false,tokens:T};A=s.removePrefix(A,I),U=A.length;let pe=[],ve=[],ge=[],R=_,M,Ae=()=>I.index===U-1,le=I.peek=(i=1)=>A[I.index+i],xe=I.advance=()=>A[++I.index]||"",Me=()=>A.slice(I.index+1),Ee=(i="",p=0)=>{I.consumed+=i,I.index+=p},Ie=(i)=>{I.output+=i.output!=null?i.output:i.value,Ee(i.value)},De=()=>{let i=1;while(le()==="!"&&(le(2)!=="("||le(3)==="?"))xe(),I.start++,i++;if(i%2===0)return false;return I.negated=true,I.start++,true},We=(i)=>{I[i]++,ge.push(i)},w=(i)=>{I[i]--,ge.pop()},m=(i)=>{if(R.type==="globstar"){let p=I.braces>0&&(i.type==="comma"||i.type==="brace"),l=i.extglob===true||pe.length&&(i.type==="pipe"||i.type==="paren");if(i.type!=="slash"&&i.type!=="paren"&&!p&&!l)I.output=I.output.slice(0,-R.output.length),R.type="star",R.value="*",R.output=ue,I.output+=R.output}if(pe.length&&i.type!=="paren")pe[pe.length-1].inner+=i.value;if(i.value||i.output)Ie(i);if(R&&R.type==="text"&&i.type==="text"){R.output=(R.output||R.value)+i.value,R.value+=i.value;return}i.prev=R,T.push(i),R=i},L=(i,p)=>{let l={...Q[p],conditions:1,inner:""};l.prev=R,l.parens=I.parens,l.output=I.output,l.startIndex=I.index,l.tokensIndex=T.length;let O=(x.capture?"(":"")+l.open;We("parens"),m({type:i,value:p,output:I.output?"":k}),m({type:"paren",extglob:true,value:xe(),output:O}),pe.push(l)},u=(i)=>{let p=A.slice(i.startIndex,I.index+1),l=A.slice(i.startIndex+2,I.index),O=oe(l,x);if((i.type==="plus"||i.type==="star")&&O.risky){let q=O.safeOutput?(i.output?"":k)+(x.capture?`(${O.safeOutput})`:O.safeOutput):undefined,se=T[i.tokensIndex];se.type="text",se.value=p,se.output=q||s.escapeRegex(p);for(let me=i.tokensIndex+1;me<T.length;me++)T[me].value="",T[me].output="",delete T[me].suffix;I.output=i.output+se.output,I.backtrack=true,m({type:"paren",extglob:true,value:M,output:""}),w("parens");return}let C=i.close+(x.capture?")":""),H;if(i.type==="negate"){let q=ue;if(i.inner&&i.inner.length>1&&i.inner.includes("/"))q=we(x);if(q!==ue||Ae()||/^\)+$/.test(Me()))C=i.close=`)$))${q}`;if(i.inner.includes("*")&&(H=Me())&&/^\.[^\\/.]+$/.test(H)){let se=X(H,{...W,fastpaths:false}).output;C=i.close=`)${se})${q})`}if(i.prev.type==="bos")I.negatedExtglob=true}m({type:"paren",extglob:true,value:M,output:C}),w("parens")};if(x.fastpaths!==false&&!/(^[*!]|[/()[\]{}"])/.test(A)){let i=false,p=A.replace(d,(l,O,C,H,q,se)=>{if(H==="\\")return i=true,l;if(H==="?"){if(O)return O+H+(q?ie.repeat(q.length):"");if(se===0)return Y+(q?ie.repeat(q.length):"");return ie.repeat(C.length)}if(H===".")return V.repeat(C.length);if(H==="*"){if(O)return O+H+(q?ue:"");return ue}return O?l:`\\${l}`});if(i===true)if(x.unescape===true)p=p.replace(/\\/g,"");else p=p.replace(/\\+/g,(l)=>l.length%2===0?"\\\\":l?"\\":"");if(p===A&&x.contains===true)return I.output=A,I;return I.output=s.wrapOutput(p,I,W),I}while(!Ae()){if(M=xe(),M==="\x00")continue;if(M==="\\"){let l=le();if(l==="/"&&x.bash!==true)continue;if(l==="."||l===";")continue;if(!l){M+="\\",m({type:"text",value:M});continue}let O=/^\\+/.exec(Me()),C=0;if(O&&O[0].length>2){if(C=O[0].length,I.index+=C,C%2!==0)M+="\\"}if(x.unescape===true)M=xe();else M+=xe();if(I.brackets===0){m({type:"text",value:M});continue}}if(I.brackets>0&&(M!=="]"||R.value==="["||R.value==="[^")){if(x.posix!==false&&M===":"){let l=R.value.slice(1);if(l.includes("[")){if(R.posix=true,l.includes(":")){let O=R.value.lastIndexOf("["),C=R.value.slice(0,O),H=R.value.slice(O+2),q=r[H];if(q){if(R.value=C+q,I.backtrack=true,xe(),!_.output&&T.indexOf(R)===1)_.output=k;continue}}}}if(M==="["&&le()!==":"||M==="-"&&le()==="]")M=`\\${M}`;if(M==="]"&&(R.value==="["||R.value==="[^"))M=`\\${M}`;if(x.posix===true&&M==="!"&&R.value==="[")M="^";R.value+=M,Ie({value:M});continue}if(I.quotes===1&&M!=='"'){M=s.escapeRegex(M),R.value+=M,Ie({value:M});continue}if(M==='"'){if(I.quotes=I.quotes===1?0:1,x.keepQuotes===true)m({type:"text",value:M});continue}if(M==="("){We("parens"),m({type:"paren",value:M});continue}if(M===")"){if(I.parens===0&&x.strictBrackets===true)throw SyntaxError(g("opening","("));let l=pe[pe.length-1];if(l&&I.parens===l.parens+1){u(pe.pop());continue}m({type:"paren",value:M,output:I.parens?")":"\\)"}),w("parens");continue}if(M==="["){if(x.nobracket===true||!Me().includes("]")){if(x.nobracket!==true&&x.strictBrackets===true)throw SyntaxError(g("closing","]"));M=`\\${M}`}else We("brackets");m({type:"bracket",value:M});continue}if(M==="]"){if(x.nobracket===true||R&&R.type==="bracket"&&R.value.length===1){m({type:"text",value:M,output:`\\${M}`});continue}if(I.brackets===0){if(x.strictBrackets===true)throw SyntaxError(g("opening","["));m({type:"text",value:M,output:`\\${M}`});continue}w("brackets");let l=R.value.slice(1);if(R.posix!==true&&l[0]==="^"&&!l.includes("/"))M=`/${M}`;if(R.value+=M,Ie({value:M}),x.literalBrackets===false||s.hasRegexChars(l))continue;let O=s.escapeRegex(R.value);if(I.output=I.output.slice(0,-R.value.length),x.literalBrackets===true){I.output+=O,R.value=O;continue}R.value=`(${j}${O}|${R.value})`,I.output+=R.value;continue}if(M==="{"&&x.nobrace!==true){We("braces");let l={type:"brace",value:M,output:"(",outputIndex:I.output.length,tokensIndex:I.tokens.length};ve.push(l),m(l);continue}if(M==="}"){let l=ve[ve.length-1];if(x.nobrace===true||!l){m({type:"text",value:M,output:M});continue}let O=")";if(l.dots===true){let C=T.slice(),H=[];for(let q=C.length-1;q>=0;q--){if(T.pop(),C[q].type==="brace")break;if(C[q].type!=="dots")H.unshift(C[q].value)}O=f(H,x),I.backtrack=true}if(l.comma!==true&&l.dots!==true){let C=I.output.slice(0,l.outputIndex),H=I.tokens.slice(l.tokensIndex);l.value=l.output="\\{",M=O="\\}",I.output=C;for(let q of H)I.output+=q.output||q.value}m({type:"brace",value:M,output:O}),w("braces"),ve.pop();continue}if(M==="|"){if(pe.length>0)pe[pe.length-1].conditions++;m({type:"text",value:M});continue}if(M===","){let l=M,O=ve[ve.length-1];if(O&&ge[ge.length-1]==="braces")O.comma=true,l="|";m({type:"comma",value:M,output:l});continue}if(M==="/"){if(R.type==="dot"&&I.index===I.start+1){I.start=I.index+1,I.consumed="",I.output="",T.pop(),R=_;continue}m({type:"slash",value:M,output:ne});continue}if(M==="."){if(I.braces>0&&R.type==="dot"){if(R.value===".")R.output=V;let l=ve[ve.length-1];R.type="dots",R.output+=M,R.value+=M,l.dots=true;continue}if(I.braces+I.parens===0&&R.type!=="bos"&&R.type!=="slash"){m({type:"text",value:M,output:V});continue}m({type:"dot",value:M,output:V});continue}if(M==="?"){if(!(R&&R.value==="(")&&x.noextglob!==true&&le()==="("&&le(2)!=="?"){L("qmark",M);continue}if(R&&R.type==="paren"){let l=le(),O=M;if(R.value==="("&&!/[!=<:]/.test(l)||l==="<"&&!/<([!=]|\w+>)/.test(Me()))O=`\\${M}`;m({type:"text",value:M,output:O});continue}if(x.dot!==true&&(R.type==="slash"||R.type==="bos")){m({type:"qmark",value:M,output:ae});continue}m({type:"qmark",value:M,output:ie});continue}if(M==="!"){if(x.noextglob!==true&&le()==="("){if(le(2)!=="?"||!/[!=<:]/.test(le(3))){L("negate",M);continue}}if(x.nonegate!==true&&I.index===0){De();continue}}if(M==="+"){if(x.noextglob!==true&&le()==="("&&le(2)!=="?"){L("plus",M);continue}if(R&&R.value==="("||x.regex===false){m({type:"plus",value:M,output:de});continue}if(R&&(R.type==="bracket"||R.type==="paren"||R.type==="brace")||I.parens>0){m({type:"plus",value:M});continue}m({type:"plus",value:de});continue}if(M==="@"){if(x.noextglob!==true&&le()==="("&&le(2)!=="?"){m({type:"at",extglob:true,value:M,output:""});continue}m({type:"text",value:M});continue}if(M!=="*"){if(M==="$"||M==="^")M=`\\${M}`;let l=a.exec(Me());if(l)M+=l[0],I.index+=l[0].length;m({type:"text",value:M});continue}if(R&&(R.type==="globstar"||R.star===true)){R.type="star",R.star=true,R.value+=M,R.output=ue,I.backtrack=true,I.globstar=true,Ee(M);continue}let i=Me();if(x.noextglob!==true&&/^\([^?]/.test(i)){L("star",M);continue}if(R.type==="star"){if(x.noglobstar===true){Ee(M);continue}let l=R.prev,O=l.prev,C=l.type==="slash"||l.type==="bos",H=O&&(O.type==="star"||O.type==="globstar");if(x.bash===true&&(!C||i[0]&&i[0]!=="/")){m({type:"star",value:M,output:""});continue}let q=I.braces>0&&(l.type==="comma"||l.type==="brace"),se=pe.length&&(l.type==="pipe"||l.type==="paren");if(!C&&l.type!=="paren"&&!q&&!se){m({type:"star",value:M,output:""});continue}while(i.slice(0,3)==="/**"){let ye=A[I.index+4];if(ye&&ye!=="/")break;i=i.slice(3),Ee("/**",3)}let me=Ae()||I.parens>0&&i===")".repeat(I.parens)&&!pe.some((ye)=>ye.type==="negate");if(l.type==="bos"&&Ae()){R.type="globstar",R.value+=M,R.output=we(x),I.output=R.output,I.globstar=true,Ee(M);continue}if(l.type==="slash"&&l.prev.type!=="bos"&&!H&&me){I.output=I.output.slice(0,-(l.output+R.output).length),l.output=`(?:${l.output}`,R.type="globstar",R.output=we(x)+(x.strictSlashes?")":"|$)"),R.value+=M,I.globstar=true,I.output+=l.output+R.output,Ee(M);continue}if(l.type==="slash"&&l.prev.type!=="bos"&&i[0]==="/"){let ye=i[1]!==undefined?"|$":"";I.output=I.output.slice(0,-(l.output+R.output).length),l.output=`(?:${l.output}`,R.type="globstar",R.output=`${we(x)}${ne}|${ne}${ye})`,R.value+=M,I.output+=l.output+R.output,I.globstar=true,Ee(M+xe()),m({type:"slash",value:"/",output:""});continue}if(l.type==="bos"&&i[0]==="/"){R.type="globstar",R.value+=M,R.output=`(?:^|${ne}|${we(x)}${ne})`,I.output=R.output,I.globstar=true,Ee(M+xe()),m({type:"slash",value:"/",output:""});continue}I.output=I.output.slice(0,-R.output.length),R.type="globstar",R.output=we(x),R.value+=M,I.output+=R.output,I.globstar=true,Ee(M);continue}let p={type:"star",value:M,output:ue};if(x.bash===true){if(p.output=".*?",R.type==="bos"||R.type==="slash")p.output=_e+p.output;m(p);continue}if(R&&(R.type==="bracket"||R.type==="paren")&&x.regex===true){p.output=M,m(p);continue}if(I.index===I.start||R.type==="slash"||R.type==="dot"){if(R.type==="dot")I.output+=K,R.output+=K;else if(x.dot===true)I.output+=ee,R.output+=ee;else I.output+=_e,R.output+=_e;if(le()!=="*")I.output+=k,R.output+=k}m(p)}while(I.brackets>0){if(x.strictBrackets===true)throw SyntaxError(g("closing","]"));I.output=s.escapeLast(I.output,"["),w("brackets")}while(I.parens>0){if(x.strictBrackets===true)throw SyntaxError(g("closing",")"));I.output=s.escapeLast(I.output,"("),w("parens")}while(I.braces>0){if(x.strictBrackets===true)throw SyntaxError(g("closing","}"));I.output=s.escapeLast(I.output,"{"),w("braces")}if(x.strictSlashes!==true&&(R.type==="star"||R.type==="bracket"))m({type:"maybe_slash",value:"",output:`${ne}?`});if(I.backtrack===true){I.output="";for(let i of I.tokens)if(I.output+=i.output!=null?i.output:i.value,i.suffix)I.output+=i.suffix}return I};X.fastpaths=(A,W)=>{let x={...W},Z=typeof x.maxLength==="number"?Math.min(o,x.maxLength):o,U=A.length;if(U>Z)throw SyntaxError(`Input length: ${U}, exceeds maximum allowed length: ${Z}`);A=c[A]||A;let{DOT_LITERAL:_,SLASH_LITERAL:T,ONE_CHAR:j,DOTS_SLASH:B,NO_DOT:Q,NO_DOTS:V,NO_DOTS_SLASH:de,STAR:ne,START_ANCHOR:k}=n.globChars(x.windows),F=x.dot?V:Q,G=x.dot?de:Q,K=x.capture?"":"?:",ee={negated:false,prefix:""},ie=x.bash===true?".*?":ne;if(x.capture)ie=`(${ie})`;let ae=(_e)=>{if(_e.noglobstar===true)return ie;return`(${K}(?:(?!${k}${_e.dot?B:_}).)*?)`},fe=(_e)=>{switch(_e){case"*":return`${F}${j}${ie}`;case".*":return`${_}${j}${ie}`;case"*.*":return`${F}${ie}${_}${j}${ie}`;case"*/*":return`${F}${ie}${T}${j}${G}${ie}`;case"**":return F+ae(x);case"**/*":return`(?:${F}${ae(x)}${T})?${G}${j}${ie}`;case"**/*.*":return`(?:${F}${ae(x)}${T})?${G}${ie}${_}${j}${ie}`;case"**/.*":return`(?:${F}${ae(x)}${T})?${_}${j}${ie}`;default:{let Y=/^(.*?)\.(\w+)$/.exec(_e);if(!Y)return;let ue=fe(Y[1]);if(!ue)return;return ue+_+Y[2]}}},be=s.removePrefix(A,ee),we=fe(be);if(we&&x.strictSlashes!==true)we+=`${T}?`;return we};t.exports=X});var Ia=St(function(e,t){var n=ja(),s=Ma(),o=ss(),r=On(),a=(c)=>c&&typeof c==="object"&&!Array.isArray(c),d=(c,f,g=false)=>{if(Array.isArray(c)){let J=c.map((oe)=>d(oe,f,g));return(oe)=>{for(let X of J){let A=X(oe);if(A)return A}return false}}let y=a(c)&&c.tokens&&c.input;if(c===""||typeof c!=="string"&&!y)throw TypeError("Expected pattern to be a non-empty string");let E=f||{},v=E.windows,b=y?d.compileRe(c,f):d.makeRe(c,f,false,true),S=b.state;delete b.state;let N=()=>false;if(E.ignore){let J={...f,ignore:null,onMatch:null,onResult:null};N=d(E.ignore,J,g)}let z=(J,oe=false)=>{let{isMatch:X,match:A,output:W}=d.test(J,b,f,{glob:c,posix:v}),x={glob:c,state:S,regex:b,posix:v,input:J,output:W,match:A,isMatch:X};if(typeof E.onResult==="function")E.onResult(x);if(X===false)return x.isMatch=false,oe?x:false;if(N(J)){if(typeof E.onIgnore==="function")E.onIgnore(x);return x.isMatch=false,oe?x:false}if(typeof E.onMatch==="function")E.onMatch(x);return oe?x:true};if(g)z.state=S;return z};d.test=(c,f,g,{glob:y,posix:E}={})=>{if(typeof c!=="string")throw TypeError("Expected input to be a string");if(c==="")return{isMatch:false,output:""};let v=g||{},b=v.format||(E?o.toPosixSlashes:null),S=c===y,N=S&&b?b(c):c;if(S===false)N=b?b(c):c,S=N===y;if(S===false||v.capture===true)if(v.matchBase===true||v.basename===true)S=d.matchBase(c,f,g,E);else S=f.exec(N);return{isMatch:Boolean(S),match:S,output:N}};d.matchBase=(c,f,g,y=g&&g.windows)=>(f instanceof RegExp?f:d.makeRe(f,g)).test(o.basename(c,{windows:y}));d.isMatch=(c,f,g)=>d(f,g)(c);d.parse=(c,f)=>{if(Array.isArray(c))return c.map((g)=>d.parse(g,f));return s(c,{...f,fastpaths:false})};d.scan=(c,f)=>n(c,f);d.compileRe=(c,f,g=false,y=false)=>{if(g===true)return c.output;let E=f||{},v=E.contains?"":"^",b=E.contains?"":"$",S=`${v}(?:${c.output})${b}`;if(c&&c.negated===true)S=`^(?!${S}).*$`;let N=d.toRegex(S,f);if(y===true)N.state=c;return N};d.makeRe=(c,f={},g=false,y=false)=>{if(!c||typeof c!=="string")throw TypeError("Expected a non-empty string");let E={negated:false,fastpaths:true};if(f.fastpaths!==false&&(c[0]==="."||c[0]==="*"))E.output=s.fastpaths(c,f);if(!E.output)E=s(c,f);return d.compileRe(E,f,g,y)};d.toRegex=(c,f)=>{try{let g=f||{};return new RegExp(c,g.flags||(g.nocase?"i":""))}catch(g){if(f&&f.debug===true)throw g;return/$^/}};d.constants=r;t.exports=d});var La=St(function(e,t){var n=["||","&&",";;&",";;",";&","|&","<(",">(","<<<","<<-","<<",">>",">&",">|","&>>","&>","<&","<>","&",";","(",")","|","<",">"],s=/[\n\r\u2028\u2029]/,o=/[\s#!"$&'():;<=>@\\^`|~]/g;t.exports=function(r){var a=false;return r.map(function(d){if(a&&typeof d==="string"&&s.test(d))throw TypeError("a token after a `comment` must not contain line terminators");if(d==="")return"''";if(d&&typeof d==="object"){if("op"in d&&d.op==="glob"){if(typeof d.pattern!=="string")throw TypeError("glob token requires a string `pattern`");if(s.test(d.pattern))throw TypeError("glob `pattern` must not contain line terminators");if(d.pattern==="")return"''";return d.pattern.replace(o,"\\$&")}if("op"in d&&typeof d.op==="string"){if(n.indexOf(d.op)<0)throw TypeError("invalid `op` value: "+JSON.stringify(d.op));return d.op.replace(/[\s\S]/g,"\\$&")}if("comment"in d&&typeof d.comment==="string"){if(s.test(d.comment))throw TypeError("`comment` must not contain line terminators");return a=true,"#"+d.comment}throw TypeError("unrecognized object token shape")}if(/'/.test(d)&&/!/.test(d))return"'"+d.replace(/'/g,`'"'"'`)+"'";if(/["\s\\]/.test(d)&&!/'/.test(d))return"'"+d+"'";if(/["'\s]/.test(d))return'"'+d.replace(/(["\\$`])/g,"\\$1")+'"';return String(d).replace(/([A-Za-z]:)?([#!"$&'()*,:;<=>?@[\\\]^`{|}~])/g,"$1\\$2")}).join(" ")}});var Na=St(function(e,t){var n="(?:"+["\\|\\|","\\&(?:\\&|>>?)",";;\\&?","[;|]\\&","\\<\\(","\\<\\<\\<","\\<\\<-","\\<\\<(?!\\()",">>",">[&|(]","<[&>]","[&;()|<>]"].join("|")+")",s=new RegExp("^"+n+"$"),o="|&;()<> \\t",r="'([^']*?)'",a="(?:\\\\[\\s\\S]|[^\\\\'])*?",d="\\$'"+a+"'",c=new RegExp("\\$'"+a+"(?:(')|\\\\?$)","g"),f="abeEfnrtv",g=`\x07\b\x1B\x1B\f
-\r	\v`,y=/^#$/,E="'",v='"',b="$",S="",N=4294967296;for(z=0;z<4;z++)S+=(N*Math.random()).toString(16);var z,J=new RegExp("^"+S);function oe(_,T){var j=T.lastIndex,B=[],Q;while(Q=T.exec(_))if(B[B.length]=Q,T.lastIndex===Q.index)T.lastIndex+=1;return T.lastIndex=j,B}function X(_,T,j){var B=typeof _==="function"?_(j):_[j];if(typeof B>"u"&&j!="")B="";else if(typeof B>"u")B="$";if(typeof B==="object")return T+S+JSON.stringify(B)+S;return T+B}var A=/\\([0-7]{1,3}|x[\dA-Fa-f]{1,2}|u[\dA-Fa-f]{1,4}|U[\dA-Fa-f]{1,8}|c(?:\\\\|[\s\S])|[abeEfnrtv\\'"?])/g;function W(_,T){var j=T.charAt(0);if(j==="c"){var B=T.charAt(1);return B==="?"?"\u007f":String.fromCharCode(B.charCodeAt(0)&31)}if(j==="x"||j==="u"||j==="U"){var Q=parseInt(T.slice(1),16);if(Q>1114111)return _;return String.fromCharCode.apply(null,Q>65535?[55232+(Q>>10),56320+(Q&1023)]:[Q])}if(j>="0"&&j<="7")return String.fromCharCode(parseInt(T,8)&255);var V=f.indexOf(T);return V<0?T:g.charAt(V)}function x(_){return _.replace(A,W).split("\x00")[0]}function Z(_,T){return c.lastIndex=T,!!c.exec(_)[1]}function U(_,T,j){if(!j)j={};var B=j.escape||"\\",Q=j.splitUnquoted===true?` 	
-`:typeof j.splitUnquoted==="string"?j.splitUnquoted:"",V="(\\"+B+`['"$\\`+B+o+"]|\\$\\$|\\$(?!"+d.slice(2)+`)|[^\\s'"$`+o+"])+",de='"(?:\\'+B+'[\\s\\S]|[^"\\'+B+'])*"',ne=new RegExp(["("+n+")","("+d+"|"+V+"|"+de+"|"+r+")+"].join("|"),"g"),k=oe(_,ne);if(k.length===0)return[];if(!T)T={};var F=false;return k.map(function(G){var K=G[0];if(!K||F)return;if(s.test(K))return{op:K};var ee=false,ie=false,ae="",fe=[],be=false,we=null,_e=false,Y;function ue(){Y+=1;var le,xe,Me=K.charAt(Y);if(Me==="{"){if(Y+=1,K.charAt(Y)==="}")throw Error("Bad substitution: "+K.slice(Y-2,Y+1));var Ee=1;le=Y;while(Ee>0&&le<K.length){if(K.charAt(le)==="{"&&K.charAt(le-1)==="$")Ee+=1;else if(K.charAt(le)==="}")Ee-=1;le+=1}if(Ee!==0)throw Error("Bad substitution: "+K.slice(Y));le-=1,xe=K.slice(Y,le),Y=le}else if(/[*@#?$!-]/.test(Me))xe=Me;else{var Ie=K.slice(Y);if(le=Ie.match(/[^\w\d_]/),!le)xe=Ie,Y=K.length;else xe=Ie.slice(0,le.index),Y+=le.index-1}return X(T,"",xe)}function I(){if(we===null)return;if(we===0){if(ae!=="")fe[fe.length]=ae,ae=""}else{fe[fe.length]=ae,ae="";for(var le=1;le<we;le+=1)fe[fe.length]=""}we=null}for(Y=0;Y<K.length;Y++){var pe=K.charAt(Y);if(Q&&pe!==b)I();if(_e=_e||!ee&&(pe==="*"||pe==="?"),ie)ae+=pe,ie=false;else if(ee)if(pe===ee)ee=false;else if(ee==E)ae+=pe;else if(pe===B)if(Y+=1,pe=K.charAt(Y),pe===v||pe===B||pe===b)ae+=pe;else ae+=B+pe;else if(pe===b)ae+=ue();else ae+=pe;else if(pe===v||pe===E)ee=pe,be=true;else if(s.test(pe))return{op:K};else if(y.test(pe)){F=true;var ve={comment:_.slice(G.index+Y+1)};if(ae.length)return[ae,ve];return[ve]}else if(pe===B)ie=true;else if(pe===b&&K.charAt(Y+1)===E&&Z(K,Y))I(),be=true,ae+=x(K.slice(Y+2,c.lastIndex-1)),Y=c.lastIndex-1;else if(pe===b){var ge=ue();if(!Q)ae+=ge;else for(var R=0;R<ge.length;R+=1){var M=ge.charAt(R);if(Q.indexOf(M)<0)I(),ae+=M;else if(we===null)we=M===" "||M==="\t"||M===`
-`?0:1;else if(M!==" "&&M!=="\t"&&M!==`
-`)we+=1}}else ae+=pe}if(_e)return{op:"glob",pattern:ae};if(Q){if(we!==null&&we>0){fe[fe.length]=ae,ae="";for(var Ae=1;Ae<we;Ae+=1)fe[fe.length]=""}if(ae!==""||be&&fe.length===0)fe[fe.length]=ae;return fe}return ae}).reduce(function(G,K){if(typeof K>"u")return G;return[].concat(K).forEach(function(ee){G[G.length]=ee}),G},[])}t.exports=function(_,T,j){var B=U(_,T,j);if(typeof T!=="function")return B;return B.reduce(function(Q,V){if(typeof V==="object")return Q[Q.length]=V,Q;var de=V.split(RegExp("("+S+".*?"+S+")","g"));if(de.length===1)return Q[Q.length]=de[0],Q;return de.filter(Boolean).forEach(function(ne){Q[Q.length]=J.test(ne)?JSON.parse(ne.split(S)[1]):ne}),Q},[])}});var Vf=typeof self<"u"&&self.location&&self.location.origin!=="null"?new URL(self.location.origin+self.location.pathname+location.search):new URL("https://github.com/cfworker");var Fa=/^(\d\d\d\d)-(\d\d)-(\d\d)$/;var Da=[0,31,28,31,30,31,30,31,31,30,31,30,31];var Wa=/^(\d\d):(\d\d):(\d\d)(\.\d+)?(z|[+-]\d\d(?::?\d\d)?)?$/i;var Ba=/^(?=.{1,253}\.?$)[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[-0-9a-z]{0,61}[0-9a-z])?)*\.?$/i;var Ha=/^(?:[a-z][a-z0-9+\-.]*:)?(?:\/?\/(?:(?:[a-z0-9\-._~!$&'()*+,;=:]|%[0-9a-f]{2})*@)?(?:\[(?:(?:(?:(?:[0-9a-f]{1,4}:){6}|::(?:[0-9a-f]{1,4}:){5}|(?:[0-9a-f]{1,4})?::(?:[0-9a-f]{1,4}:){4}|(?:(?:[0-9a-f]{1,4}:){0,1}[0-9a-f]{1,4})?::(?:[0-9a-f]{1,4}:){3}|(?:(?:[0-9a-f]{1,4}:){0,2}[0-9a-f]{1,4})?::(?:[0-9a-f]{1,4}:){2}|(?:(?:[0-9a-f]{1,4}:){0,3}[0-9a-f]{1,4})?::[0-9a-f]{1,4}:|(?:(?:[0-9a-f]{1,4}:){0,4}[0-9a-f]{1,4})?::)(?:[0-9a-f]{1,4}:[0-9a-f]{1,4}|(?:(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}(?:25[0-5]|2[0-4]\d|[01]?\d\d?))|(?:(?:[0-9a-f]{1,4}:){0,5}[0-9a-f]{1,4})?::[0-9a-f]{1,4}|(?:(?:[0-9a-f]{1,4}:){0,6}[0-9a-f]{1,4})?::)|[Vv][0-9a-f]+\.[a-z0-9\-._~!$&'()*+,;=:]+)\]|(?:(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}(?:25[0-5]|2[0-4]\d|[01]?\d\d?)|(?:[a-z0-9\-._~!$&'"()*+,;=]|%[0-9a-f]{2})*)(?::\d*)?(?:\/(?:[a-z0-9\-._~!$&'"()*+,;=:@]|%[0-9a-f]{2})*)*|\/(?:(?:[a-z0-9\-._~!$&'"()*+,;=:@]|%[0-9a-f]{2})+(?:\/(?:[a-z0-9\-._~!$&'"()*+,;=:@]|%[0-9a-f]{2})*)*)?|(?:[a-z0-9\-._~!$&'"()*+,;=:@]|%[0-9a-f]{2})+(?:\/(?:[a-z0-9\-._~!$&'"()*+,;=:@]|%[0-9a-f]{2})*)*)?(?:\?(?:[a-z0-9\-._~!$&'"()*+,;=:@/?]|%[0-9a-f]{2})*)?(?:#(?:[a-z0-9\-._~!$&'"()*+,;=:@/?]|%[0-9a-f]{2})*)?$/i;var za=/^(?:(?:[^\x00-\x20"'<>%\\^`{|}]|%[0-9a-f]{2})|\{[+#./;?&=,!@|]?(?:[a-z0-9_]|%[0-9a-f]{2})+(?::[1-9][0-9]{0,3}|\*)?(?:,(?:[a-z0-9_]|%[0-9a-f]{2})+(?::[1-9][0-9]{0,3}|\*)?)*\})*$/i;var Ua=/^(?:(?:https?|ftp):\/\/)(?:\S+(?::\S*)?@)?(?:(?!10(?:\.\d{1,3}){3})(?!127(?:\.\d{1,3}){3})(?!169\.254(?:\.\d{1,3}){2})(?!192\.168(?:\.\d{1,3}){2})(?!172\.(?:1[6-9]|2\d|3[0-1])(?:\.\d{1,3}){2})(?:[1-9]\d?|1\d\d|2[01]\d|22[0-3])(?:\.(?:1?\d{1,2}|2[0-4]\d|25[0-5])){2}(?:\.(?:[1-9]\d?|1\d\d|2[0-4]\d|25[0-4]))|(?:(?:[a-z\u{00a1}-\u{ffff}0-9]+-?)*[a-z\u{00a1}-\u{ffff}0-9]+)(?:\.(?:[a-z\u{00a1}-\u{ffff}0-9]+-?)*[a-z\u{00a1}-\u{ffff}0-9]+)*(?:\.(?:[a-z\u{00a1}-\u{ffff}]{2,})))(?::\d{2,5})?(?:\/[^\s]*)?$/iu;var Ga=/^(?:urn:uuid:)?[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;var Ka=/^(?:\/(?:[^~/]|~0|~1)*)*$/;var Ja=/^#(?:\/(?:[a-z0-9_\-.!$&'()*+,;:=@]|%[0-9a-f]{2}|~0|~1)*)*$/i;var Va=/^(?:0|[1-9][0-9]*)(?:#|(?:\/(?:[^~/]|~0|~1)*)*)$/;var Xa=(e)=>{if(e[0]==='"')return false;let[t,n,...s]=e.split("@");if(!t||!n||s.length!==0||t.length>64||n.length>253)return false;if(t[0]==="."||t.endsWith(".")||t.includes(".."))return false;if(!/^[a-z0-9.-]+$/i.test(n)||!/^[a-z0-9.!#$%&'*+/=?^_`{|}~-]+$/i.test(t))return false;return n.split(".").every((o)=>/^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/i.test(o))};var qa=/^(?:(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}(?:25[0-5]|2[0-4]\d|[01]?\d\d?)$/;var Za=/^((([0-9a-f]{1,4}:){7}([0-9a-f]{1,4}|:))|(([0-9a-f]{1,4}:){6}(:[0-9a-f]{1,4}|((25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3})|:))|(([0-9a-f]{1,4}:){5}(((:[0-9a-f]{1,4}){1,2})|:((25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3})|:))|(([0-9a-f]{1,4}:){4}(((:[0-9a-f]{1,4}){1,3})|((:[0-9a-f]{1,4})?:((25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}))|:))|(([0-9a-f]{1,4}:){3}(((:[0-9a-f]{1,4}){1,4})|((:[0-9a-f]{1,4}){0,2}:((25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}))|:))|(([0-9a-f]{1,4}:){2}(((:[0-9a-f]{1,4}){1,5})|((:[0-9a-f]{1,4}){0,3}:((25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}))|:))|(([0-9a-f]{1,4}:){1}(((:[0-9a-f]{1,4}){1,6})|((:[0-9a-f]{1,4}){0,4}:((25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}))|:))|(:(((:[0-9a-f]{1,4}){1,7})|((:[0-9a-f]{1,4}){0,5}:((25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}))|:)))$/i;var Qa=(e)=>e.length>1&&e.length<80&&(/^P\d+([.,]\d+)?W$/.test(e)||/^P[\dYMDTHS]*(\d[.,]\d+)?[YMDHS]$/.test(e)&&/^P([.,\d]+Y)?([.,\d]+M)?([.,\d]+D)?(T([.,\d]+H)?([.,\d]+M)?([.,\d]+S)?)?$/.test(e));function nt(e){return e.test.bind(e)}var Xf={date:Lr,time:Nr.bind(undefined,false),"date-time":tc,duration:Qa,uri:rc,"uri-reference":nt(Ha),"uri-template":nt(za),url:nt(Ua),email:Xa,hostname:nt(Ba),ipv4:nt(qa),ipv6:nt(Za),regex:ic,uuid:nt(Ga),"json-pointer":nt(Ka),"json-pointer-uri-fragment":nt(Ja),"relative-json-pointer":nt(Va)};function Ya(e){return e%4===0&&(e%100!==0||e%400===0)}function Lr(e){let t=e.match(Fa);if(!t)return false;let n=+t[1],s=+t[2],o=+t[3];return s>=1&&s<=12&&o>=1&&o<=(s==2&&Ya(n)?29:Da[s])}function Nr(e,t){let n=t.match(Wa);if(!n)return false;let s=+n[1],o=+n[2],r=+n[3],a=!!n[5];return(s<=23&&o<=59&&r<=59||s==23&&o==59&&r==60)&&(!e||a)}var ec=/t|\s/i;function tc(e){let t=e.split(ec);return t.length==2&&Lr(t[0])&&Nr(true,t[1])}var nc=/\/|:/;var sc=/^(?:[a-z][a-z0-9+\-.]*:)(?:\/?\/(?:(?:[a-z0-9\-._~!$&'()*+,;=:]|%[0-9a-f]{2})*@)?(?:\[(?:(?:(?:(?:[0-9a-f]{1,4}:){6}|::(?:[0-9a-f]{1,4}:){5}|(?:[0-9a-f]{1,4})?::(?:[0-9a-f]{1,4}:){4}|(?:(?:[0-9a-f]{1,4}:){0,1}[0-9a-f]{1,4})?::(?:[0-9a-f]{1,4}:){3}|(?:(?:[0-9a-f]{1,4}:){0,2}[0-9a-f]{1,4})?::(?:[0-9a-f]{1,4}:){2}|(?:(?:[0-9a-f]{1,4}:){0,3}[0-9a-f]{1,4})?::[0-9a-f]{1,4}:|(?:(?:[0-9a-f]{1,4}:){0,4}[0-9a-f]{1,4})?::)(?:[0-9a-f]{1,4}:[0-9a-f]{1,4}|(?:(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}(?:25[0-5]|2[0-4]\d|[01]?\d\d?))|(?:(?:[0-9a-f]{1,4}:){0,5}[0-9a-f]{1,4})?::[0-9a-f]{1,4}|(?:(?:[0-9a-f]{1,4}:){0,6}[0-9a-f]{1,4})?::)|[Vv][0-9a-f]+\.[a-z0-9\-._~!$&'()*+,;=:]+)\]|(?:(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}(?:25[0-5]|2[0-4]\d|[01]?\d\d?)|(?:[a-z0-9\-._~!$&'()*+,;=]|%[0-9a-f]{2})*)(?::\d*)?(?:\/(?:[a-z0-9\-._~!$&'()*+,;=:@]|%[0-9a-f]{2})*)*|\/(?:(?:[a-z0-9\-._~!$&'()*+,;=:@]|%[0-9a-f]{2})+(?:\/(?:[a-z0-9\-._~!$&'()*+,;=:@]|%[0-9a-f]{2})*)*)?|(?:[a-z0-9\-._~!$&'()*+,;=:@]|%[0-9a-f]{2})+(?:\/(?:[a-z0-9\-._~!$&'()*+,;=:@]|%[0-9a-f]{2})*)*)(?:\?(?:[a-z0-9\-._~!$&'()*+,;=:@/?]|%[0-9a-f]{2})*)?(?:#(?:[a-z0-9\-._~!$&'()*+,;=:@/?]|%[0-9a-f]{2})*)?$/i;function rc(e){return nc.test(e)&&sc.test(e)}var oc=/[^\\]\\Z/;function ic(e){if(oc.test(e))return false;try{return new RegExp(e,"u"),true}catch(t){return false}}var ac=/^[A-Za-z]:\//;function Fr(e=""){if(!e)return e;return e.replace(/\\/g,"/").replace(ac,(t)=>t.toUpperCase())}var cc=/^[/\\](?![/\\])|^[/\\]{2}(?!\.)|^[A-Za-z]:[/\\]/;var Ir=/^\/([A-Za-z]:)?$/;function dc(){return"/"}var Ge=function(...e){e=e.map((s)=>Fr(s));let t="",n=false;for(let s=e.length-1;s>=-1&&!n;s--){let o=s>=0?e[s]:dc();if(!o||o.length===0)continue;t=`${o}/${t}`,n=Vt(o)}if(t=uc(t,!n),n&&!Vt(t))return`/${t}`;return t.length>0?t:"."};function uc(e,t){let n="",s=0,o=-1,r=0,a=null;for(let d=0;d<=e.length;++d){if(d<e.length)a=e[d];else if(a==="/")break;else a="/";if(a==="/"){if(o===d-1||r===1);else if(r===2){if(n.length<2||s!==2||n[n.length-1]!=="."||n[n.length-2]!=="."){if(n.length>2){let c=n.lastIndexOf("/");if(c===-1)n="",s=0;else n=n.slice(0,c),s=n.length-1-n.lastIndexOf("/");o=d,r=0;continue}else if(n.length>0){n="",s=0,o=d,r=0;continue}}if(t)n+=n.length>0?"/..":"..",s=2}else{if(n.length>0)n+=`/${e.slice(o+1,d)}`;else n=e.slice(o+1,d);s=d-o-1}o=d,r=0}else if(a==="."&&r!==-1)++r;else r=-1}return n}var Vt=function(e){return cc.test(e)};var rs=function(e,t){let n=Ge(e).replace(Ir,"$1").split("/"),s=Ge(t).replace(Ir,"$1").split("/");if(s[0][1]===":"&&n[0][1]===":"&&n[0]!==s[0])return s.join("/");let o=[...n];for(let r of o){if(s[0]!==r)break;n.shift(),s.shift()}return[...n.map(()=>".."),...s].join("/")};var Ke=function(e,t){let n=Fr(e).split("/"),s="";for(let o=n.length-1;o>=0;o--){let r=n[o];if(r){s=r;break}}return t&&s.endsWith(t)?s.slice(0,-t.length):s};var fc=Ta(Ia(),1);var qf=La();var An=Na();var Cn=fc.default;var lc=/(?:^|: )(?:ENOENT|ENOTDIR)\b/;function Xt(e){return lc.test(re(e))}function Te(e){return(t)=>{if(Xt(t))return e;throw t}}var qt=/^(~|\$HOME|\$CLAUDE_CONFIG_DIR)(?=\/|$)/;function En(e,t,n=`${t}/.claude`){const s=qt.exec(e)?.[0];if(s===undefined)return e;return`${s==="$CLAUDE_CONFIG_DIR"?n:t}${e.slice(s.length)}`}function os(e,t){if(t===e)return"";const n=e==="/"?"/":`${e}/`;return t.startsWith(n)?t.slice(n.length):undefined}var lt=600000;var pc=1e4;var Pn=1e4;class Zt extends Error{}var _n=globalThis;function is(e,t,n){const s=typeof n[1]==="function";const o=s?n[1]:n[0];const r=(s?n[2]:n[1])??{};if(typeof o!=="function")throw new Error(`${e}: ${t} takes a listener, or a matcher and then a listener.`);const{timeoutMs:a,onFailure:d}=r;if(a!==undefined&&(typeof a!=="number"||!Number.isInteger(a)||a<=0||a>lt))throw new Error(`${e}: ${t}'s timeoutMs is ${String(a)}. Give a whole number of milliseconds above 0 and at most ${lt}.`);if(d!==undefined&&d!=="pass"&&d!=="refuse")throw new Error(`${e}: ${t}'s onFailure is ${String(d)}. Give 'pass' or 'refuse'.`);return{matcher:s?n[0]:undefined,listener:o,options:r}}async function Wr(e,t,{timeoutMs:n=pc},s,o){const r=new AbortController;const a=await e.now()+n;s.throwIfAborted();let d;let c=()=>{return};const f=new Promise((g,y)=>{d=_n.setTimeout(()=>{r.abort();y(new Zt(`${t} passed its ${n/1000} s timeout`))},n);c=()=>y(s.reason);s.addEventListener("abort",c,{once:true})});try{return await Promise.race([Promise.resolve().then(()=>o({deadline:a,signal:AbortSignal.any([r.signal,s])})),f])}finally{_n.clearTimeout(d);s.removeEventListener("abort",c)}}var mc=1000;function Qt(e,t){if(t===undefined)return e;return new Promise((n,s)=>{let o;const r=()=>void(o=_n.setTimeout(()=>s(t.reason),mc));if(t.aborted)r();else t.addEventListener("abort",r,{once:true});e.then(n,s).finally(()=>{_n.clearTimeout(o);t.removeEventListener("abort",r)})})}function jt(e,{ms:t,job:n},s,o){return new Promise((r,a)=>{const d=n===undefined?`its ${t/1000} s deadline`:`the ${t/1000} s deadline of ${n}`;const c=e.clock.after(t,()=>a(new Error(`${s} passed ${d}`)));o.then((f)=>{c.cancel();r(f)},(f)=>{c.cancel();a(f)})})}var Pe="cmod";var Br="cmod:isLoaded";async function Hr(e,t,n){const s=Object.hasOwn(t,n.method)?t[n.method]:undefined;if(s===undefined)return{deny:`${e} has no method ${n.method}.`};try{return{value:await s(n.input)}}catch(o){return{deny:`${e}: ${re(o)}`}}}function zr(e,t){const n=(s)=>new Proxy({},{get:(o,r)=>typeof r==="string"&&r!=="then"?(a)=>t(`mod.dependencies.${s}.${r}`,e.cmod.call({to:s,method:r,input:a})):undefined});return new Proxy({},{get:(s,o)=>typeof o==="string"&&o!=="then"?n(o):undefined})}function Rn(e){const t=`${e.plugin.name}: $.cmod.call: `;const n=(s)=>e.cmod.call(s).catch((o)=>{const r=re(o);throw r.startsWith(t)?new Error(r.slice(t.length),{cause:o}):o});return{...e,cmod:{call:n}}}function as(e,t){const n=e.plugin.name;const s=async(o)=>{if(o.to!==n)return e.cmod.call(o);const r=await t.dispatch("cmod.call",{...o,caller:n},async()=>({deny:`${n} has no method ${o.method}.`}));if(r.deny!==undefined)throw new Error(r.deny);return r.value};return{...e,cmod:{call:s}}}function Tn(e){return`${e} is installing. Try again when it's ready.`}function st(e,t){return re(t).endsWith(Tn(e))}function hc(e){return`${e} did not answer in time, so Claude Code went on without it.`}var cs=`it ran past the ${Pn/1000} s Claude Code gives a hook`;function ds(e){const t=[Tn(""),hc(""),`: ${cs}`];for(let n=e;n!==undefined;n=n instanceof Error?n.cause:undefined){const s=re(n);if(t.some((o)=>s.endsWith(o)))return true}return false}function Ur(e,t){let n;const s=new Map;const o=(r)=>{if(r.agent_id===undefined)n=r.agent_type};t.add("classic.SessionStart",(r,a)=>{o(r);return a(r)});t.add("classic.UserPromptSubmit",(r,a)=>{o(r);return a(r)});t.add("tool.call",async(r,a)=>{if(r.agentId===undefined)return a(r);s.set(r.tool_use_id,r.agentId);try{return await a(r)}finally{s.delete(r.tool_use_id)}});return{async agentOf(r){const a=r===undefined?undefined:s.get(r);const d=a===undefined?n:(await e.agent.list()).find((c)=>c.id===a)?.type;return{...a===undefined?{}:{agentId:a},...d===undefined?{}:{agentType:d}}}}}function xc(e,t){if(e.type===Ue&&t.output!==undefined&&e.message.type===bt)return{...e,message:{...e.message,output:t.output}};if(e.type===Ue&&t.text!==undefined)return{...e,message:{...e.message,text:t.text}};if(e.type===Ue&&t.input!==undefined&&e.message.type===xt)return{...e,message:{...e.message,input:t.input}};if(e.type===Ye){const{agentType:n,model:s}=t.owner??{};return{...e,task:{...e.task,...t.title===undefined?{}:{title:t.title},...n===undefined?{}:{agentType:n},...s===undefined?{}:{model:s}}}}return e}var jn=(e,t)=>`${e}${Object.entries(vt).find(([,n])=>n===t)?.[0]??t}`;var Mt={prompt:["text","note","title","refuse"],note:["text"],skill:["text"],instructionFile:["text","refuse"],attachedFile:["text","refuse"],reply:["text"],toolCall:["input","result","refuse","note"],toolResult:["output","isError","note"],notice:["text"],taskStart:["prompt","title","owner","isAsync","refuse"],turnEnd:["refuse","note"],contextEnd:["refuse","summary"]};function us(e,t,n,s){return fs(jn("before",e),Mt[e],["refuse","result"],t,n,s,xc)}function Mn(e,t,n){if(n===undefined||n===null||n===false)return;if(typeof n!=="object"||Array.isArray(n))throw new Error(`it answered ${JSON.stringify(n)}, but ${e} takes an object or nothing: ${t.map((o)=>`{ ${o} }`).join(", ")||"no answer"}.`);const s=Object.keys(n).filter((o)=>!t.includes(o));if(s.length>0)throw new Error(`it answered ${s.join(" and ")}, which ${e} does not take. It takes ${t.map((o)=>`{ ${o} }`).join(", ")||"no answer"}.`);return n}async function fs(e,t,n,s,o,r,a=(d)=>d){let d=s;let c;for(const f of o){try{const g=Mn(e,t,await f(d));if(typeof g!=="object"||g===null)continue;const y=g;const E=[c?.["note"],y["note"]].filter((v)=>typeof v==="string");c={...c,...y,...E.length===0?{}:{note:E.join(`
+// node_modules/@cmodjs/core/hotkeys.js
+var hotkeyName = /^[A-Za-z][A-Za-z0-9_]{0,63}$/;
+var comboShape = /^(?:(?:ctrl|alt|shift|meta)\+){1,2}(?:[a-z0-9]|f(?:[1-9]|1[0-2])|tab|enter|escape|space|backspace|delete|up|down|left|right|home|end|pageup|pagedown|[`\-=[\]\\;',./])$/;
+var order = ["ctrl", "alt", "shift", "meta"];
+function isCombo(value) {
+  if (typeof value !== "string" || !comboShape.test(value))
+    return false;
+  const modifiers = value.split("+").slice(0, -1);
+  return modifiers.every((each, index) => index === 0 || order.indexOf(each) > order.indexOf(modifiers[index - 1]));
+}
+function checkHotkeys(name, hotkeys) {
+  const combos = new Map;
+  for (const [key, declared] of Object.entries(hotkeys)) {
+    const at = `${name}: hotkeys.${key}`;
+    if (!hotkeyName.test(key))
+      throw new Error(`${at} is not a hotkey name. Use letters, digits, and _, starting with a letter.`);
+    if (declared.title.trim() === "")
+      throw new Error(`${at} needs a title, the label Settings shows beside its combo.`);
+    if (declared.default === undefined)
+      continue;
+    if (!isCombo(declared.default))
+      throw new Error(`${at} defaults to "${String(declared.default)}", which is not a combo. Give one or two of ctrl, alt, shift, meta in that order, then a key, such as "ctrl+q" or "ctrl+shift+k".`);
+    const taken = combos.get(declared.default);
+    if (taken !== undefined)
+      throw new Error(`${at} defaults to ${declared.default}, which hotkeys.${taken} has too. Give each hotkey its own combo.`);
+    combos.set(declared.default, key);
+  }
+  return hotkeys;
+}
 
-`)}};if(n.some((v)=>y[v]!==undefined))return c;d=a(d,g)}catch(g){r(g)}}return c}function Gr(e){const t=e.trim();return t===""?undefined:t.slice(t.lastIndexOf(`
-`)+1).trim()}function In(e,t){const n=Gr(e)??"";const s=`cmod ${t}: `;return n.startsWith(s)?n.slice(s.length):n}async function Ot(e,t){let n="";let s="";let o=await e.next();while(o.done!==true){if(o.value.stream==="stderr"){s=Gr(o.value.text)??s}else{const r=`${n}${o.value.text}`.split(`
-`);n=r.pop()??"";for(const a of r)t(a)}o=await e.next()}if(n!=="")t(n);return{code:o.value.code,lastError:s}}function Ln(e,t,n,s={}){return e.process.spawn({argv:["cmod",...t],env:{...s,CLAUDE_CODE_SESSION_ID:n}})}async function ls(e,t,n){const s=await e.clock.now();const o=await e.fs.list(t).catch(Te([]));const r=await Promise.all(o.map(async({name:a})=>(await e.fs.stat(`${t}/${a}`).catch(Te(undefined)))?.mtimeMs??0));return r.some((a)=>s-a<n)}async function It(e){const t=yt({HOME:await e.env.home(),XDG_DATA_HOME:await e.env.dataHome()});return ur({list:async(n)=>(await e.fs.list(n).catch(Te([]))).map((s)=>s.name),exists:async(n)=>await e.fs.stat(n).catch(Te(undefined))!==undefined},t)}async function ps(e,t,n){const s=[];const{code:o,lastError:r}=await Ot(Ln(e,t,n),(a)=>void s.push(a));if(o!==0)throw new Error(In(r,t[0])||`cmod ${t.slice(0,2).join(" ")} ${Ve(o,"")}.`);return s.join(`
-`)}function Kr(e){let t;let n=new Set;const s=(o)=>{const[r,...a]=o;return t!==undefined&&r!==undefined&&(r==="cmod"||n.has(r))?[`${t}/${r}`,...a]:o};return{claude:{...e,process:{run:(o,r)=>e.process.run(s(o),r),spawn:(o)=>e.process.spawn({...o,argv:s(o.argv)})}},async refresh(){const[o,r]=await Promise.all([e.env.home(),e.env.dataHome()]);const a=`${yt({HOME:o,XDG_DATA_HOME:r})}/programs`;n=new Set((await e.fs.list(a).catch(Te([]))).map((d)=>d.name));t=a}}}var Jr=/\u0001(\d+)\u0001/g;var Vr=/[0-9]+(?=[<>])/y;var xs=/^[A-Za-z_][A-Za-z0-9_]*(\[[^\]]*\])?\+?=/;var bs=/[$`]/;var bc=/^\$HOME(?=\/|$)/;var kc=/^-[A-Za-z0-9]{2,}$/;var vc=";&|()<>";var Sc=new Set([">",">>",">|","&>","&>>",">&","<","<>","<&","<<<"]);var Oc=new Set([">",">>",">|","&>","&>>","<>"]);var Ac=new Set([";","&","&&","||","|","|&"]);var Cc=new Set([";;",";&",";;&"]);var eo=new Set(["if","then","else","elif","fi","do","done","while","until","esac","{","}","!"]);var Ec=new Set(["sh","bash","zsh"]);var _c=new Set(["-exec","-execdir","-ok","-okdir"]);var Pc=new Set(["-C","-c","--git-dir","--work-tree","--namespace","--config-env","--super-prefix","--attr-source"]);var Rc=new Set(["find","java","javac","go","gcc","g++","clang","clang++","swift","swiftc","xcodebuild","xcrun","ffmpeg","ffprobe","openssl","plutil","defaults","security","codesign"]);var ms={valued:"efmABCdD",longValued:["--regexp","--file","--max-count","--after-context","--before-context","--context","--directories","--devices","--binary-files","--label","--include","--exclude","--exclude-dir","--exclude-from"],scriptOptions:["-e","-f","--regexp","--file"]};var ys={valued:"fFvi",longValued:["--file","--field-separator","--assign","--include","--source"],scriptOptions:["-f","--file","--source"],takesAssignments:true,inPlaceOptions:["-i","--include"]};var $s={valued:"efl",optional:"iI",longValued:["--expression","--file","--line-length"],scriptOptions:["-e","-f","--expression","--file"],inPlaceOptions:["-i","-I","--in-place"]};var Xr={valued:"eEIMmF",optional:"ixdDC",scriptOptions:["-e","-E"],inPlaceOptions:["-i"]};var Tc=new Map([["tee",{}],["rm",{}],["touch",{valued:"drt",longValued:["--date","--reference","--time"]}],["truncate",{valued:"sr",longValued:["--size","--reference"]}]]);var hs={valued:"tS",longValued:["--target-directory","--suffix"],targetOptions:["-t","--target-directory"]};var jc=new Map([["cp",{...hs,sources:"reads"}],["mv",{...hs,sources:"writes"}],["ln",{...hs,sources:undefined,linksHere:true}],["rsync",{valued:"efBTM",longValued:["--rsh","--rsync-path","--filter","--exclude","--include","--exclude-from","--include-from","--files-from","--temp-dir","--compare-dest","--copy-dest","--link-dest","--backup-dir","--suffix","--chmod","--chown","--usermap","--groupmap","--timeout","--contimeout","--bwlimit","--log-file","--log-file-format","--out-format","--password-file","--port","--sockopts","--max-size","--min-size","--max-delete","--partial-dir","--block-size","--modify-window","--iconv","--checksum-choice","--compress-choice","--compress-level","--remote-option","--info","--debug","--address","--write-batch","--only-write-batch","--read-batch","--protocol","--skip-compress"],sources:"reads",skipsRemote:true}]]);var Mc=new Map([["curl",{valued:"AbcCdDeEFHKmoPQrTtuUwxXyYz",longValued:["--url","--data","--data-raw","--data-binary","--data-urlencode","--data-ascii","--json","--form","--form-string","--header","--proxy-header","--user","--user-agent","--referer","--output","--output-dir","--cookie","--cookie-jar","--request","--proxy","--proxy-user","--preproxy","--noproxy","--max-time","--connect-timeout","--retry","--retry-delay","--retry-max-time","--range","--continue-at","--upload-file","--write-out","--cert","--cert-type","--key","--key-type","--cacert","--capath","--ciphers","--config","--dump-header","--interface","--limit-rate","--max-filesize","--max-redirs","--resolve","--connect-to","--oauth2-bearer","--aws-sigv4","--unix-socket","--abstract-unix-socket","--variable","--url-query","--trace","--trace-ascii","--stderr","--keepalive-time","--local-port","--dns-servers","--doh-url","--quote","--telnet-option","--time-cond","--speed-limit","--speed-time","--etag-save","--etag-compare","--hsts","--alt-svc","--mail-from","--mail-rcpt","--mail-auth","--pass","--proto","--proto-redir","--pubkey","--socks4","--socks4a","--socks5","--socks5-hostname"]}],["wget",{valued:"aoeiBtOTwQPlARDIXU",longValued:["--output-file","--append-output","--execute","--input-file","--base","--tries","--output-document","--timeout","--dns-timeout","--connect-timeout","--read-timeout","--wait","--waitretry","--quota","--limit-rate","--directory-prefix","--level","--accept","--reject","--domains","--exclude-domains","--include-directories","--exclude-directories","--user-agent","--header","--user","--password","--http-user","--http-password","--post-data","--post-file","--body-data","--body-file","--method","--referer","--load-cookies","--save-cookies","--certificate","--private-key","--ca-certificate","--ca-directory","--bind-address","--cut-dirs","--default-page","--restrict-file-names","--local-encoding","--remote-encoding"]}]]);var Ic={valued:"cgGsw",longValued:["--command","--session-command","--group","--supp-group","--shell","--whitelist-environment"]};var Lc=["-c","--command","--session-command"];var to=new Map([["cat",{}],["head",{valued:"nc",longValued:["--lines","--bytes"]}],["tail",{valued:"ncbs",longValued:["--lines","--bytes","--pid","--sleep-interval","--max-unchanged-stats"]}],["less",{valued:"bhjkoOpPtTxyz"}],["grep",ms],["egrep",ms],["fgrep",ms],["rg",{valued:"efgtTmABCjMrEd",longValued:["--regexp","--file","--glob","--iglob","--type","--type-not","--type-add","--max-count","--after-context","--before-context","--context","--threads","--max-columns","--replace","--encoding","--max-depth","--max-filesize","--sort","--sortr","--pre","--pre-glob","--engine","--ignore-file","--path-separator","--context-separator","--field-match-separator","--field-context-separator"],scriptOptions:["-e","-f","--regexp","--file"]}],["awk",ys],["gawk",ys],["sed",$s],["gsed",$s]]);var ks=new Map([["sudo",{valued:"CDghpRrTtUu",longValued:["--close-from","--chdir","--group","--host","--prompt","--chroot","--role","--type","--command-timeout","--other-user","--user"],stops:["-e","--edit","-l","--list","-v","--validate","-V","--version","-K","--remove-timestamp"],folderOptions:["-D","--chdir"],takesAssignments:true}],["env",{valued:"aCPSu",longValued:["--argv0","--chdir","--split-string","--unset"],folderOptions:["-C","--chdir"],codeOptions:["-S","--split-string"],takesAssignments:true}],["doas",{valued:"aCu",stops:["-C","-L"]}],["timeout",{valued:"ks",longValued:["--kill-after","--signal"],leadingOperands:1}],["flock",{valued:"wEc",longValued:["--timeout","--wait","--conflict-exit-code","--command"],codeOptions:["-c","--command"],leadingOperands:1}],["stdbuf",{valued:"ioe",longValued:["--input","--output","--error"]}],["watch",{valued:"nq",optional:"d",longValued:["--interval","--equexit"],shellUnless:["-x","--exec"]}],["nohup",{}],["nice",{valued:"n",longValued:["--adjustment"]}],["time",{valued:"fo",longValued:["--format","--output"]}],["exec",{valued:"a"}],["command",{stops:["-v","-V"]}],["xargs",{valued:"aEdILnPs",optional:"eil",longValued:["--arg-file","--delimiter","--max-args","--max-chars","--max-procs","--process-slot-var"]}]]);var Nc=new Map([["python",["-c"]],["python2",["-c"]],["python3",["-c"]],["node",["-e","--eval","-p","--print"]],["bun",["-e","--eval","-p","--print"]],["deno",["eval"]],["ruby",["-e"]],["perl",["-e","-E"]],["php",["-r"]],["lua",["-e"]],["osascript",["-e"]]]);function vs(e){const t={commands:[],writes:[],reads:[],fetches:[],isFullyParsed:true};At(e,"",t);return t}function At(e,t,n){if(e.includes("\x01")){n.isFullyParsed=false;return}try{const{text:s,markers:o}=Ss(e,0,false);Bc(An(s,(r)=>r===""?undefined:`$${r}`),o,t,n)}catch(s){if(!(s instanceof SyntaxError)&&!(s instanceof Error&&s.message.startsWith("Bad substitution: ")))throw s;n.isFullyParsed=false}}function Ss(e,t,n){const s=[];const o=[];const r=(y)=>`\x01${s.push(y)-1}\x01`;let a="";let d=0;let c=0;let f=t;let g=true;while(f<e.length){const y=e.charAt(f);const E=e.charAt(f+1);if(y===`
-`){a+=" ; ";f=Wc(e,f+1,o.splice(0));g=true;continue}if(y===" "||y==="\t"){a+=y;f+=1;g=true;continue}if(y==="#"){if(g)f=so(e,f);else{a+="\\#";f+=1}continue}if(y==="\\"){if(E==="")throw new SyntaxError("The line ends with a backslash.");if(E!==`
-`){a+=y+E;g=false}f+=2;continue}if(y==="'"||y==="$"&&E==="'"){const b=Cs(e,f+(y==="$"?2:1),"'",y==="$");a+=e.slice(f,b+1);f=b+1;g=false;continue}if(y==='"'){const b=Fc(e,f,r);a+=b.text;f=b.end;g=false;continue}const v=Os(e,f);if(v!==undefined){a+=r(v);f=v.end;g=false;continue}if((y==="<"||y===">")&&E==="("){const b=Ss(e,f+2,true).end;a+=r({raw:e.slice(f,b+1),code:[e.slice(f+2,b)]});f=b+1;g=false;continue}if(y==="("&&E==="("&&g){const b=no(e,f+2);if(b!==undefined){if(As(e.slice(f+2,b-2)).length>0)throw new SyntaxError("An arithmetic command runs a substitution.");f=b;continue}}if(e.startsWith("<<<",f)){a+="<<<";f+=3;g=true;continue}if(y==="<"&&E==="<"){const b=Dc(e,f);o.push(b);a+=` <<< ${r(b.marker)} `;f=b.end;g=true;continue}if(g){Vr.lastIndex=f;const b=Vr.exec(e);if(b!==null){f+=b[0].length;continue}if(qr(e,f,"case"))c+=1;if(qr(e,f,"esac")&&c>0)c-=1}if(y==="(")d+=1;if(y===")"){if(d>0)d-=1;else if(c===0){if(!n)throw new SyntaxError("The line closes a parenthesis it never opened.");if(o.length>0)throw new SyntaxError("A heredoc inside a substitution has no body.");return{text:a,markers:s,end:f}}}a+=y;f+=1;g=vc.includes(y)}if(n)throw new SyntaxError("A substitution is never closed.");if(d>0)throw new SyntaxError("A parenthesis is never closed.");if(o.length>0)throw new SyntaxError("A heredoc has no body.");return{text:a,markers:s,end:f}}function Fc(e,t,n){let s='"';let o=t+1;while(o<e.length){const r=e.charAt(o);if(r==='"')return{text:`${s}"`,end:o+1};if(r==="\\"){if(e.charAt(o+1)!==`
-`)s+=e.slice(o,o+2);o+=2;continue}const a=Os(e,o);if(a!==undefined){s+=n(a);o=a.end;continue}s+=r;o+=1}throw new SyntaxError("A double quote is never closed.")}function Os(e,t){if(e.startsWith("$((",t)){const n=no(e,t+3);if(n!==undefined)return{raw:e.slice(t,n),code:As(e.slice(t+3,n-2)),end:n}}if(e.startsWith("$(",t)){const n=Ss(e,t+2,true).end;return{raw:e.slice(t,n+1),code:[e.slice(t+2,n)],end:n+1}}if(e.charAt(t)==="`"){const n=Cs(e,t+1,"`",true);return{raw:e.slice(t,n+1),code:[e.slice(t+1,n).replace(/\\([\\`$])/g,"$1")],end:n+1}}return}function As(e){const t=[];let n=0;while(n<e.length){if(e.charAt(n)==="\\"){n+=2;continue}const s=Os(e,n);if(s===undefined)n+=1;else{t.push(...s.code);n=s.end}}return t}function no(e,t){let n=0;for(let s=t;s<e.length;s+=1){const o=e.charAt(s);if(o==="(")n+=1;if(o!==")")continue;if(n>0)n-=1;else return e.charAt(s+1)===")"?s+2:undefined}throw new SyntaxError("An arithmetic expansion is never closed.")}function Cs(e,t,n,s){for(let o=t;o<e.length;o+=1){const r=e.charAt(o);if(s&&r==="\\")o+=1;else if(r===n)return o}throw new SyntaxError(`A ${n} quote is never closed.`)}function so(e,t){const n=e.indexOf(`
-`,t);return n<0?e.length:n}function qr(e,t,n){return e.startsWith(n,t)&&/^$|[\s;&|()<>]/.test(e.charAt(t+n.length))}function Dc(e,t){let n=t+2;const s=e.charAt(n)==="-";if(s)n+=1;while(e.charAt(n)===" "||e.charAt(n)==="\t")n+=1;let o="";let r=false;while(n<e.length&&!/[\s;&|()<>]/.test(e.charAt(n))){const a=e.charAt(n);if(a==="'"||a==='"'){const d=Cs(e,n+1,a,a==='"');o+=e.slice(n+1,d);r=true;n=d+1}else if(a==="\\"){o+=e.charAt(n+1);r=true;n+=2}else{o+=a;n+=1}}if(o==="")throw new SyntaxError("A heredoc has no delimiter.");return{delimiter:o,stripsTabs:s,isQuoted:r,marker:{raw:"",code:[]},end:n}}function Wc(e,t,n){let s=t;for(const o of n){const r=[];for(;;){if(s>=e.length)throw new SyntaxError(`The heredoc ${o.delimiter} never ends.`);const a=so(e,s);const d=o.stripsTabs?e.slice(s,a).replace(/^\t+/,""):e.slice(s,a);s=a+1;if(d===o.delimiter)break;r.push(d)}o.marker.raw=r.join(`
-`);o.marker.code=o.isQuoted?[]:As(o.marker.raw)}return s}function Bc(e,t,n,s){let o=n;const r=[];let a=gs(undefined);let d;for(let c=0;c<e.length;c+=1){const f=e[c];if(typeof f!=="string"&&"comment"in f)throw new SyntaxError("The line holds a comment the scanner left.");if(ws(f)){const b=Zr(f,t,o,s);if(d==="header"){if(b.text==="in")d="pattern"}else if(d==="pattern"){if(b.text==="esac")d=undefined}else if(b.text==="case"&&a.words.every((S)=>eo.has(S.text))){d="header"}else a.words.push(b);continue}const g=f.op;if(Sc.has(g)){const b=e[c+1];if(b===undefined||!ws(b))throw new SyntaxError(`The redirection ${g} has no target.`);c+=1;a.redirects.push({operator:g,target:Zr(b,t,o,s)});continue}if(d!==undefined){if(d==="pattern"&&g===")")d=undefined;continue}const y=e[c+1];if(g==="("&&a.words.length===1&&y!==undefined&&!ws(y)&&"op"in y&&y.op===")"){a=gs(undefined);c+=1;continue}const E=s.commands.length;o=Qr(a,g,o,s);const v=s.commands.length>E?s.commands.length-1:undefined;a=gs(g==="|"||g==="|&"?{writer:v}:undefined);if(g==="(")r.push(o);else if(g===")"){const b=r.pop();if(b===undefined)throw new SyntaxError("The line closes a subshell it never opened.");o=b}else if(Cc.has(g))d="pattern";else if(!Ac.has(g))throw new SyntaxError(`The parser does not know the operator ${g}.`)}Qr(a,";",o,s)}function gs(e){return{words:[],redirects:[],pipe:e}}function ws(e){return typeof e==="string"||"op"in e&&e.op==="glob"}function Zr(e,t,n,s){const o=typeof e==="string"?e:e.pattern;for(const r of o.matchAll(Jr)){for(const a of t[Number(r[1])].code)At(a,n,s)}return{text:o.replace(Jr,(r,a)=>t[Number(a)].raw),isGlob:typeof e!=="string",isDynamic:/[$\u0001]/.test(Ke(o))}}function Qr(e,t,n,s){for(const b of e.redirects)zc(b,n,s);const o=Hc(e.words);const[r,...a]=o;if(r===undefined||r.text==="for"||r.text==="select")return n;const d=e.redirects.findLast((b)=>b.operator==="<<<");const c=d!==undefined?{type:"text",text:d.target.text}:e.pipe!==undefined?{type:"pipe"}:undefined;const f=s.commands.length;const g=Es(r,a,n,c,s);const y=s.commands[f];const E=e.pipe?.writer;if(y!==undefined&&E!==undefined&&d===undefined)s.commands[f]={...y,input:E};const v=e.pipe!==undefined||t==="|"||t==="|&"||t==="&";return g===undefined||v?n:g}function Hc(e){let t=0;for(;;){const n=e[t]?.text;if(n===undefined)break;if(n==="function")t+=2;else if(eo.has(n)||xs.test(n))t+=1;else break}return e.slice(t)}function zc({operator:e,target:t},n,s){if(e==="<"||e==="<>")ot(s,"reads",t,n);if(Oc.has(e)||e===">&"&&!/^([0-9]+|-)$/.test(t.text))ot(s,"writes",t,n)}function Es(e,t,n,s,o){if(e.isDynamic||e.isGlob)o.isFullyParsed=false;const r=Ke(e.text);if(r==="git")Uc(e,t,n,o);else if(r==="find")Gc(e,t,n,o);else if(ks.has(r))Jc(e,r,t,n,s,o);else{const a=_s(r,t);o.commands.push({argv:[e.text,...a],folder:n});Vc(r,t,a,n,s,o);if(r==="cd")return td(t,n)}return}function Uc(e,t,n,s){let o=0;let r=n;for(let a=t[0]?.text;a?.startsWith("-")===true;a=t[o]?.text){if(a==="-C")r=Fn(r,t[o+1]?.text??"");if(a==="-c"&&/^alias\.[^=]*=\s*!/i.test(t[o+1]?.text??""))s.isFullyParsed=false;o+=Pc.has(a)?2:1}s.commands.push({argv:[e.text,..._s("git",t.slice(o))],folder:r})}function Gc(e,t,n,s){const o=[];const r=[];for(let a=0;a<t.length;a+=1){const d=t[a].text;if(!_c.has(d)){o.push(d);continue}const c=t.findIndex((f,g)=>g>a&&(f.text===";"||f.text==="+"));r.push(t.slice(a+1,c<0?t.length:c));a=c<0?t.length:c}s.commands.push({argv:[e.text,...o],folder:n});if(o.includes("-delete"))for(const a of Kc(t))ot(s,"writes",a,n);for(const[a,...d]of r){if(a!==undefined)Es(a,d,n,undefined,s)}}function Kc(e){let t=0;for(let o=e[0]?.text;o==="-D"||/^-([HLP]|O\d*)$/.test(o??"");o=e[t]?.text)t+=o==="-D"?2:1;const n=e.findIndex((o,r)=>r>=t&&/^[-(!),]/.test(o.text));const s=e.slice(t,n<0?e.length:n);return s.length>0?s:[Nn(".")]}function Jc(e,t,n,s,o,r){const a=ks.get(t);if(t==="xargs"&&o?.type!=="text")r.isFullyParsed=false;const{options:d,operands:c}=rt(n,a,true);let f=n.length-c.length;if(d.some((J)=>a.stops?.includes(J.name)===true))f=n.length;f+=a.leadingOperands??0;while(a.takesAssignments===true&&xs.test(n[f]?.text??""))f+=1;const g=a.codeOptions?.includes(n[f]?.text??"")===true;r.commands.push({argv:[e.text,..._s(t,n.slice(0,f))],folder:s});const y=d.findLast((J)=>a.folderOptions?.includes(J.name)===true)?.value;const E=y===undefined?s:Fn(s,y.text);const v=g?n[f+1]:d.findLast((J)=>a.codeOptions?.includes(J.name)===true)?.value;const b=n.slice(g?f+2:f);const S=a.shellUnless!==undefined&&!d.some((J)=>a.shellUnless?.includes(J.name)===true);if(v!==undefined||S){At([...v===undefined?[]:[v],...b].map((J)=>J.text).join(" "),E,r);return}const[N,...z]=b;if(N!==undefined)Es(N,z,E,o,r)}function Vc(e,t,n,s,o,r){const a=to.get(e);const d=Tc.get(e);const c=jc.get(e);const f=Mc.get(e);const g=Nc.get(e);if(e==="eval")r.isFullyParsed=false;else if(Ec.has(e))Xc(t,s,o,r);else if(e==="ssh")qc(t,o,r);else if(e==="su")Zc(t,s,r);else if(e==="source"||e===".")ot(r,"reads",rt(t,{},true).operands[0],s);else if(e==="dd")for(const y of t.filter((E)=>E.text.startsWith("of=")))ot(r,"writes",{...y,text:y.text.slice(3)},s);else if(d!==undefined)for(const y of rt(t,d,false).operands)ot(r,"writes",y,s);else if(c!==undefined)Yc(c,t,s,r);else if(a!==undefined)Yr(a,t,s,r);else if(f!==undefined)Qc(f,t,r);else if(g!==undefined){if(e==="perl"&&rt(t,Xr,false).options.some((v)=>v.name==="-i"))Yr(Xr,t,s,r);const y=t.find((v)=>!v.text.startsWith("-")||v.text==="-");const E=o?.type==="pipe"&&(y===undefined||y.text==="-");if(n.some((v)=>g.includes(v))||o?.type==="text"||E)r.isFullyParsed=false}}function Xc(e,t,n,s){const{options:o,operands:r}=rt(e,{valued:"oO",longValued:["--rcfile","--init-file"]},true);const a=r[0];if(o.some((d)=>d.name==="-c")){if(a!==undefined)At(a.text,t,s)}else if(a===undefined||o.some((d)=>d.name==="-s"))ro(n,t,s)}function qc(e,t,n){const{operands:s}=rt(e,{valued:"BbcDEeFIiJLlmOoPpQRSWw"},true);const o=s.slice(1);if(o.length>0)At(o.map((r)=>r.text).join(" "),"~",n);else if(s.length>0)ro(t,"~",n)}function Zc(e,t,n){const s=rt(e,Ic,false).options.findLast((o)=>Lc.includes(o.name))?.value;if(s!==undefined)At(s.text,t,n)}function Qc(e,t,n){const{options:s,operands:o}=rt(t,e,false);const r=[...s.filter((a)=>a.name==="--url").flatMap((a)=>a.value===undefined?[]:[a.value]),...o];for(const a of r)n.fetches.push(/^[a-z][a-z0-9+.-]*:\/\//i.test(a.text)?a.text:`http://${a.text}`)}function ro(e,t,n){if(e?.type==="text")At(e.text,t,n);if(e?.type==="pipe")n.isFullyParsed=false}function Yc(e,t,n,s){const{options:o,operands:r}=rt(t,e,false);const a=o.findLast((y)=>e.targetOptions?.includes(y.name)===true)?.value;const d=r[0];if(e.linksHere===true&&a===undefined&&r.length===1&&d!==undefined){ot(s,"writes",{...d,text:Ke(d.text)},n);return}const c=a??r.at(-1);const f=a===undefined?r.slice(0,-1):r;if(c===undefined||f.length===0)return;const g=(y)=>e.skipsRemote!==true||!/^[^/]*:/.test(y.text);for(const y of f.filter(g)){if(e.sources!==undefined)ot(s,e.sources,y,n);if(g(c)&&!y.isGlob&&!c.isGlob)oo(s,"writes",`${c.text.replace(/\/+$/,"")}/${Ke(y.text)}`,n)}if(g(c))ot(s,"writes",c,n)}function Yr(e,t,n,s){const{options:o,operands:r}=rt(t,e,false);const a=o.find((c)=>e.inPlaceOptions?.includes(c.name)===true&&(e!==ys||c.value?.text==="inplace"));let d=r;if(e===$s&&a!==undefined&&a.value===undefined){const c=d[0]?.text;const f=o.some((g)=>e.scriptOptions?.includes(g.name)===true);if(c===""||!f&&c!==undefined&&/^\.[\w.-]*$/.test(c))d=d.slice(1)}if(e.scriptOptions!==undefined&&!o.some((c)=>e.scriptOptions?.includes(c.name)===true))d=d.slice(1);if(e.takesAssignments===true)d=d.filter((c)=>!xs.test(c.text));for(const c of d)ot(s,a===undefined?"reads":"writes",c,n)}function rt(e,t,n){const s=[];const o=[];for(let r=0;r<e.length;r+=1){const a=e[r];const d=a.text;if(d==="--"){o.push(...e.slice(r+1));break}if(a.isGlob||d==="-"||!d.startsWith("-")){if(n){o.push(...e.slice(r));break}o.push(a);continue}if(d.startsWith("--")){const c=d.indexOf("=");if(c>=0)s.push({name:d.slice(0,c),value:Nn(d.slice(c+1))});else if(t.longValued?.includes(d)===true){s.push({name:d,value:e[r+1]});r+=1}else s.push({name:d,value:undefined});continue}for(let c=1;c<d.length;c+=1){const f=d.charAt(c);const g=d.slice(c+1);if(t.optional?.includes(f)===true){s.push({name:`-${f}`,value:g===""?undefined:Nn(g)});break}if(t.valued?.includes(f)===true){if(g!=="")s.push({name:`-${f}`,value:Nn(g)});else{s.push({name:`-${f}`,value:e[r+1]});r+=1}break}s.push({name:`-${f}`,value:undefined})}}return{options:s,operands:o}}function _s(e,t){const n=t.map((a)=>a.text);if(Rc.has(e))return n;const s=to.get(e)??ks.get(e);const o=`${s?.valued??""}${s?.optional??""}`;const r=n.indexOf("--");return n.flatMap((a,d)=>r>=0&&d>r||!kc.test(a)?[a]:ed(a,o))}function ed(e,t){const n=[];for(let s=1;s<e.length;s+=1){const o=e.charAt(s);if(t.includes(o)&&s<e.length-1)return[...n,`-${e.slice(s)}`];n.push(`-${o}`)}return n}function td(e,t){const n=e.find((s)=>!s.text.startsWith("-")||s.text==="-");if(n===undefined)return"~";return Fn(t,n.text==="-"?"$OLDPWD":n.text)}function ot(e,t,n,s){if(n!==undefined&&!n.isGlob)oo(e,t,n.text,s)}function oo(e,t,n,s){if(n===""||n.startsWith("/dev/"))return;const o=Fn(s,n);if(bs.test(o.replace(bc,"")))e.isFullyParsed=false;e[t].push(o)}function Fn(e,t){return e===""||/^(\/|~|\$HOME(\/|$))/.test(t)?t:`${e}/${t}`}function Nn(e){return{text:e,isGlob:false,isDynamic:false}}function io(e,t){const{fs:n}=t;const s=(a,d=t.cwd)=>Ge(d,En(a,t.home,t.configRoot));const o=(a)=>({path:s(a),contents:undefined});const r={shell:undefined,reads:[],writes:[],urls:[],subagent:undefined};if(e.tool==="Bash"){const a=Xe(e,"command");const d=vs(a);const c=d.commands.map(({argv:f,folder:g})=>({argv:f,folder:s(g)}));r.shell={line:a,commands:c,isFullyParsed:d.isFullyParsed};r.reads=d.reads.map(o);r.writes=d.writes.map(o);r.urls=d.fetches}else if(e.tool==="PowerShell"){r.shell={line:Xe(e,"command"),commands:[],isFullyParsed:false}}else if(e.tool==="Edit"){const a=s(Xe(e,"file_path"));r.writes=[{path:a,contents:Ps(()=>nd(e,a,n))}]}else if(e.tool==="Write"){const a=s(Xe(e,"file_path"));const d=Xe(e,"content");r.writes=[{path:a,contents:Ps(async()=>Yt(d,await Ts(a,n)))}]}else if(e.tool==="NotebookEdit"){const a=s(Xe(e,"notebook_path"));r.writes=[{path:a,contents:Ps(async()=>Yt(undefined,await Ts(a,n)))}]}else if(e.tool==="Read"){r.reads=[o(Xe(e,"file_path"))]}else if(e.tool==="Grep"){r.reads=[o(Rs(e,"path")??"")]}else if(e.tool==="Glob"){const a=s(Rs(e,"path")??"");r.reads=[{path:s(Xe(e,"pattern"),a),contents:undefined}]}else if(e.tool==="WebFetch"){r.urls=[Xe(e,"url")]}else if(e.tool==="Agent"){r.subagent=Rs(e,"subagent_type")??"general-purpose"}return r}async function nd(e,t,n){const s=await Ts(t,n);const o=Xe(e,"old_string");const r=Xe(e,"new_string");if(o==="")return Yt(s===undefined||s===""?r:undefined,s);if(s===undefined||!s.includes(o))return Yt(undefined,s);const a=js(e,"replace_all")===true?s.split(o).join(r):s.replace(o,()=>r);return Yt(a,s)}async function Ts(e,t){const n=await t.stat(e).catch(Te(undefined));return n?.kind==="file"?t.read(e):undefined}function Yt(e,t){return{...e===undefined?{}:{content:e},...t===undefined?{}:{previousContent:t}}}function Ps(e){let t;return()=>t??=e()}function js(e,t){return e.input[t]}class Dn extends Error{}function Xe(e,t){const n=js(e,t);if(typeof n!=="string")throw new Dn(`The ${e.tool} call has no text field ${t}.`);return n}function Rs(e,t){return js(e,t)===undefined?undefined:Xe(e,t)}function ao(e,t,n){const s=async(o,r)=>{const a=await Promise.resolve().then(()=>t(o,r.signal)).catch((d)=>{n({id:`hook:${e}`,message:`The ${e} listener failed`,error:d});return});if(a===undefined)return r(o);return lo(await r(o),a)};return s}function co(e){const t=async(n,s,o)=>{const r=await e(n,s);return r===undefined?undefined:lo(await o(n),r)};return t}var sd=/^---\r?\n[\s\S]*?\r?\n---[ \t]*(?:\r?\n|$)/;var rd=/^Base directory for this skill: [^\n]*\n\n/;function uo(e){return async(t,n)=>{const{name:s,root:o}=e.plugin;if(!t.skill.startsWith(`${s}:`))return n(t);const r=t.skill.slice(s.length+1);const a=`${o}/skills`;if(!await e.fs.exists(a)||!(await e.fs.list(a)).some((c)=>c.name===r))return n(t);if((await e.fs.stat(`${a}/${r}`)).kind!=="dir")return n(t);const d={HOME:await e.env.home(),CLAUDE_CONFIG_DIR:await e.env.configHome()};for(const{folder:c}of hn(d,s,await e.session.root()).toReversed()){const f=`${c}/skills/${r}/SKILL.md`;if(await e.fs.exists(f))return{text:`${rd.exec(t.text)?.[0]??""}${(await e.fs.read(f)).replace(sd,"")}`}}return n(t)}}async function fo(e,t,n,s,o){try{const{home:r,configRoot:a}=await n;if(r===undefined)throw new Error("HOME is not set, so ~ in a path has no meaning.");const{shell:d,reads:c,writes:f}=io(s,{cwd:o,home:r,...a===undefined?{}:{configRoot:a},fs:t.fs});const g=(v)=>v.map(({path:b})=>b).filter((b)=>d===undefined||!bs.test(b));const y=(v)=>(b)=>{if(!Xt(b))t.ui.warn("call:files",`${e}: the ${s.tool} call reads ${v}, which could not be checked: ${re(b)}`);return};const E=await Promise.all(g(c).map(async(v)=>(await t.fs.stat(v).catch(y(v)))?.kind==="file"?[v]:[]));return{read:E.flat(),changed:g(f)}}catch(r){if(!(r instanceof Dn))t.ui.warn("call:files",`${e}: the ${s.tool} call lists no files: ${re(r)}`);return{read:[],changed:[]}}}function lo(e,t){const n={...e,...t};const s=[...e["additionalContext"]??[],...t["additionalContext"]??[]];if(s.length>0)n["additionalContext"]=s;return n}var Lt="*";var Ne={sessions:"cmod:sessions",search:"cmod:search",messages:"cmod:messages",turns:"cmod:turns",contexts:"cmod:contexts",tasks:"cmod:tasks",goal:"cmod:goal",updateGoal:"cmod:updateGoal",subscribe:"cmod:subscribe",watchBefore:"cmod:watchBefore",act:"cmod:act",changed:"cmod:changed",before:"cmod:before",sessionColor:"cmod:sessionColor"};async function ho(e){const[t,n]=await Promise.all([e.session.model(),e.session.usage()]);const{tokens:s,window:o,percent:r}=n.context;const a=n.rateLimits.map(({kind:d,percentUsed:c,resetsAt:f})=>({type:d,percent:c,...f===undefined?{}:{resetsAt:f}}));return{model:t,contextWindow:{...s===undefined?{}:{tokenCount:s},size:o,...r===undefined?{}:{percent:r}},rateLimits:a,...n.cost===undefined?{}:{cost:{usd:n.cost.usd}}}}function Is(e){if(e.type===Ue)return e.message;if("turn"in e)return e.turn;if("context"in e)return e.context;if("task"in e){const{id:t,title:n,agentType:s,model:o,openedBy:r,openedAt:a,closedAt:d,isBackground:c,forkedFrom:f}=e.task;const g={id:t,title:n,...s===undefined?{}:{agentType:s},...o===undefined?{}:{model:o},...f===undefined?{}:{forkedFrom:f},startedAt:a};return{id:t,title:n,openedBy:r,openedAt:a,...d===undefined?{}:{closedAt:d},...c===true?{isBackground:c}:{},owner:g}}if("usage"in e)return e.usage;return e.goal}function go(e,t,n){const s=n.type===Ue?e===Ue||e===n.message.type:e===n.type;return s&&(t===undefined||tt(Is(n),t))}function wo(e){if(e.type===Ue)return e.message.task;if(e.type===Ye||e.type===Rt)return e.task.id===""?e.task.parent:e.task.id;if(e.type===Tt||e.type===kt)return e.turn.prompt.task;if(e.type===bn||e.type===Jt)return e.context.task;if(e.type===kn)return e.goal.task;return}function od(e){if(e.type===Ye||e.type===Rt)return e.task.parent;return wo(e)}function id(e){if(e.type===Ue)return e.message.context;if(e.type===Tt||e.type===kt)return e.turn.context;if(e.type===bn||e.type===Jt)return e.context.number;if(e.type===Ye||e.type===Rt)return e.task.context;return}function en(e,t,n,s){if(e.session!==undefined&&e.session!==t)return false;const o=wo(n);if(e.isAgent===true)return(n.type===Ye||n.type===Rt?n.task.parent:o)===e.task;if(e.task!==undefined&&(o===undefined||!s(o,e.task)))return false;if(e.context!==undefined&&(id(n)!==e.context||od(n)!==e.task))return false;if(e.turn===undefined)return true;if(n.type===Ue)return n.message.turn===e.turn;return(n.type===Tt||n.type===kt)&&n.turn.prompt.id===e.turn}function ad(e,t){return`${e}: ${t} hears Claude Code's permission check, so hooks/register.ts must call registerPermissionCheck(addHook) after registerMod.`}function yo({name:e,claude:t,report:n,hookOn:s,routeOn:o,permissionRoutes:r}){const a=(w,m)=>t.cmod.call({to:Pe,method:w,input:m});const d=new Map;const c=new Map;const f=new Set;const g=new Map;const y=new Map;const E=new Map;let v={id:"",title:"",project:"",cwd:"",model:"",startedAt:"",lastAt:"",isRunning:true};let b={session:""};const S=({color:w,...m})=>b.session===m.id&&b.color!==undefined?{...m,color:b.color}:m;const N=(w)=>w.session??Lt;const z=(w)=>{if(f.has(w))return;f.add(w);Promise.resolve().then(async()=>{f.delete(w);const m=(i)=>[...i.get(w)??[]].map(({event:p,matcher:l,options:O,scope:C})=>({event:p,matcher:l===undefined?undefined:Sn(l),...O.onFailure==="refuse"?{onFailure:"refuse",scope:C}:{}}));const L=[...d.get(w)??[],...c.get(w)??[]].some(({scope:i})=>i.task!==undefined||i.isGoal===true);const u=[...m(d),...L?[{event:Ye}]:[]];await a(Ne.subscribe,{session:w,subscriptions:u}).catch((i)=>n(`sessions:${w}`,`Hears nothing from ${w===Lt?"the other sessions":`session ${w}`}`,i));await a(Ne.watchBefore,{session:w,subscriptions:m(c)}).catch((i)=>n(`before:${w}`,`Changes nothing in ${w===Lt?"the other sessions":`session ${w}`}`,i))})};const J=(w)=>{const m=g.get(w);if(m!==undefined)return m;const L=y.get(w);if(L!==undefined)return L;const u=a(Ne.tasks,{session:w,all:true}).then((i)=>{const p=new Map(i.map((l)=>[l.id,l.parent]));g.set(w,p);return p}).finally(()=>y.delete(w));y.set(w,u);return u};const oe=(w)=>(m,L)=>{for(let u=m,i=0;u!==undefined&&i<64;u=w?.get(u),i+=1)if(u===L)return true;return false};const X=({scope:w},m,L)=>{if(w.task===undefined||w.isAgent===true)return en(w,m,L,oe(undefined));const u=J(m);if(u instanceof Map)return en(w,m,L,oe(u));return u.then((i)=>en(w,m,L,oe(i)),(i)=>{if(!st(Pe,i))n(`tasks:${m}`,"Could not read the tasks it listens under",i);return false})};const A=(w,m)=>{if(m.type!==Ye)return;g.get(w)?.set(m.task.id,m.task.parent);y.get(w)?.then((L)=>L.set(m.task.id,m.task.parent),(L)=>t.ui.warn("tasks:read",`${e}: the tasks of ${w} stay unread until the next change: ${re(L)}`))};const W=(w,m,L,u,i,p)=>{const l=N(m);const O={scope:m,event:L,method:u,...is(e,u,i)};const C=w.get(l)??new Set;C.add(O);w.set(l,C);p(l);return{remove(){for(const[H,q]of w){if(!q.delete(O))continue;if(q.size===0)w.delete(H);p(H);return}}}};const x=(w,m,L)=>w.onFailure==="refuse"&&m.includes("refuse")?{refuse:`${e}: ${re(L)}`}:undefined;const Z=(w,m,L,u,i=[])=>Wr(t.clock,w,m,L,u).catch((p)=>{if(L.aborted||p instanceof Zt&&!w.startsWith("before"))return;n(`session:${w}`,`The ${w} listener failed`,p);return x(m,i,p)});const U=(w,m,L)=>[...c.get(w)??[],...L?c.get(Lt)??[]:[]].filter((u)=>u.event===m);const _=async(w,m,L)=>(w.matcher===undefined||tt(Is(L),w.matcher))&&await X(w,m,L);const T=async(w,m,L,u,i)=>{const p=U(w,m,u).map((O)=>async(C)=>{if(!await _(O,w,C))return;const H=await ee(w,C);return Z(O.method,O.options,i,async(q)=>Mn(O.method,Mt[m],await O.listener(H,q)),Mt[m])});const l=await us(m,L,p,(O)=>n(`session:${jn("before",m)}`,`The ${jn("before",m)} listener failed`,O));return l?.note===undefined?l:{...l,note:et(e,l.note)}};const j=(w,m,L)=>{const u=(i,p,l)=>(...O)=>{if(L!==undefined)throw new Error(`${e}: ${L} has ended, so its ${p} never fires. Listen on its Session.`);return W(i,w(),l,p,O,z)};return Object.fromEntries([...Object.entries(vt).map(([i,p])=>[`on${i}`,u(d,`on${i}`,p)]),...m?Tr.map((i)=>[`before${i}`,u(c,`before${i}`,vt[i])]):[]])};let B;const Q=async(w)=>{if(w.type!==xt&&w.type!==bt)return w;B??=Promise.all([t.env.home(),t.env.configHome()]).then(([m,L])=>({home:m,configRoot:L}));return{...w,files:await fo(e,t,B,{tool:w.name,input:w.input},w.cwd)}};const V=async(w,m)=>Promise.all((await a(w,m)).map(Q));const de=(w,m)=>({async*[Symbol.asyncIterator](){let L=w["before"];for(;;){const u=await V(Ne.search,{...w,...L===undefined?{}:{before:L}});for(const p of u)if(m===undefined||tt(p,m))yield p;const i=u.at(-1);if(i===undefined||u.length<Rr)return;L={session:i.session,id:i.id}}}});const ne=(w,m)=>({search:(L,u)=>de({text:L,...w},u),...j(()=>w,true,m)});const k=(w,m)=>{const L=m.prompt.task??w.task;return{...m,...ne({...w,...L===undefined?{}:{task:L},turn:m.prompt.id},m.closedAt===undefined?undefined:`turn ${m.prompt.id}`),messages:()=>V(Ne.messages,{session:w.session,turn:m.prompt.id,...L===undefined?{}:{task:L}}),abort:async()=>{if(m.closedAt!==undefined)throw new Error(`${e}: turn ${m.prompt.id} has ended, so there is nothing to abort.`);const u=w.session??v.id;await ie(u,"abort",{turn:m.prompt.id},L===undefined?undefined:{session:u,task:L})}}};const F=(w,m)=>{const L={...w.session===undefined?{}:{session:w.session},...m.task===undefined?{}:{task:m.task}};return{...m,...ne({...L,context:m.number},m.closedAt===undefined?undefined:`context ${m.number}`),turns:async()=>(await a(Ne.turns,{...L,context:m.number})).map((u)=>k(L,u))}};const G=(w,m)=>{const L=m.isBackground===true?{session:m.id}:{session:w,task:m.id};return{id:m.id,title:m.title,openedBy:m.openedBy,openedAt:m.openedAt,...m.closedAt===undefined?{}:{closedAt:m.closedAt},...m.status===undefined?{}:{status:m.status},...m.name===undefined?{}:{name:m.name},...m.spawnedBy===undefined?{}:{spawnedBy:m.spawnedBy},...m.isBackground===true?{isBackground:true}:{},owner:we(w,m),...ne({session:w,task:m.id}),search:(u,i)=>de({text:u,...L},i),tasks:async()=>(await a(Ne.tasks,L)).map((u)=>G(L.session,u)),messages:()=>V(Ne.messages,L)}};const K=(w)=>({search:(m,L)=>de({text:m,...w()},L),...j(()=>({...w(),isGoal:true}),true),text:async()=>(await a(Ne.goal,w())).text,tasks:async()=>{const{session:m=v.id,task:L}=w();return(await a(Ne.tasks,{session:m,...L===undefined?{}:{task:L}})).map((u)=>G(m,u))},update:async({text:m})=>{if(m.trim()==="")throw new Error(`${e}: a goal needs text.`);const{session:L=v.id,task:u}=w();await a(Ne.updateGoal,{session:L,...u===undefined?{}:{task:u},text:m})}});const ee=async(w,m)=>{const L={session:w};if(m.type===Ue)return Q(m.message);if("turn"in m)return k(L,m.turn);if("context"in m)return F(L,m.context);if("task"in m)return G(w,m.task);if("usage"in m)return m.usage;const{task:u}=m.goal;return K(()=>({session:w,...u===undefined?{}:{task:u}}))};const ie=(w,m,L,u)=>a(Ne.act,{session:u?.session??w,action:m,input:L,...u===undefined?{}:{task:u.task}});const ae=async({type:w,text:m,as:L})=>{if(w===$t){if(L!==undefined)throw new Error(`${e}: a Note is always from this mod, so it takes no as.`);const i=await t.session.append({message:{type:"user",content:[{type:"text",text:et(e,m)}]}});if(i.deny!==undefined)throw new Error(`${e}: Claude Code refused the note: ${i.deny}`);return}const u=await t.prompt.submit({text:m,...L===ft?{asUser:true}:{}});if("drop"in u&&typeof u.drop==="string")throw new Error(`${e}: Claude Code dropped the prompt: ${u.drop}`)};const fe=async()=>[...await t.session.surfaces()];const be=(w,m,L=m!==undefined)=>{const u=()=>w().id;const i=()=>m===undefined&&u()===v.id;const p=()=>m===undefined?{session:u(),isAgent:true}:{session:m.session,task:m.task,isAgent:true};const l=()=>m===undefined?{session:u()}:{session:m.session,task:m.task};const O=async(se={})=>(await a(Ne.turns,{...l(),...se})).map((me)=>k(l(),me));const C=async()=>(await a(Ne.contexts,l())).map((se)=>F(l(),se));const H={get id(){return w().id},get title(){return w().title},get color(){return w().color},get project(){return w().project},get agentType(){return w().agentType},get model(){return w().model},get cwd(){return w().cwd},get isRunning(){return w().isRunning},get startedAt(){return w().startedAt},get lastAt(){return w().lastAt},get forkedFrom(){return w().forkedFrom},search:(se,me)=>ne(p()).search(se,me),...j(p,true),goal:K(l),context:async()=>{const se=await C();const me=se.at(-1);if(me===undefined)throw new Error(`${e}: session ${u()} has no context yet.`);return me},contexts:C,turn:async()=>{const[se]=await O({last:1});return se?.closedAt===undefined?se:undefined},turns:O,messages:(se={})=>V(Ne.messages,{...l(),...se}),usage:async()=>i()?ho(t):ie(u(),"usage",null,m),surfaces:async()=>i()?fe():ie(u(),"surfaces",null,m),async send(se){if(se.text.trim()==="")throw new Error(`${e}: send needs text.`);if(i()&&se.as!==vn)return ae(se);await ie(u(),"send",se,m)}};if(L)return H;const q=async(se)=>G(u(),await se.catch((me)=>Promise.reject(new Error(`${e}: ${re(me)}`))));return Object.assign(H,{startTask:(se)=>q(se.isBackground===true?ie(u(),"startBackgroundTask",se):i()?Ls(t,se):ie(u(),"startTask",se)),fork:(se)=>q(i()?Ls(t,se,v.id):ie(u(),"fork",se)),clone:(se)=>q(ie(u(),"clone",se)),callTool:async(se)=>await Q(await ie(u(),"callTool",se))})};const we=(w,m)=>{const L=w===v.id?v:E.get(w);const u=m.isBackground===true;return be(()=>({id:m.id,title:m.title,project:L?.project??"",...m.agentType===undefined?{}:{agentType:m.agentType},model:m.model??"",cwd:L?.cwd??"",isRunning:m.closedAt===undefined&&(u||(L?.isRunning??true)),startedAt:m.openedAt,lastAt:m.closedAt??m.openedAt,...m.forkedFrom===undefined?{}:{forkedFrom:m.forkedFrom}}),u?undefined:{session:w,task:m.id},true)};const _e=new Map;const Y=(w,m)=>[..._e.get(w)??[]].filter(({matcher:L,isEveryAgent:u})=>(m["task"]===undefined||u)&&(L===undefined||tt(m,L)));const ue=async(w,m,L)=>{const u=Y(w,m);if(!w.startsWith("before")){await Promise.all(u.map(({listener:l,options:O})=>Z(w,O,L,(C)=>l(m,C))));return}const i=I(w);const p=u.map(({listener:l,options:O})=>()=>Z(w,O,L,async(C)=>Mn(w,i,await l(m,C)),i));return fs(w,i,["refuse"],undefined,p,(l)=>n(`session:${w}`,`The ${w} listener failed`,l))};const I=(w)=>ud[w.slice("before".length)]??[];const pe=(w,m,L)=>Y(w,m).map((u)=>x(u.options,I(w),L)).find((u)=>u!==undefined);const ve=async(w)=>{const m=(await t.command.list()).find((L)=>L.name===w.command)?.source;return{session:v.id,cwd:v.cwd,name:w.command,args:w.args,...qe({source:m}),from:xn(w.origin,false)}};const ge={beforeRun:new Set,onRun:new Set};for(const[w,m]of Object.entries(ge))_e.set(w,m);o?.("command.run",async(w,m)=>{if(ge.beforeRun.size===0&&ge.onRun.size===0)return m(w);const L=await ve(w);const u=ge.beforeRun.size===0?undefined:await ue("beforeRun",L,m.signal);if(typeof u?.["refuse"]==="string")return{text:u["refuse"]};if(typeof u?.["result"]==="string")return{text:u["result"],...typeof u["exitCode"]==="number"?{exitCode:u["exitCode"]}:{}};const i=typeof u?.["args"]==="string"?u["args"]:w.args;const p=await m(i===w.args?w:{...w,args:i});ue("onRun",{...L,args:i},m.signal);return typeof u?.["note"]==="string"?{...p,context:[...p.context??[],et(e,u["note"])]}:p},async(w,m)=>{const L=ge.beforeRun.size===0?undefined:pe("beforeRun",await ve(w),m);return L===undefined?undefined:{text:L.refuse}});const R=(w,m)=>{if(s===undefined||o===undefined)throw new Error(`${e}: ${w} works only in a mod's own session.`);const L=w.startsWith("before");if(m==="PermissionCheck"||m==="PermissionRequest"){const l=r?.();if(l===undefined)throw new Error(ad(e,w));return l(w,{raise:ue,refusalFor:pe,hookOn:s,routeOn:o,current:()=>v})}const u=ns[m];const i=(L?u.before:undefined)??u.on;if(w==="beforeSessionStart")o("session.compact",le);if(w==="beforeModelChange")s(u.on,()=>{const l=M.splice(0);return l.length===0?undefined:{additionalContext:l}});const p=(l,O)=>{const C=pe(w,Ns(m,l),O);return C===undefined?undefined:Ms(e,m,C)};return s(i,async(l,O)=>{const C=Ns(m,l);if(m==="SessionStart"&&C["source"]==="compact"){if(!L)return;const q=Ae?.agentId;const se=q===undefined?await t.session.model():undefined;const me=await ue(w,{...C,...qe({task:q,model:se,title:v.title||undefined})},O);if(me===undefined)return;return Ms(e,m,q===undefined?me:qe({note:me["note"]}))}if(!L){ue(w,C,O);return}if(m==="ModelChange")M.splice(0);const H=await ue(w,C,O);if(H===undefined)return;if(m==="ModelChange"&&typeof H["note"]==="string"&&H["refuse"]===undefined)M.push(et(e,H["note"]));return Ms(e,m,H)},L?p:undefined)};const M=[];let Ae;const le=async(w,m)=>{Ae=w;try{return await m(w)}finally{if(Ae===w)Ae=undefined}};const xe=(w,m,L=false)=>{const u=is(e,w,m);const i={...u,options:w==="beforePermissionRequest"?{...u.options,onFailure:"refuse"}:u.options,isEveryAgent:L};const p=_e.get(w)??new Set;if(!_e.has(w)){R(w,w.replace(/^(on|before)/,""));_e.set(w,p)}p.add(i);return{remove:()=>void p.delete(i)}};const Me=()=>Object.fromEntries(Object.entries(ns).flatMap(([w,m])=>[`on${w}`,..."before"in m?[`before${w}`]:[]]).map((w)=>[w,(...m)=>xe(w,m)]));const Ee=be(()=>v);const Ie=Object.assign(Ee,Me(),{goal:Object.assign(Ee.goal,{beforeSessionStart:(...w)=>xe("beforeSessionStart",w,true)}),async scrollTo(w,m){const{deny:L}=await t.ui.scroll({to:{requestId:w.id},...m?.block===undefined?{}:{block:m.block}});if(L!==undefined)throw new Error(`${e}: Claude Code did not scroll to the message: ${L}`)},caption:(w,m)=>t.ui.notice(w.callId,m)});const De=j(()=>({}),false);const We=(w,m,L,u,i)=>{const p=U(w,m,u).filter((l)=>en(l.scope,w,L,oe(g.get(w)))&&(l.matcher===undefined||tt(Is(L),l.matcher)));return p.map((l)=>x(l.options,Mt[m],i)).find((l)=>l!==undefined)};return{sessions:{get current(){return Ie},list:async(w={})=>(await a(Ne.sessions,w)).map((m)=>{if(m.id!==v.id){E.set(m.id,m);return be(()=>E.get(m.id)??m)}if(v.title==="")v={...v,title:m.title};return Ie}),search:(w,m,L={})=>de({text:w,...ld(L)},m),...De},changed(w,m,L,u){A(w,m);let i;for(const p of L?[w,Lt]:[w]){for(const l of d.get(p)??[]){const{event:O,method:C,matcher:H,listener:q,options:se}=l;const me=()=>{i??=ee(w,m);i.then((P)=>Z(C,se,u,(D)=>q(P,D))).catch((P)=>n(`session:${C}`,`The ${C} listener failed`,P))};const ye=go(O,H,m)&&X(l,w,m);if(ye===true)me();else if(ye!==false)ye.then((P)=>P&&me())}}},answerBefore:T,failedBefore:We,raise:ue,listen:xe,turn:(w)=>k({session:v.id},w),follow(w){const m=w.id!==v.id&&v.id!=="";const L=v.id;v=S({...w,title:w.title||(w.id===v.id?v.title:""),isRunning:true,lastAt:new Date().toISOString()});if(!m)return;for(const u of[d,c]){const i=u.get(L);if(i===undefined)continue;u.delete(L);for(const p of i)if(p.scope.session===L)p.scope={...p.scope,session:v.id};u.set(v.id,new Set([...u.get(v.id)??[],...i]))}g.delete(L);z(L);z(v.id)},recolor(w){b=w;v=S(v)}}}var pt=(e)=>typeof e==="object"&&e!==null&&!Array.isArray(e)?e:{};var qe=(e)=>Object.fromEntries(Object.entries(e).filter(([,t])=>t!==undefined));var cd=(e)=>qe({session:e["session_id"],task:e["agent_id"],agentType:e["agent_type"],cwd:e["cwd"],permissionMode:e["permission_mode"]});var po=(e)=>e===undefined?undefined:{name:String(pt(e)["name"]),source:String(pt(e)["source"])};var dd=(e)=>({model:e["to_model"],previous:e["from_model"],requested:e["requested_model"]??undefined,source:e["source"],contextTokenCount:e["context_tokens"],isCacheWarm:e["prompt_cache_warm"],cacheTtl:e["cache_ttl"],cacheWriteUsd:e["estimated_cache_write_usd"],pricing:e["pricing"]});var ud={Run:["args","note","result","exitCode","refuse"],ProjectSetup:["note"],SessionStart:["note","title","reloadSkills","firstPrompt"],ModelChange:["ask","refuse","note"],WorktreeCreate:["result"],Elicitation:["refuse"],ElicitationResponse:["refuse"],PermissionCheck:["allow","ask","refuse"],PermissionRequest:["allow","input","updates","refuse","interrupt"],PermissionDenial:["retry"],ToolBatch:["note"],TodoCreate:["refuse"],TodoComplete:["refuse"],ReplyDisplay:["text"]};var mo=(e)=>({id:e["task_id"],subject:e["task_subject"],description:e["task_description"],teammate:e["teammate_name"]});var fd={ProjectSetup:(e)=>({trigger:e["trigger"]}),SessionStart:(e)=>({source:e["source"],model:e["model"],title:e["session_title"]||undefined,idleSeconds:e["seconds_since_last_response"],contextTokenCount:e["context_tokens"],isCacheWarm:e["prompt_cache_likely_expired"]===undefined?undefined:e["prompt_cache_likely_expired"]!==true,cacheWriteUsd:e["estimated_cache_write_usd"]}),SessionEnd:(e)=>({reason:e["reason"]==="prompt_input_exit"?"exit":e["reason"]}),ModelChange:dd,CwdChange:(e)=>({cwd:e["new_cwd"]??e["cwd"],previous:e["old_cwd"]}),DirectoryAdd:(e)=>({directory:e["directory"],source:e["source"]==="slash_command"?"command":"sdk"}),WorktreeCreate:(e)=>({name:e["name"]}),WorktreeRemove:(e)=>({path:e["worktree_path"]}),Notification:(e)=>({text:e["message"],title:e["title"],type:e["notification_type"]}),Elicitation:(e)=>({id:e["elicitation_id"],server:e["mcp_server_name"],text:e["message"],mode:e["mode"],url:e["url"],schema:e["requested_schema"]}),ElicitationResponse:(e)=>({id:e["elicitation_id"],server:e["mcp_server_name"],mode:e["mode"],action:e["action"],content:e["content"]}),PermissionRequest:(e)=>({name:e["tool_name"],input:pt(e["tool_input"]),suggestions:e["permission_suggestions"]??[],mcpServer:po(e["mcp_server"])}),PermissionDenial:(e)=>({name:e["tool_name"],input:pt(e["tool_input"]),callId:e["tool_use_id"],reason:e["reason"],mcpServer:po(e["mcp_server"])}),ToolBatch:(e)=>({calls:(Array.isArray(e["tool_calls"])?e["tool_calls"]:[]).map((t)=>{const n=pt(t);return qe({callId:n["tool_use_id"],name:n["tool_name"],input:pt(n["tool_input"]),output:n["tool_response"]})})}),TodoCreate:mo,TodoComplete:mo,ReplyDisplay:(e)=>({replyId:e["message_id"],index:e["index"],isLast:e["final"],text:e["delta"]})};async function Ls(e,t,n){if(t.title.trim()==="")throw new Error("a task needs a title.");const{name:s,agentType:o,model:r,cwd:a}=n===undefined?t:{prompt:t.prompt,title:t.title,agentType:Pr};const d=await e.agent.spawn({prompt:t.prompt,description:t.title,...s===undefined?{}:{name:s},...o===undefined?{}:{subagentType:o},...r===undefined?{}:{model:r},...a===undefined?{}:{cwd:a}});if(d.deny!==undefined)throw new Error(`Claude Code refused the task: ${d.deny}`);if(d.agentId===undefined)throw new Error("Claude Code answered without starting a task.");return{id:d.agentId,title:t.title,...n===undefined?{agentType:o??"general-purpose"}:{forkedFrom:n},model:d.model,openedBy:"",openedAt:new Date().toISOString()}}function Ns(e,t){const n=pt(t);return{...cd(n),...qe(fd[e](n))}}function Ms(e,t,n){const s=typeof n["refuse"]==="string"?n["refuse"]:undefined;const o=typeof n["note"]==="string"?[et(e,n["note"])]:undefined;if(t==="SessionStart")return qe({additionalContext:o,sessionTitle:n["title"],reloadSkills:n["reloadSkills"]===true?true:undefined,initialUserMessage:n["firstPrompt"]});if(t==="ModelChange"){if(s!==undefined)return{permissionDecision:"deny",permissionDecisionReason:s};return typeof n["ask"]==="string"?{permissionDecision:"ask",permissionDecisionReason:n["ask"]}:undefined}if(t==="ProjectSetup")return qe({additionalContext:o});if(t==="WorktreeCreate")return qe({worktreePath:n["result"]});if(t==="PermissionDenial")return n["retry"]===true?{retry:true}:undefined;if(t==="ToolBatch")return qe({additionalContext:o});if(t==="ReplyDisplay")return qe({displayContent:n["text"]});return s===undefined?undefined:{block:s}}function ld({running:e,since:t,everyProject:n,before:s}){return{...e===undefined?{}:{running:e},...t===undefined?{}:{since:t},...n===undefined?{}:{everyProject:n},...s===undefined?{}:{before:{session:s.session,id:s.id}}}}var Fp=new Set(["act","before","answer","watch","goal","taskEnd"]);var pd="1fd8a8ee972047c4a89640fd51048522";var md=64;var hd={Darwin:"darwin",Linux:"linux"};var gd={arm64:"arm64",aarch64:"arm64",x86_64:"x64",amd64:"x64"};var wd=/"IOPlatformUUID" = "([0-9A-Fa-f-]{36})"/;var vo=/^[0-9a-f]{32}$/;var xo=["/etc/machine-id","/var/lib/dbus/machine-id"];class So extends Error{}async function Oo(e){const t=async(g)=>{const{exitCode:y,stdout:E,stderr:v}=await e.process.run(g);if(y!==0)throw new Error(`cmod could not read this computer: ${g.join(" ")} ${Ve(y,v)}`);return E.trim()};const[n="",s="",o=""]=(await t(["uname","-snm"])).split(/\s+/);const r=hd[n];const a=gd[o];if(r===undefined)throw new Error(`cmod reads the device of macOS and Linux, and this computer runs ${n}.`);if(a===undefined)throw new Error(`cmod reads the device of arm64 and x64 computers, and this one is ${o}.`);if(r==="linux")return{id:await bo(await yd(e.fs)),name:s,os:r,arch:a};const[d,c]=await Promise.all([t(["ioreg","-rd1","-c","IOPlatformExpertDevice"]),t(["scutil","--get","LocalHostName"])]);const f=wd.exec(d)?.[1];if(f===undefined)throw new Error("cmod could not read this computer: ioreg -rd1 -c IOPlatformExpertDevice names no IOPlatformUUID.");return{id:await bo(f.replaceAll("-","").toLowerCase()),name:c,os:r,arch:a}}async function yd(e){for(const t of xo){const n=(await e.read(t).catch(Te(""))).trim();if(vo.test(n))return n}throw new So(`cmod could not read this computer: neither ${xo.join(" nor ")} holds a machine id.`)}async function bo(e){if(!vo.test(e))throw new Error("cmod could not read this computer: its machine id is not 32 hex digits.");const t=(await $d(ko(e),ko(pd))).slice(0,16);t[6]=(t[6]??0)&15|64;t[8]=(t[8]??0)&63|128;return[...t].map((n)=>n.toString(16).padStart(2,"0")).join("")}async function $d(e,t){const n=async(...o)=>new Uint8Array(await crypto.subtle.digest("SHA-256",Uint8Array.from(o.flatMap((r)=>[...r]))));const s=new Uint8Array(md);s.set(e);return n(s.map((o)=>o^92),await n(s.map((o)=>o^54),t))}function ko(e){return Uint8Array.from(e.match(/../g)??[],(t)=>Number.parseInt(t,16))}var Ao=1e4;async function Co(e,t,n,s){const o=xd(await e.fs.read(`${t.root}/.claude-plugin/plugin.json`).catch(Te(undefined)));const{program:r,hotkeys:a}=t.steps;const d=(await e.fs.list(`${t.root}/rules`).catch(Te([]))).filter((f)=>f.kind==="file"&&f.name.endsWith(".md")).map((f)=>f.name.slice(0,-".md".length)).toSorted();const c=[Re(o)&&typeof o["description"]==="string"?o["description"]:undefined,n.length>0?`Adds ${ct(n)}.`:undefined,d.length>0?`Adds ${d.length} ${d.length===1?"rule":"rules"}: ${ct(d)}.`:undefined,r===undefined?undefined:`Installed the ${r} program.`,...Object.values(a??{}).flatMap(({title:f,default:g})=>g===undefined?[]:[`Binds ${g} to ${f}.`])].filter((f)=>f!==undefined);return{message:"Installed",...c.length===0?{}:{description:c.join(`
-`)},action:{label:"Settings",onClick:()=>s()}}}function xd(e){try{return e===undefined?undefined:JSON.parse(e)}catch(t){if(t instanceof SyntaxError)return;throw t}}var Fs;function Nt(e){Fs=e}function ze(){if(Fs===undefined)throw new Error("A mod's imports work once its setup runs. Call them from setup or from a hook, never at the top of a module.");return Fs}var Eo=new WeakMap;function _o(e,t){Eo.set(e,t)}function Ft(e){const t=Eo.get(e);if(t===undefined)throw new Error("This mod has not started, so it reaches no Claude Code calls yet.");return t}class He extends Error{line;constructor(e,t){super(`line ${e}: ${t}`);this.line=e}}var bd=["md","markdown","mdx"];var kd=["sh","bash","zsh","fish","py","rb","pl","r","yaml","yml","toml","ps1","nu","tcl","mk","conf","cfg","env"];var vd=["ts","tsx","mts","cts","js","jsx","mjs","cjs","go","rs","swift","kt","kts","java","c","h","cc","cpp","hpp","cs","scala","dart","zig","jsonc","json5"];var Sd=["lua","sql","hs","elm"];var Od=["Makefile","Dockerfile","Brewfile","Gemfile","Rakefile","Justfile","justfile"];var Bn=".meta";function Ro(e,t){const n=e.slice(e.lastIndexOf("/")+1);const s=n.lastIndexOf(".");const o=s<=0?"":n.slice(s+1).toLowerCase();if(bd.includes(o))return{type:"frontmatter"};if(kd.includes(o)||Od.includes(n))return{type:"comment",prefix:"#"};if(vd.includes(o))return{type:"comment",prefix:"//"};if(Sd.includes(o))return{type:"comment",prefix:"--"};if(o===""&&t?.startsWith("#!")===true)return{type:"comment",prefix:"#"};return{type:"sidecar"}}function Bs(e,t){const n=e.split(`
-`);if(t.type==="comment"){const a=Mo(n,t.prefix);return{metadata:a===undefined?{}:Po(Io(a.lines,a.start+2,0))}}const s=t.type==="frontmatter"?jo(n):{start:-1,end:n.length,lines:n};if(s===undefined)return{metadata:{}};const o=Ds(s);const r=t.type==="frontmatter"?Ed(s,"name"):undefined;return{metadata:o===undefined?{}:Po(o.entries),...r===undefined?{}:{name:r}}}function To(e,t,n){const s=e.split(`
-`);const o=Object.entries(n);if(t.type==="comment"){const{prefix:f}=t;const g=o.length===0?[]:[`${f} /// metadata`,...o.map(([v,b])=>`${f} ${Wn(v)}: ${Wn(b)}`),`${f} ///`];const y=Mo(s,f);if(y!==undefined)return[...s.slice(0,y.start),...g,...s.slice(y.end+1)].join(`
-`);if(g.length===0)return e;const E=s[0]?.startsWith("#!")===true?1:0;return[...s.slice(0,E),...g,...s.slice(E)].join(`
-`)}const r=o.length===0?[]:["metadata:",...o.map(([f,g])=>`  ${Wn(f)}: ${Wn(g)}`)];if(t.type==="sidecar"){const f=Ds({start:-1,end:s.length,lines:s});const g=f===undefined?s:[...s.slice(0,f.start),...s.slice(f.end)];const y=g.join(`
-`).trim();return[...y===""?[]:[y],...r].join(`
-`)+(r.length===0&&y===""?"":`
-`)}const a=jo(s);if(a===undefined)return r.length===0?e:["---",...r,"---",...s].join(`
-`);const d=Ds(a);const c=d===undefined?[...a.lines,...r]:[...s.slice(a.start+1,d.start),...r,...s.slice(d.end,a.end)];if(c.every((f)=>f.trim()===""))return s.slice(a.end+1).join(`
-`);return[...s.slice(0,a.start+1),...c,...s.slice(a.end)].join(`
-`)}function jo(e){if(e[0]?.replace(/^\uFEFF/,"").trimEnd()!=="---")return;const t=e.findIndex((n,s)=>s>0&&n.trimEnd()==="---");if(t===-1)throw new He(1,"the frontmatter starts with --- and never ends. Close it with a --- line.");return{start:0,end:t,lines:e.slice(1,t)}}function Mo(e,t){const n=e.findIndex((o)=>o.trimEnd()===`${t} /// metadata`);if(n===-1)return;const s=[];for(let o=n+1;o<e.length;o+=1){const r=(e[o]??"").trimEnd();if(r===`${t} ///`)return{start:n,end:o,lines:s};if(r!==t&&!r.startsWith(`${t} `))break;s.push(r.slice(t.length+1))}throw new He(n+1,`the metadata block never ends. Close it with a "${t} ///" line.`)}function Ds(e){const t=e.lines.findIndex((d)=>/^metadata\s*:/.test(d));if(t===-1)return;const n=e.start+2+t;const s=Hs((e.lines[t]??"").replace(/^metadata\s*:/,"")).trim();const o=e.start+1+t;if(s.startsWith("{"))return{start:o,end:o+1,entries:Cd(s,n)};if(s!=="")throw new He(n,"metadata holds a single value. Write a map of names to text, such as metadata: { mymod.key: value }.");let r=t+1;while(r<e.lines.length&&(/^\s/.test(e.lines[r]??"")||(e.lines[r]??"").trim()===""))r+=1;while(r>t+1&&(e.lines[r-1]??"").trim()==="")r-=1;const a=e.lines.slice(t+1,r);return{start:o,end:e.start+1+r,entries:Io(a,n+1,Ad(a))}}function Ad(e){const t=e.find((n)=>n.trim()!==""&&!n.trim().startsWith("#"));return t===undefined?0:/^\s*/.exec(t)?.[0].length??0}function Io(e,t,n){const s=[];e.forEach((o,r)=>{const a=t+r;const d=Hs(o);if(d.trim()==="")return;const c=/^\s*/.exec(d)?.[0].length??0;if(c!==n)throw new He(a,"a metadata value holds a list or a map. Each value is one line of text, and a list is one space-separated text.");const f=d.trim();if(f.startsWith("- "))throw new He(a,"metadata holds a list. Write a map of names to text, and a list as one space-separated text.");s.push(Lo(f,a))});return s}function Cd(e,t){if(!e.endsWith("}"))throw new He(t,"the metadata map starts with { and does not end on the same line. Close it with }, or write one entry per line.");const n=e.slice(1,-1).trim();if(n==="")return[];return No(n,",",t).map((s)=>s.trim()).filter((s)=>s!=="").map((s)=>Lo(s,t))}function Lo(e,t){const[n,...s]=No(e,":",t,true);if(n===undefined||s.length===0)throw new He(t,`"${e}" has no ":". Write each entry as name: value.`);const o=s.join(":").trim();if(o.startsWith("{")||o.startsWith("[")||o==="|"||o===">")throw new He(t,`${n.trim()} holds a list or a map. Each value is one line of text, and a list is one space-separated text.`);return{key:Ws(n.trim(),t),value:Ws(o,t)}}function No(e,t,n,s=false){const o=[];let r;let a="";for(let d=0;d<e.length;d+=1){const c=e[d];if(r!==undefined){a+=c;if(c==="\\"&&r==='"'){a+=e[d+1]??"";d+=1}else if(c===r)r=undefined;continue}const f=a.trimEnd().at(-1);if((c==='"'||c==="'")&&(f===undefined||f===":"))r=c;const g=e[d+1];if(c===t&&(!s||g===undefined||g===" "||g==="\t")){o.push(a);a="";if(s){o.push(e.slice(d+1));return o}continue}a+=c}if(r!==undefined)throw new He(n,`a ${r==='"'?"double":"single"} quote never closes.`);o.push(a);return o}function Hs(e){let t;for(let n=0;n<e.length;n+=1){const s=e[n];if(t!==undefined){if(s==="\\"&&t==='"')n+=1;else if(s===t)t=undefined;continue}if(s==='"'||s==="'")t=s;if(s==="#"&&(n===0||/\s/.test(e[n-1]??"")))return e.slice(0,n)}return e}function Ws(e,t){if(e.startsWith('"')){if(!e.endsWith('"')||e.length<2)throw new He(t,`${e} opens a double quote that never closes.`);try{return JSON.parse(e)}catch(n){if(!(n instanceof SyntaxError))throw n;throw new He(t,`${e} is not a double-quoted text. Escape a " inside it as \\".`)}}if(e.startsWith("'")){if(!e.endsWith("'")||e.length<2)throw new He(t,`${e} opens a single quote that never closes.`);return e.slice(1,-1).replaceAll("''","'")}return e}function Ed(e,t){const n=e.lines.findIndex((o)=>o.startsWith(`${t}:`));if(n===-1)return;const s=Hs((e.lines[n]??"").slice(t.length+1)).trim();if(s==="")return;try{return Ws(s,e.start+2+n)}catch(o){if(o instanceof He)return;throw o}}function Po(e){return Object.freeze(Object.fromEntries(e.map(({key:t,value:n})=>[t,n])))}var _d=/^[A-Za-z0-9_./+~$%^()=\\][^#]*$/;var Pd=/^(true|false|yes|no|on|off|null|~|[-+]?(\d[\d_]*)?\.?\d+([eE][-+]?\d+)?|0x[0-9a-fA-F]+|\.inf|\.nan)$/i;function Wn(e){const t=_d.test(e)&&e===e.trim()&&!e.includes(": ")&&!e.endsWith(":")&&!e.includes(" #")&&!Pd.test(e)&&!/["',{}[\]]/.test(e);return t?e:JSON.stringify(e)}var Fo=[".git","node_modules"];var Rd=/^[A-Za-z0-9_][A-Za-z0-9_.-]*$/;function Dt(e,t){const n=/^~\/\.claude(?=\/|$)/.exec(e);if(n!==null&&t.configRoot!==undefined)return Ge(`${t.configRoot}${e.slice(n[0].length)}`);const s=qt.exec(e)?.[0];if(s!==undefined){if(t.home===undefined)throw new Error(`${e} starts with ${s}, and HOME is not set. Start Claude Code with HOME set.`);return Ge(En(e,t.home,t.configRoot))}return e.startsWith("/")?Ge(e):Ge(t.projectRoot(),e)}function Do({name:e,claude:t,places:n,report:s}){const o=`${e}.`;const r=new Map;const a=new Set;const d=(v)=>Object.freeze(Object.fromEntries(Object.entries(v).flatMap(([b,S])=>b.startsWith(o)?[[b.slice(o.length),S]]:[])));const c=async(v)=>{const b=await t.fs.stat(v,{resolve:true});if(b.kind!=="file")throw new Error(`${v} is not a file, so it holds no metadata.`);const S=b.realPath??v;const N=!S.slice(S.lastIndexOf("/")+1).includes(".");const z=N?(await t.fs.read(S)).split(`
-`,1)[0]:undefined;const J=Ro(S,z);const oe=J.type==="sidecar"?`${S}${Bn}`:S;const X=J.type==="sidecar"?await t.fs.stat(oe).catch(Te(undefined)):undefined;return{realPath:S,format:J,holder:oe,signature:`${b.mtimeMs}:${b.size}:${X?.kind==="file"?`${X.mtimeMs}:${X.size}`:""}`}};const f=async(v)=>(await t.fs.stat(v).catch(Te(undefined)))?.kind==="file"?t.fs.read(v):"";const g=(v,b)=>(S)=>{if(Xt(S))return b;const N=`${e}: fs.find skipped ${v}: ${re(S)}`;if(!a.has(N))t.ui.warn("fs:find",N);a.add(N);return b};const y=async(v)=>{const b=await c(v);const S=r.get(v);if(S?.signature===b.signature)return S.read;let N;try{const{metadata:z,name:J}=Bs(await f(b.holder),b.format);N={metadata:z,...J===undefined?{}:{name:J}}}catch(z){if(!(z instanceof He))throw z;const J=`${b.holder} ${z.message}`;N={metadata:{},error:J};if(!a.has(J))s({id:`metadata:${b.holder}`,message:`Skips the metadata of ${b.holder}`,description:J});a.add(J)}r.set(v,{signature:b.signature,read:N});return N};const E=async(v)=>{const b=Dt(v,n);const S=Cn.scan(b);if(!S.isGlob)return(await t.fs.stat(b).catch(g(b,undefined)))?.kind==="file"?[b]:[];const N=Cn(b,{dot:true});const z=Fo.filter((x)=>S.glob.split("/").includes(x));const J=S.glob.includes("**")?Number.POSITIVE_INFINITY:S.glob.split("/").length;const oe=[];const X=new Set;const A=async(x,Z)=>{const U=(await t.fs.stat(x,{resolve:true}).catch(g(x,undefined)))?.realPath??x;if(X.has(U))return;X.add(U);const _=await t.fs.list(x).catch(g(x,[]));await Promise.all(_.map(async(T)=>{const j=`${x}/${T.name}`;const B=T.isLink===true?(await t.fs.stat(j).catch(g(j,undefined)))?.kind:T.kind;if(B==="file"&&N(j))oe.push(j);if(B!=="dir"||Z+1>=J)return;if(Fo.includes(T.name)&&!z.includes(T.name))return;await A(j,Z+1)}))};const W=S.base===""?"/":S.base;if((await t.fs.stat(W).catch(g(W,undefined)))?.kind==="dir")await A(W,0);return oe};return{async find(v){const b=typeof v==="string"?[v]:v;const S=[...new Set((await Promise.all(b.map(E))).flat())].sort();const N=S.filter((z)=>!(z.endsWith(Bn)&&S.includes(z.slice(0,-Bn.length))));return Promise.all(N.map(async(z)=>{const J=await y(z).catch((oe)=>({metadata:{},error:`${z} ${re(oe)}`}));return{path:z,...J.name===undefined?{}:{name:J.name},metadata:d(J.metadata),...J.error===undefined?{}:{error:J.error}}}))},async read(v){const b=await y(Dt(v,n));if(b.error!==undefined)throw new Error(`${e}: ${b.error}`);return d(b.metadata)},async update(v,b){const S=Dt(v,n);const N=await c(S);const z=await f(N.holder);let J;try{J=Bs(z,N.format).metadata}catch(A){throw new Error(`${e}: ${N.holder} ${re(A)}`,{cause:A})}const oe={...d(J)};b(oe);for(const[A,W]of Object.entries(oe)){if(!Rd.test(A))throw new Error(`${e}: the metadata key "${A}" is not a name. Use letters, digits, "_", ".", and "-".`);if(typeof W!=="string")throw new Error(`${e}: the metadata key "${A}" holds ${JSON.stringify(W)}. Each value is text, and a list is one space-separated text.`);if(W.includes(`
-`))throw new Error(`${e}: the metadata key "${A}" holds a line break. Each value is one line of text.`)}const X={};for(const[A,W]of Object.entries(J)){if(!A.startsWith(o))X[A]=W;else if(Object.hasOwn(oe,A.slice(o.length)))X[A]=oe[A.slice(o.length)]}for(const[A,W]of Object.entries(oe))X[`${o}${A}`]=W;if(JSON.stringify(X)===JSON.stringify(J))return;await t.fs.write(N.holder,To(z,N.format,X));r.delete(S)}}}var Td=/^[A-Za-z_]\w*$/;function Wo(e,t){for(const[n,s]of Object.entries(t)){const o=`${e}: options.${n}`;if(!Td.test(n))throw new Error(`${o} is not an option name. Use letters, digits, and _, starting with a letter, as Claude Code passes each option on as CLAUDE_PLUGIN_OPTION_${n.toUpperCase()}.`);if(s.title.trim()==="")throw new Error(`${o} needs a title, the label /config shows.`);if(s.type==="choice"&&(s.choices??[]).length===0)throw new Error(`${o} is a choice with no choices. Give option.choice(['a', 'b'], { ... }).`);if(s.type==="choice"&&s.default!==undefined&&!(s.choices??[]).includes(s.default))throw new Error(`${o} defaults to ${String(s.default)}, which is not one of its choices: ${(s.choices??[]).join(", ")}.`)}return t}function Bo(e,t,n){let s;try{s=JSON.parse(n)}catch(a){return{values:{},ignored:[`is not JSON (${re(a)}). Fix the file; ${e} uses its other options until then.`]}}if(!Re(s))return{values:{},ignored:['is not a JSON object. Write one, such as { "branch": "main" }.']};const o={};const r=[];for(const[a,d]of Object.entries(s)){const c=t[a];if(c===undefined)r.push(`sets ${a}, which ${e} does not declare. ${Object.keys(t).length===0?"Remove it.":`Remove it, or use one of: ${Object.keys(t).join(", ")}.`}`);else if(c.type==="secret")r.push(`sets ${a}, a secret, and a project file is committed for everyone to read. Remove it. ${_t}`);else{const f=tn(c,d);if(f===undefined)o[a]=d;else r.push(`sets ${a} to ${JSON.stringify(d)}, and ${c.title} ${f}.`)}}return{values:o,ignored:r}}function zs(e){return e===undefined||e===""||Array.isArray(e)&&e.length===0}function tn(e,t){const n=e.type;if(n==="toggle")return typeof t==="boolean"?undefined:"takes true or false";if(n==="number"){if(typeof t!=="number"||!Number.isFinite(t))return"takes a number";if(e.min!==undefined&&t<e.min)return`takes ${e.min} or more`;if(e.max!==undefined&&t>e.max)return`takes ${e.max} or less`;return}if(n==="list")return Array.isArray(t)&&t.every((s)=>typeof s==="string")?undefined:"takes a list of text";if(typeof t!=="string")return"takes text";if(n==="choice"&&!(e.choices??[]).includes(t))return`takes one of: ${(e.choices??[]).join(", ")}`;return}var mt=Symbol("an element built outside a render");var ht;function Ze(e,t,n){const s=ht;const o={table:e,markdown:n};ht=o;try{return Ks(o,t())}finally{ht=s}}function Qe(e){const t=(n)=>ht===undefined?{[mt]:{name:e,props:n}}:zo(ht,e,n);return t}function zo(e,t,n){const s="children"in n?{...n,children:Ks(e,n.children)}:n;if(t==="Markdown"&&e.markdown!==undefined)return e.markdown(s);return e.table[t](s)}function Ks(e,t){if(Array.isArray(t))return t.map((o)=>Ks(e,o));if(typeof t!=="object"||t===null||!(mt in t))return t;const{name:n,props:s}=t[mt];return zo(e,n,s)}function Js(e,t){const n=ht;ht=undefined;try{return Us(t(),e)}finally{ht=n}}function Us(e,t){if(Array.isArray(e))return e.map((r)=>Us(r,t));if(typeof e!=="object"||e===null||!(mt in e))return e;const{name:n,props:s}=e[mt];const o=Object.fromEntries(Object.entries(s).map(([r,a])=>[r,r==="key"&&typeof a==="string"?`${t}${a}`:Us(a,t)]));return{[mt]:{name:n,props:o}}}var Vs="$cmodElement";var Gs="$cmodHandler";function Ct(e,t){if(typeof e==="function")return{[Gs]:t.push(e)-1};if(Array.isArray(e))return e.map((n)=>Ct(n,t));if(typeof e!=="object"||e===null)return e;if(mt in e){const{name:n,props:s}=e[mt];if(n==="Client")throw new Error("Client draws only in panes and styles.");return{[Vs]:n,props:Ct(s,t)}}if(Object.getPrototypeOf(e)!==Object.prototype)throw new Error("a widget draws only the elements of ui/elements.js and ui/components.js, text, numbers, and plain objects.");return Object.fromEntries(Object.entries(e).map(([n,s])=>[n,Ct(s,t)]))}function nn(e,t,n){if(Array.isArray(e))return e.map((a)=>nn(a,t,n));if(typeof e!=="object"||e===null)return e;const s=e;if(typeof s[Gs]==="number"){const a=s[Gs];return(...d)=>n(a,JSON.parse(JSON.stringify(d)))}const o=s[Vs];if(o===undefined)return Object.fromEntries(Object.entries(s).map(([a,d])=>[a,nn(d,t,n)]));if(typeof o!=="string"||!Object.hasOwn(Ho,o))throw new Error(`a widget drew ${String(o)}, which is not an element of ui/elements.js.`);const r=nn(s["props"],t,n);return Ho[o](typeof r["key"]==="string"?{...r,key:`${t}${r["key"]}`}:r)}var jd=new Set(["Button","Input","Select"]);function Hn(e,t){if(typeof e!=="object"||e===null)return false;if(Array.isArray(e))return e.some((o)=>Hn(o,t));const n=e;const s=n["props"];if(jd.has(n[Vs])&&s?.["key"]===t)return true;return Object.values(n).some((o)=>Hn(o,t))}function Uo(e,t,n){const{Button:s,Link:o}=e;const r=(a)=>{const{href:d,...c}=a;if(typeof d!=="string")return s(a);const{label:f,children:g}=c;const y=g!==undefined&&!(Array.isArray(g)&&g.length===0);if(t!=="terminal"&&d.startsWith("https:"))return o({href:d,...typeof f==="string"?{label:f}:{},...y?{children:g}:{}});return s({...c,onPress:(E)=>n(d,E)})};return{...e,Button:r}}var je=Qe("Box");var $e=Qe("Text");var Je=Qe("Button");var Md=Qe("Link");var Id=Qe("Code");var zn=Qe("Markdown");var Xs=Qe("Input");var Ld=Qe("Select");var Nd=Qe("Image");var Fd=Qe("Svg");var Dd=Qe("Raster");var rm=Qe("Client");var Ho={Box:je,Text:$e,Button:Je,Link:Md,Code:Id,Markdown:zn,Input:Xs,Select:Ld,Image:Nd,Svg:Fd,Raster:Dd};function Wt({key:e,label:t,hotkey:n,variant:s="secondary",onPress:o}){const r=s==="primary";return Je({plain:true,key:e,label:t,...n===undefined?{}:{hotkey:n},onPress:o,children:$e({backgroundColor:r?"claude":"userMessageBackground",color:r?"inverseText":"text",bold:r,children:` ${t} `})})}var Un="working";var Bt="turnEnd";var Wd=/^[A-Za-z0-9_-]{1,64}$/;var qs=["columns","rows"];function Gn(e,t,n,s){if(!Wd.test(n))throw new Error(`${e}: "${n}" is not a ${t} id. Use 1 to 64 letters, digits, "_", or "-".`);if(s.trim()==="")throw new Error(`${e}: the ${t} "${n}" needs a title, the label its tab shows.`)}function Go(e,t){Gn(e,"pane",t.id,t.title);for(const n of qs){const s=t[n];if(typeof s!=="function"&&s!==undefined&&(!Number.isInteger(s)||s<=0))throw new Error(`${e}: the pane "${t.id}" has ${n} ${s}. Use a whole number above 0, or leave it out.`)}}var Jo="toolGroup";var Vo="toolProgress";var Xo="commandOutput";var qo="askUserQuestion";var Ko={prompt:"UserMessage",reply:"AssistantMessage",toolCall:"ToolUse",toolResult:"ToolResult",notice:"InfoNotice",[Jo]:"ToolGroup",[Vo]:"ToolProgress",[Xo]:"CommandOutput",[qo]:"AskUserQuestion",[Un]:"Spinner",[Bt]:"TurnDuration"};function Zo(e){return typeof e==="string"&&Object.hasOwn(Ko,e)?Ko[e]:undefined}function Kn(e){return typeof e==="string"?`${e.charAt(0).toUpperCase()}${e.slice(1)}`:e.name}var Fe={list:"cmod:parts",draw:"cmod:draw",press:"cmod:press",shown:"cmod:shown",changed:"cmod:partsChanged",stylers:"cmod:markdownStylers"};var rn="that button drew before the last redraw. Press the one it shows now.";var Bd=80;function si(e){return e.viewport?.columns??Bd}function Vn(e,t=si(e)){return{surface:e.surface,columns:Math.max(t,0)}}async function ri(e,t,n){if(n==="terminal"){const[o,r,a,d]=await Promise.all([e.env.browser(),e.env.sshConnection(),e.env.display(),e.env.waylandDisplay()]);const c=o||r?"":(await e.process.run(["uname","-s"])).stdout.trim().toLowerCase();const f=wr({os:c,browser:o,sshConnection:r,display:a,waylandDisplay:d},t);if(f!==undefined&&(await e.process.run(f)).exitCode===0)return"opened"}const s=await e.ui.copy({text:t,surface:n});if(!s.isCopied)throw new Error(`cmod could not open ${t} or copy it: ${s.reason}`);return"copied"}var Hd="⏺";function Qo(e,t){const n={};for(const s of qs){const o=e[s];const r=typeof o==="function"?o(t):o;if(r===undefined)continue;if(!Number.isInteger(r)||r<=0)throw new Error(`the pane "${e.id}" gets ${s} ${r} from its state. Return a whole number above 0, or undefined for Claude Code's default.`);n[s]=r}return n}function Yo(e){return e===1?"1 time":`${e} times`}function ei(e,t,n){const s={...e,...t};return n||!("isFirstOfReply"in s)?s:{...s,isFirstOfReply:false}}function Zs(e){let t=0;return()=>e===undefined?undefined:`${e}:${t+=1}`}function ti(e,t,n=Zs(e.key)){const{dimColor:s,onLinkPress:o,pressableLinks:r}=e;const a={...s===undefined?{}:{dimColor:s},...o===undefined?{}:{onLinkPress:o},...r===undefined?{}:{pressableLinks:r}};let d=false;const c=(f)=>{if(f.key!==undefined)return f.key;if(d)return n();d=true;return e.key};return(f)=>{const g=c(f);return t({...a,...g===undefined?{}:{key:g},...f})}}function Qs(e){return`threw, so Claude Code draws its own: ${re(e)}`}async function ni(e,t,n){const s=[];let o;try{o=Ze(e,()=>t(({children:f,...g})=>{const y=e.Box({});s.push({given:g,drawing:y});return y}))}catch(f){return{failure:Qs(f)}}if(s.length===0)return{drawing:o,isClaudesRow:false};const r=s.findIndex((f)=>f.drawing===o);const a=await Promise.all(s.map(({given:f},g)=>n(f,g===r)));let d=0;let c;try{c=Ze(e,()=>t(()=>a[d++]??je({})))}catch(f){return{failure:Qs(f)}}if(d!==a.length)return{failure:`used Default ${Yo(a.length)}, then ${Yo(d)}, so Claude Code draws its own. A render must draw the same for the same props.`};return{drawing:c,isClaudesRow:r>=0}}function Jn(e,t){const n=e.map(({drawing:a,isClaudesRow:d},c)=>(c>0||t==="inReply")&&!d?je({marginTop:1,children:a}):a);const s=(a)=>je({flexDirection:"column",children:a});const[o,...r]=n;if(t!=="opensReply"||o===undefined)return s(n);if(e[0]?.isClaudesRow!==true)return je({children:[je({minWidth:2,children:$e({color:"text",children:Hd})}),s(n)]});return s([o,je({paddingLeft:2,children:s(r)})])}function sn(e){const t=e.findLast((r)=>r.parts!==undefined)?.parts;const n=e.flatMap((r)=>r.requests??[]);const s=e.some((r)=>r.redraw===true);const o=e.some((r)=>r.isStart===true);return{...t===undefined?{}:{parts:t},...s?{redraw:true}:{},...n.length===0?{}:{requests:n},...o?{isStart:o}:{}}}var zd=200;function oi({name:e,claude:t,router:n,report:s,announce:o,mod:r,borrowed:a,nextDraw:d}){const c=new Map;const f=new Map;const g=new Set;const y=new Map;const E=async()=>{const i=new Map((await t.ui.panes()).map((p)=>[p.id,p]));for(const p of c.keys()){const l=i.get(p);if(l?.isPlaced===true)g.add(p);else g.delete(p);if(l===undefined)y.delete(p);else y.set(p,{isShown:l.isShown,isFocused:l.isFocused})}};const v=()=>E().catch((i)=>t.ui.warn("panes:read",`${e} keeps its panes' open, shown, and focused state from before: ${re(i)}`));const b=new Map;const S=new Set;const N=new Map;let z;let J=[];let oe=0;let X=false;let A=false;const W=new Map;const x=new Map;const Z=new Map;let U={open:[],shown:null,isFocused:false};const _=new Map;const T=new Map;const j=new Set;let B=[];let Q=0;const V=new Set;let de=0;let ne;let k=0;let F;const G=()=>({widgets:[...W.values()].map(({id:i,title:p,areas:l,place:O})=>({id:i,title:p,areas:l,...O===undefined?{}:{place:O}})),pages:[...Z.values()].map(({init:{id:i,title:p},place:l})=>({id:i,title:p,place:l})),...N.size>0?{stylesMarkdown:true}:{}});const K=(i,p)=>{if(!Array.isArray(i))return;const l=i.filter((O)=>typeof O==="string"&&O!==e);if(!p&&l.join("\x00")===J.join("\x00"))return;J=l;oe+=1;if(e===Pe||c.size>0)t.ui.invalidate("ui.render")};const ee=(i,p)=>{const l=i();return l===undefined?null:Ct(l,p)};const ie=()=>{for(const[i,p]of T){if(i==="markdown")continue;for(const l of p.values()){const O=[];try{if(JSON.stringify(ee(l.render,O))!==l.tree)return true}catch(H){t.ui.warn(`drawing:${i}`,`${e}: the ${i} drawing threw, so the cmod plugin asks for it again: ${re(H)}`);return true}const C=l.draws.at(-1);if(C!==undefined&&_.has(C))_.set(C,{id:i,handlers:O})}}return false};const ae=({redraw:i,...p})=>i===true&&ie()?{...p,redraw:i}:p;const fe=(i)=>{if(ne!==undefined)return void ne.push(i);if(B!==undefined)return void B.push(i);const p=Q>0;if(F!==undefined&&!p)return void F.push(i);const l=[i];if(!p)F=l;const O=async()=>{if(F===l)F=undefined;const H=ae(sn(l));if(Object.keys(H).length===0)return;const q={...H,...p?{isAsked:true}:{}};return t.cmod.call({to:Pe,method:Fe.changed,input:q}).then((se)=>{if(p&&q.requests!==undefined&&!(Re(se)&&se["isHeld"]===true))de+=1;if(Re(se)&&e!==Pe)K(se["stylers"],false)},(se)=>{if(!st(Pe,se))t.ui.warn("parts:tell",`${e}: the cmod plugin did not hear about its pages and widgets: ${re(se)}`)})};if(!p)return Promise.resolve().then(O);const C=O().finally(()=>V.delete(C));V.add(C);return C};const be=async(i)=>{Q+=1;try{const p=await i();while(V.size>0)await Promise.allSettled(V);return p}finally{Q-=1}};const we=async(i)=>{k+=1;ne??=[];try{await i()}finally{k-=1}const p=ne;ne=k===0?undefined:[];return ae(sn(p))};const _e=(i)=>{let p=false;return(l)=>{if(!p)s({id:`draw:${i}`,message:`The ${i} failed`,description:l});p=true}};const Y=(i)=>N.get(i);const ue=(i,p,l,O,C)=>{if("text"in i)return l({text:i.text});const{render:H,props:q}=i;const se=()=>Js(O,()=>H.Component({...q,...p,Default:({source:me=q.source})=>l({text:me})}));try{return C===undefined?se():Ze(C,se,l)}catch(me){H.log(Qs(me));return l({text:q.source})}};const I=(i,p,l,O)=>(C,H=Zs(C.key))=>{if(l>=J.length)return i.Markdown(C);const q=C.key??O();for(const[se,me]of J.entries()){if(se<l)continue;const ye=`${oe}\x00${p.surface}\x00${p.columns}\x00${C.text}`;const P=I(i,p,se+1,O);const D=Ze(i,()=>a(me,ye,{markdown:C.text,...p},q),ti(C,(te)=>P(te,H),H));if(D!==undefined)return D}return i.Markdown(C)};const pe=(i,p)=>{const l=z;let O=0;const C=()=>String(O++);const H=I(i,p,0,C);if(l===undefined)return J.length===0?undefined:H;return(q)=>{const se=l(q.text,Y);if(se.every((te)=>("text"in te)))return H(q);const me=q.key??C();const ye=Zs(q.key);const P=ti(q,(te)=>H(te,ye),ye);const D=se.map((te,ce)=>ue(te,p,P,`${me}:${ce}:`,i));return Jn(D.map((te)=>({drawing:te,isClaudesRow:false})),"pane")}};const ve=(i,p)=>{const l=z===undefined?[]:z(i,Y);if(l.every((O)=>("text"in O)))return zn({text:i});return Jn(l.map((O,C)=>({drawing:ue(O,p,zn,`${C}:`),isClaudesRow:false})),"pane")};const ge=(i)=>{if(z!==undefined)return;const p=i();z=p;n.add("ui.render",async(l,O)=>{if(l.component!=="AssistantMessage")return O(l);const C=p(l.props.text,Y,l.requestId);if(C.every((me)=>("text"in me)))return O(l);const H=t.ui.resolve(l);const q=(me,ye)=>O({...l,props:ei(l.props,{text:me},ye)});const se=await Promise.all(C.map(async(me,ye)=>{if("text"in me)return{drawing:await q(me.text,ye===0),isClaudesRow:true};const{render:P,props:D}=me;const te=await ni(H,(ce)=>Js(`${ye}:`,()=>P.Component({...D,...Vn(l),id:l.requestId,Default:ce})),({source:ce=D.source},he)=>q(ce,ye===0&&he));if(!("failure"in te))return te;P.log(te.failure);return{drawing:await q(D.source,ye===0),isClaudesRow:true}}));return Ze(H,()=>Jn(se,l.props.isFirstOfReply?"opensReply":"inReply"))})};const R=(i,p,l)=>{b.set(i.id,p);const{id:O,title:C,closeOnEscape:H,holdToasts:q}=i;return t.ui.open({id:O,title:C,...p,...H===true?{closeOnEscape:H}:{},...q===true?{holdToasts:q}:{},...l===true?{focus:l}:{}})};const M=async(i)=>{try{const p=Qo(i,r().state);const l=b.get(i.id);if(l?.columns===p.columns&&l?.rows===p.rows)return;await R(i,p)}catch(p){t.ui.warn(`pane:resize:${i.id}`,`${e}: the ${i.title} pane kept its size: ${re(p)}`)}};const Ae=async(i,p,l)=>{try{await l()}catch(O){s({id:`pane:${i.id}:${p}`,message:`The ${i.title} pane's ${p} threw`,error:O})}};const le=()=>{if(X)return;X=true;n.add("ui.render",(i,p)=>{const l=c.get(i.requestId);if(l===undefined||i.component!=="Pane")return p(i);const{init:O}=l;g.add(O.id);y.set(O.id,{isShown:true,isFocused:i.props.isFocused});v();const C=t.ui.resolve(i);try{return Ze(C,()=>O.render(r(),{...i.props,surface:i.surface,params:l.params}),pe(C,Vn(i,i.props.bodyColumns)))}catch(H){f.get(O.id)?.(`threw: ${re(H)}`);return Ze(C,()=>$e({color:"error",children:`The ${O.title} pane could not draw: ${re(H)}`}))}});n.add("ui.scroll",async(i,p)=>{const l=c.get(i.requestId)?.init;const O=await p(i);if(l?.onScroll===undefined||i.component!=="Pane"||O.deny!==undefined)return O;await Ae(l,"onScroll",()=>l.onScroll?.(r(),i));return O});n.add("ui.close",async(i,p)=>{g.delete(i.id);y.delete(i.id);const l=await p(i);await v();const O=c.get(i.id)?.init;if(O?.onClose!==undefined)await Ae(O,"onClose",()=>O.onClose?.(r(),i));return l})};const xe=(i,p,l)=>t.ui.scroll({to:p,in:i,...l?.block===undefined?{}:{block:l.block}}).then(({deny:O})=>{if(O!==undefined)throw new Error(`${e}: Claude Code did not scroll ${i}: ${O}`)});const Me=(i)=>{Go(e,i);if(c.has(i.id))throw new Error(`${e}: the pane "${i.id}" is already added. Give each pane its own id.`);const p={init:i,params:undefined};c.set(i.id,p);f.set(i.id,_e(`${i.title} pane`));o(`the ${i.title} pane`);le();const l=i;const O={id:i.id,get isOpen(){return g.has(i.id)},get isShown(){return y.get(i.id)?.isShown??false},get isFocused(){return y.get(i.id)?.isFocused??false},get params(){return p.params},async open(...[C]){if(C!==undefined&&"params"in C)p.params=C.params;const{isPlaced:H}=await R(l,Qo(l,r().state),C?.focus);if(H)g.add(i.id);await E();t.ui.invalidate("ui.render")},async close(){await t.ui.close({id:i.id});g.delete(i.id);y.delete(i.id);await E()},toggle:(C)=>g.has(i.id)?O.close():O.open(C),scrollTo:(C,H)=>xe(i.id,C,H),async focus(C){const{deny:H}=await t.ui.focus({requestId:i.id,key:C});if(H!==undefined)throw new Error(`${e}: Claude Code did not focus "${C}" in the ${i.title} pane: ${H}`)},remove(){if(c.get(i.id)!==p)return;c.delete(i.id);f.delete(i.id);if(g.has(i.id))t.ui.close({id:i.id}).catch((C)=>t.ui.warn(`pane:close:${i.id}`,`${e}: the ${i.title} pane stayed open: ${re(C)}`));g.delete(i.id);y.delete(i.id)}};return O};const Ee=(i)=>U.open.find((p)=>p.id===i);const Ie=(i,p)=>{Gn(e,"page",p.id,p.title);if(Z.has(p.id))throw new Error(`${e}: the page "${p.id}" is already added. Give each page its own id.`);const l={init:p,place:i,params:undefined};Z.set(p.id,l);o(i==="settings"?`the ${p.title} page in Settings`:`the ${p.title} page in the Sidebar`);fe({parts:G()});const O={id:p.id,get isOpen(){return i==="settings"?U.shown===p.id:Ee(p.id)!==undefined},get isShown(){return U.shown===p.id},get isFocused(){return U.shown===p.id&&U.isFocused},get params(){return Ee(p.id)?.params??l.params},async open(...[C]){if(C!==undefined&&"params"in C)l.params=C.params;await fe({requests:[{open:p.id,...l.params===undefined?{}:{params:l.params},...C?.focus===true?{focus:true}:{}}]})},toggle:(C)=>O.isOpen?O.close():O.open(C),close:async()=>{await fe({requests:[{close:p.id}]})},scrollTo:async(C,H)=>{await fe({requests:[{scroll:p.id,to:C,...H?.block===undefined?{}:{block:H.block}}]})},focus:async(C)=>{const H=[...T.get(`page:${p.id}`)?.values()??[]].at(-1);if(H===undefined||!Hn(ee(H.render,[]),C))throw new Error(`${e}: the ${p.title} page draws no Button, Input, or Select with the key "${C}".`);await fe({requests:[{focus:p.id,key:C}]})},remove(){if(Z.get(p.id)!==l)return;Z.delete(p.id);w(`page:${p.id}`);fe({parts:G(),requests:[{close:p.id}]})}};return O};const De=(i)=>{Gn(e,"widget",i.id,i.title);if(W.has(i.id))throw new Error(`${e}: the widget "${i.id}" is already added. Give each widget its own id.`);W.set(i.id,i);o(`the ${i.title} widget`);fe({parts:G()});return{id:i.id,get area(){return x.get(i.id)},remove(){if(W.get(i.id)!==i)return;W.delete(i.id);x.delete(i.id);w(`widget:${i.id}`);fe({parts:G()})}}};const We=({kind:i,render:p})=>{const l=typeof i==="string"?undefined:i;const O=Zo(i);if(l===undefined&&O===undefined)throw new Error(`${e}: ${String(i)} is not a kind styles.add draws, such as ToolCall or CodeBlock.`);const C=`the style of ${Kn(i)}`;if(S.has(C))throw new Error(`${e}: ${C} is already added. Add one style per kind.`);S.add(C);o(C);const H=(ye)=>p(r(),ye);const q=(ye)=>()=>{ye?.remove();if(l!==undefined&&N.delete(l.markdown))fe({parts:G()});S.delete(C);t.ui.invalidate("ui.render")};if(l!==undefined){N.set(l.markdown,{Component:H,log:_e(`${Kn(i)} style`)});ge(l.createReader);fe({parts:G()});return{kind:i,remove:q()}}const se=_e(`${Kn(i)} style`);const me=n.add("ui.render",async(ye,P)=>{if(ye.component!==O)return P(ye);const D=t.ui.resolve(ye);const te=await ni(D,(ce)=>H({...ye.props,...Vn(ye),id:ye.requestId,Default:ce}),(ce,he)=>P({...ye,props:ei(ye.props,ce,he)}));if("failure"in te){se(te.failure);return P(ye)}if(ye.component!=="AssistantMessage")return te.drawing;return Ze(D,()=>Jn([te],ye.props.isFirstOfReply?"opensReply":"inReply"))});return{kind:i,remove:q(me)}};const w=(i)=>{for(const p of T.get(i)?.values()??[])for(const l of p.draws)_.delete(l);T.delete(i)};const m=(i,p,l,O,C=()=>{return})=>{let H=[];let q;try{q=ee(O,H);j.delete(i)}catch(ce){if(!j.has(i))s({id:i,message:`The ${p} could not draw`,error:ce});j.add(i);H=[];q=ee(()=>C(ce),H)}const se=d();const me=T.get(i)??new Map;T.set(i,me);const ye=JSON.stringify("turn"in l?{...l,turn:l.turn.prompt.id}:l);const P=me.get(ye)?.draws??[];const D=[...P,se].slice(-2);for(const ce of P)if(!D.includes(ce))_.delete(ce);me.delete(ye);me.set(ye,{draws:D,tree:JSON.stringify(q),render:O});const[te]=me;if(me.size>zd&&te!==undefined){for(const ce of te[1].draws)_.delete(ce);me.delete(te[0])}_.set(se,{id:i,handlers:H});return{draw:se,tree:q}};const L=(i)=>{if("markdown"in i)return m("markdown","markdown style",i,()=>ve(i.markdown,{surface:i.surface,columns:i.columns}));if("page"in i){const O=Z.get(i.page);if(O===undefined)throw new Error(`${e} has no ${i.page} page.`);const C=`${O.init.title} page`;return m(`page:${i.page}`,C,i,()=>O.init.render(r(),{params:i.params,isFocused:i.isFocused,columns:i.columns}),(H)=>$e({color:"error",children:`The ${C} could not draw: ${re(H)}`}))}const p=W.get(i.widget);if(p===undefined||!p.areas.includes(i.area))return null;x.set(p.id,i.area);const l=i.area===Bt&&i.turn!==undefined?{area:i.area,columns:i.columns,turn:i.turn}:{area:i.area,columns:i.columns};return m(`widget:${p.id}`,`${p.title} widget`,i,()=>p.render(r(),l))};const u=async({draw:i,handler:p,args:l},O)=>{const C=_.get(i);const H=C?.handlers[p];if(C===undefined||H===undefined)throw new Error(`${e}: ${rn}`);if(O!==Pe&&C.id!=="markdown")throw new Error(`${e}: ${O} pressed a button only the cmod plugin draws.`);const q=async()=>{try{await H(...l)}catch(se){s({id:C.id,message:"Its button failed",error:se,isCritical:true})}};if(O===Pe)return we(q);await q();return null};return{panes:{add:Me},sidebar:{add:(i)=>Ie("sidebar",i)},settings:{add:(i)=>Ie("settings",i),open:async()=>{await fe({requests:[{settings:true}]})}},widgets:{add:De},styles:{add:We},asked:be,async answerInput(i,p){const l=de;const O=await be(i);if(de>l)await p();return O},answer(i,p,l){const O=i===Fe.draw&&Re(p)&&typeof p["markdown"]==="string";if(l!==Pe&&!O&&i!==Fe.press)return;if(i===Fe.list)return Promise.resolve({value:G()});if(i===Fe.draw)return Promise.resolve().then(()=>({value:L(p)}));if(i===Fe.press)return u(p,l).then((C)=>({value:C}));if(i===Fe.shown){U=p;return Promise.resolve({value:null})}if(i===Fe.stylers){K(p,true);return Promise.resolve({value:null})}return},markdownIn:pe,restyled:(i)=>K(i,true),started(){const i=sn(B??[]);B=undefined;fe({...i,parts:G(),isStart:true})},changed(){if(W.size>0||Z.size>0)fe({redraw:true});if(c.size===0&&S.size===0)return;t.ui.invalidate("ui.render");if(A)return;A=true;Promise.resolve().then(()=>{A=false;for(const{init:i}of c.values()){if(g.has(i.id))M(i)}})},async restorePanes(){if(c.size>0)await E()}}}var on="cmod:install";var Ud=8;function ii(e,t,n,s){let o;let r=false;let a=false;let d=[];let c;const f=new Map;const g=async(X)=>{if(c!==undefined)return void c.push(X);await Rn(t()).cmod.call({to:Pe,method:Fe.changed,input:X})};const y=(X)=>(A)=>t().ui.warn("installer:page",`${e}: ${X}: ${re(A)}`);const E=(X)=>g({requests:[{open:on,focus:true}],...X?{isAsked:true}:{}});const v=async(X,A)=>{o?.cancel();const W=new Promise((x)=>{let Z=false;const U=(_)=>{if(Z)return;Z=true;n.hide();t().clock.after(0,()=>x(_))};o={...X(U),cancel:()=>U(A)}});n.show(()=>E(true));if(r){await g({redraw:true}).catch(y("the installer did not redraw"))}else{r=true;await E(false).catch((x)=>{r=false;n.hide();throw x})}for(const x of d)x();d=[];return W};const b=()=>void g({redraw:true}).catch(y("the installer did not redraw"));const S=(...X)=>je({gap:2,flexShrink:0,children:X});const N=(X,...A)=>je({flexDirection:"column",gap:1,children:[X,...A]});const z=(X,A)=>{if(o===undefined&&!r)t().clock.after(0,()=>void g({requests:[{close:on}]}).catch(y("a leftover install page stayed open")));const W=[];const x=Ct(o?.draw({params:undefined,isFocused:A,columns:X})??$e({dimColor:true,children:`${e} needs nothing from you now.`}),W);const Z=s();f.set(Z,W);for(const U of f.keys())if(f.size>Ud)f.delete(U);return{draw:Z,tree:x}};const J=async(X)=>{const A=c;const W=[];c=W;try{await X()}finally{c=A}return sn(W)};const oe=async({draw:X,handler:A,args:W})=>{const x=f.get(X)?.[A];if(x===undefined)throw new Error(`${e}: ${rn}`);return J(()=>x(...W))};return{answer(X,A){if(X===Fe.draw&&Re(A)&&A["page"]===on)return Promise.resolve({value:z(Number(A["columns"]),A["isFocused"]===true)});if(X===Fe.press&&Re(A)&&typeof A["draw"]==="number"&&f.has(A["draw"]))return oe(A).then((W)=>({value:W}));return},hear(X){if(X.open.some((A)=>A.id===on)){a=r;return}if(!a)return;r=false;a=false;o?.cancel()},options(X,A){const W=new Map;const x=new Map;return v((Z)=>({draw:()=>N($e({bold:true,children:`Set up ${e}`}),$e({children:`${e} needs ${X.length===1?"one setting":`${X.length} settings`}:`}),...X.map(([U,_])=>{const T=je({flexDirection:"column",children:[$e({bold:true,children:_.title}),..._.description===""?[]:[$e({dimColor:true,wrap:"wrap",children:_.description})]]});if(_.type==="secret"){return je({flexDirection:"column",children:[T,$e({dimColor:true,wrap:"wrap",children:`${_t} Then press Next.`}),Wt({key:`secret:${U}`,label:"Open /config",onPress:()=>void t().command.run({command:"config"})})]})}const j=x.get(U);const B=Xs({key:`option:${U}`,label:"Value",placeholder:_.type==="choice"?(_.choices??[]).join(", "):_.type==="toggle"?"true or false":_.type==="list"?"comma-separated":"",value:W.get(U)??"",submitLabel:"save",onSubmit:(V)=>void A(U,V).then((de)=>{if(de===undefined){W.set(U,V);x.delete(U)}else x.set(U,de)}).catch((de)=>x.set(U,re(de))).finally(b)});const Q=j!==undefined?[$e({color:"error",wrap:"wrap",children:j})]:W.has(U)?[$e({color:"success",children:"✓ saved"})]:[];return je({flexDirection:"column",children:[T,B,...Q]})}),S(Wt({key:"next",hotkey:"x",variant:"primary",label:"Next",onPress:()=>Z(true)}),Wt({key:"not-now",hotkey:"n",label:"Not now",onPress:()=>Z(false)})))}),false)},step(X,A,W,x){let Z;return v((U)=>({draw:(_)=>{let T;try{T=A.render(X,_)}catch(B){T=$e({color:"error",wrap:"wrap",children:`The ${A.title} step could not draw: ${re(B)}`})}const j=async()=>{try{if(await A.isDone(X))return U(true);Z={color:"warning",text:`Finish ${A.title} first.`}}catch(B){Z={color:"error",text:`The ${A.title} step's isDone failed: ${re(B)}`}}await g({redraw:true})};return N($e({children:[$e({bold:true,children:A.title}),$e({dimColor:true,children:`  (${W} of ${x})`})]}),T,...Z===undefined?[]:[$e({color:Z.color,wrap:"wrap",children:Z.text})],S(Wt({key:"next",hotkey:"x",variant:"primary",label:W===x?"Finish":"Next",onPress:()=>void j()}),Wt({key:"not-now",hotkey:"n",label:"Not now",onPress:()=>U(false)})))}}),false)},async close(){o?.cancel();o=undefined;if(!r)return;r=false;a=false;await g({requests:[{close:on}]}).catch(y("the install page stayed open"))},changed(){if(o!==undefined&&r)b()},shown:()=>new Promise((X)=>void d.push(X)),collect:J}}class an extends Error{keys;titles;constructor(e,t){super(`it needs ${ct(t)}`);this.keys=e;this.titles=t}}function ci({name:e,declared:t,fromClaude:n,claude:s,report:o,changed:r}){let a=ai(t,n,{},new Set);let d;let c;const f=async()=>{if(Object.keys(t).length===0)return new Set;const y=await s.config.list().catch((E)=>{s.ui.warn("options:config",`${e} could not read /config, so a project's options.json may override a value your organization set: ${re(E)}`);return[]});return new Set(y.filter((E)=>E.isLocked&&E.key.startsWith(`${e}.`)).map((E)=>E.key.slice(e.length+1)))};const g=async(y)=>{const E={HOME:await s.env.home(),CLAUDE_CONFIG_DIR:await s.env.configHome()};const v=hn(E,e,y).find(({tier:z})=>z==="project");if(v===undefined)return{};const b=`${v.folder}/options.json`;if(!await s.fs.exists(b))return{};const{values:S,ignored:N}=Bo(e,t,await s.fs.read(b));for(const z of N)o({id:`options:${b} ${z}`,message:`Ignores part of ${b}`,description:`${b} ${z}`});return S};return{get values(){return a},get missing(){return Object.entries(t).filter(([y,E])=>E.default===undefined&&zs(a[y])).map(([y])=>y)},async load(y){if(Object.keys(t).length===0)return;d??=await f();const E=await g(y);const v=c===undefined;c=y;const b=ai(t,n,E,d);if(!v&&JSON.stringify(b)===JSON.stringify(a))return;a=b;if(!v)r()}}}function ai(e,t,n,s){return Object.freeze(Object.fromEntries(Object.entries(e).map(([o,r])=>[o,Gd(o,r,t[o],n,s)])))}function Gd(e,t,n,s,o){if(o.has(e))return n;if(Object.hasOwn(s,e))return s[e];if(!zs(n)&&tn(t,n)===undefined)return Array.isArray(n)?Object.freeze([...n]):n;return t.default??(t.type==="list"?Object.freeze([]):t.type==="number"?undefined:"")}var Xn=new AbortController().signal;function Ys(){const e=new Map;return{add(t,n,s){const o={hook:n,...s===undefined?{}:{failed:s}};e.set(t,[...e.get(t)??[],o]);return{remove(){const r=(e.get(t)??[]).filter((a)=>a!==o);if(r.length===0)e.delete(t);else e.set(t,r)}}},dispatch(t,n,s,o=Xn){const r=e.get(t);const a=async(d,c)=>{const f=r?.[d];if(f===undefined)return s(c);return f.hook(c,Object.assign((g)=>a(d+1,g),{signal:o}))};return a(0,n)},dispatchFailure(t,n,s,o,r){const a=e.get(t);const d=async(c,f)=>{const g=a?.[c];if(g===undefined)return o(f);const y=await g.failed?.(f,s,Object.assign((E)=>d(c+1,E),{signal:Xn,called:r}));return y===undefined?d(c+1,f):y};return d(0,n)}}}var di=["memory","session","project","global"];var Kd=20;var Jd=new WeakMap;function Vd(e,t,n){return`${e}.${t}.sessions.${n}`}function ui({name:e,initial:t,session:n,root:s,claude:o,report:r,changed:a,forkParent:d}){const c=()=>{a();for(const _ of Jd.get(U)??[])_()};const f=Xd(e,t);const g=qd(f);let y=s;let E=n;let v=Promise.resolve();const b=(_)=>{const T=v.then(_);v=Promise.allSettled([T]);return T};const S=(_,T)=>_==="project"?`${e}.${T}.projects.`:Vd(e,T,"");const N=(_,T,j)=>_==="global"?`${e}.${T}`:`${S(_,T)}${j}`;const z=(_,T,j)=>o.store.get(N(_,T,j));const J=async(_,T,j,B)=>{if(_!=="project")return o.store.set(N(_,T,B),j);await o.store.delete(N(_,T,B));await o.store.set(N(_,T,B),j);const Q=(await o.store.keys()).filter((V)=>V.startsWith(S(_,T)));for(const V of Q.slice(0,-Kd))await o.store.delete(V)};const oe=`${e}.$transcripts.`;const X=async(_)=>{const T=await o.store.keys();const j=async(Q)=>{const V=await o.store.get(Q);return typeof V!=="string"||!await o.fs.exists(V)};const B=T.filter((Q)=>Q.startsWith(oe)&&Q!==`${oe}${_}`);await Promise.all(B.map(async(Q)=>{if(!await j(Q))return;const V=Q.slice(oe.length);await Promise.all(T.filter((de)=>de.startsWith(`${e}.`)&&de.endsWith(`.sessions.${V}`)).map((de)=>o.store.delete(de)));await o.store.delete(Q)}))};const A=async(_,T)=>{const j=[];for(const B of _){for(const Q of Object.keys(f[B]))j.push([B,Q,B==="memory"?undefined:await z(B,Q,B==="project"?T.root:T.session)])}y=T.root;E=T.session;for(const[B,Q,V]of j)g[B][Q]=V===undefined?f[B][Q]:cn(e,`${B}.${Q}`,V);c()};const W=async(_,T)=>{for(const j of Object.keys(f.session)){const B=await z("session",j,_);if(B!==undefined)await J("session",j,B,T)}};const x=async(_)=>(await o.store.keys()).some((T)=>T.startsWith(`${e}.`)&&T.endsWith(`.sessions.${_}`));const Z=(_)=>new Proxy(g[_],{set(T,j,B){if(typeof j!=="string")throw new Error(`${e}: mod.state.${_} keys are text, not ${String(j)}.`);if(!Object.hasOwn(f[_],j))throw new Error(`${e}: mod.state.${_}.${j} is not declared. Add it to state.${_} in defineMod with its starting value.`);if(Object.is(T[j],B))return true;T[j]=cn(e,`${_}.${j}`,B);if(_!=="memory"){const Q=_==="project"?y:E;b(()=>J(_,j,B,Q)).catch((V)=>{r({id:`state:${_}.${j}`,message:`Could not keep state.${_}.${j}`,error:V})})}c();return true}});const U=Object.freeze(Object.fromEntries(Object.keys(t).map((_)=>[_,Z(_)])));return{state:U,get root(){return y},changed:c,load:()=>b(async()=>{if(Object.keys(f.session).length>0&&!await x(E)){const _=await d();if(_!==undefined)await W(_,E)}return A(di,{root:y,session:E})}),moveTo:(_)=>b(async()=>_===y?undefined:A(["project"],{root:_,session:E})),switchSession:(_,T,j)=>b(async()=>{if(Object.keys(f.session).length>0){await o.store.set(`${oe}${_}`,j);X(_).catch((B)=>r({id:"state:sessions",message:"Could not forget the session values of ended sessions",error:B}))}if(_===E)return;if(T==="fork")await W(E,_);return A(["memory","session"],{root:y,session:_})})}}function Xd(e,t){const n={memory:{},session:{},project:{},global:{}};for(const[s,o]of Object.entries(t)){if(!Zd(s))throw new Error(`${e}: state.${s} is not a lifetime. Put each value in state.memory, state.session, state.project, or state.global.`);if(!fi(o))throw new Error(`${e}: state.${s} is not an object of values. Write state: { ${s}: { key: value } }.`);for(const[r,a]of Object.entries(o))n[s][r]=cn(e,`${s}.${r}`,a)}return n}function qd(e){return{memory:{...e.memory},session:{...e.session},project:{...e.project},global:{...e.global}}}function Zd(e){return di.includes(e)}function cn(e,t,n){const s=Array.isArray(n);if(!s&&!fi(n))return n;const o=s?n.map((d)=>cn(e,t,d)):Object.fromEntries(Object.entries(n).map(([d,c])=>[d,cn(e,t,c)]));const r=s?`mod.state.${t} = [...mod.state.${t}, item]`:`mod.state.${t} = { ...mod.state.${t}, field: value }`;const a=()=>{throw new Error(`${e}: mod.state.${t} cannot change in place. Assign it a new value, such as ${r}, so the mod redraws and keeps it.`)};return new Proxy(Object.freeze(o),{set:a,defineProperty:a,deleteProperty:a})}function fi(e){if(typeof e!=="object"||e===null)return false;const t=Object.getPrototypeOf(e);return t===Object.prototype||t===null}var li="cmod:failed";var Qd=/^https:\/\/github\.com\/([^/]+\/[^/#?]+?)(?:\.git)?(?:\/issues)?\/?$/;var Yd=2048;var pi="cmod:hidden-failures";var eu=30000;var mi=[1e4,60000,300000];var tu=4000;var hi=3;var er=2;var nu=16;var gi=["⠋","⠙","⠹","⠸","⠼","⠴","⠦","⠧","⠇","⠏"];var $i=100;var su=1e4/$i;var ru="…";var ou={default:{glyph:" "},success:{glyph:"✓",color:"success"},info:{glyph:"ℹ",color:"suggestion"},warning:{glyph:"⚠",color:"warning"},error:{glyph:"✗",color:"error"}};function xi(e,t,n){const s=new Map;const o=new Map;const r=new Map;e.store.get(pi).then((k)=>{if(typeof k!=="object"||k===null)return;for(const[F,G]of Object.entries(k))if(typeof G==="string"&&!o.has(F))o.set(F,G)},(k)=>j("hidden:read",`${t}: could not read the failures you hid: ${re(k)}`));let a=0;let d=0;let c;let f=false;let g=false;let y;const E=(k)=>k.type==="loading"||k.trying!==undefined;const v=(k)=>k.spinsFrom!==undefined&&d-k.spinsFrom<su;const b=()=>{for(const F of s.values())F.spinsFrom=E(F)?F.spinsFrom??d:undefined;const k=[...s.values()].some(v);if(k&&c===undefined){c=e.clock.every($i,()=>{d+=1;b()})}if(!k&&c!==undefined){c.cancel();c=undefined}if(s.size<=hi)g=false;e.ui.invalidate("ui.render")};const S=(k)=>{k.timer?.cancel();k.timer=undefined};const N=(k)=>{const F=k.options.duration??tu;if(k.timer!==undefined||k.type==="loading"||k.isOpen||!Number.isFinite(F))return;k.timer=e.clock.after(F,()=>{k.timer=undefined;if(f)N(k);else z(k.id)})};const z=(k)=>{if(k===undefined)r.clear();else r.delete(String(k));for(const F of s.values()){if(k!==undefined&&F.id!==k&&!F.merged.has(String(k)))continue;for(const G of F.merged.keys())r.delete(G);S(F);s.delete(F.id)}b()};const J=(k,F,G,K,ee)=>{const ie=G.id??(a+=1);const ae=s.get(ie);if(ae?.trying!==undefined&&k==="loading"){ae.trying=G.description??F;b();return ie}if(ae!==undefined)S(ae);const fe=ee!==undefined&&ae?.hides===ee?ae.reporting:undefined;const be={id:ie,type:k,message:F,options:G,actions:K,...ee===undefined?{}:{hides:ee},merged:new Map,count:1,at:new Date,isOpen:ae?.isOpen??false,reporting:fe,timer:undefined};if(k==="error"&&ae?.message!==F)e.ui.log(`${t}: ${F}${typeof G.description==="string"?`: ${G.description}`:""}`,{to:"debug"});s.set(ie,be);b();return ie};const oe=(k)=>(F,G={})=>J(k,F,G,G.action===undefined?[]:[G.action]);const X=(k)=>{z(k.id);if(k.hides===undefined)return;for(const[F,G]of[[String(k.id),k.hides],...k.merged])o.set(F,G);e.store.set(pi,Object.fromEntries(o)).catch((F)=>j("hidden:write",`${t}: could not remember the failure you hid: ${re(F)}`))};const A=Object.assign(oe("default"),{success:oe("success"),info:oe("info"),warning:oe("warning"),error:oe("error"),loading:oe("loading"),dismiss:z,promise(k,F){const G=oe("loading")(F.loading);const K=Promise.resolve().then(()=>typeof k==="function"?k():k).then((ee)=>{oe("success")(typeof F.success==="function"?F.success(ee):F.success,{id:G});return ee},(ee)=>{oe("error")(typeof F.error==="function"?F.error(ee):F.error,{id:G});throw ee});K.catch(()=>{return});return{unwrap:()=>K}}});const W=async(k)=>{const F=await e.ui.copy({text:k});if(!F.isCopied)throw new Error(F.reason)};const x=(k,F)=>()=>void Promise.resolve().then(F).catch((G)=>Q({id:`press:${k.id}`,message:`${k.message}: the press failed`,error:G,isCritical:true}));const Z=(k)=>e.cmod.call({to:Pe,method:li,input:k});const U=()=>e.fs.read(`${e.plugin.root}/.claude-plugin/plugin.json`).then((k)=>String(JSON.parse(k).version)).catch((k)=>`unknown (${re(k)})`);const _=(k,F,G)=>`${t} ${k}, @cmodjs/core ${Gt}, at ${F.toISOString()}
-${G}`;const T=new Map;const j=(k,F)=>{e.ui.log(F,{to:"debug"});const G=new Date;const K=`${F}
-${G.toISOString().slice(0,16)}`;if(T.get(k)===K)return;T.set(k,K);e.clock.after(0,()=>{(async()=>{const ee=await U();await Z({mod:t,id:k,message:F,details:_(ee,G,F),at:G.toISOString(),isCritical:false,root:e.plugin.root,level:"warning",version:ee,core:Gt})})().catch(()=>{return})})};const B=async(k,F)=>{const G={isSettled:false};try{const K=Z(k).finally(()=>void(G.isSettled=true));const ee=await(F?K:jt(e,{ms:eu},li,K));if(Re(ee)&&typeof ee["showsToast"]==="boolean")return ee["showsToast"];throw new Error(`cmod answered ${ee===undefined?"nothing":JSON.stringify(ee)}, not { showsToast: true or false }`)}catch(K){if(!G.isSettled||ds(K))return"unanswered";e.ui.log(`${t}: cmod kept no Log of ${k.id}, so it shows the toast: ${re(K)}`,{to:"debug"});return}};const Q=({id:k,message:F,error:G,description:K=G===undefined||qn(G)===F?undefined:qn(G),retry:ee,isCritical:ie=false,root:ae=e.plugin.root})=>{if(!ie&&ds(G)){j(k,`${t}: ${F}: ${qn(G)}`);return k}const fe=`${n()??""}
-${F}
-${G===undefined?"":qn(G)}`;const be=new Date;const we=`${fe}
-${K??""}
-${be.toISOString().slice(0,16)}`;if(r.get(k)===we)return k;r.set(k,we);const _e=G instanceof Error&&G.stack!==undefined?`
+// node_modules/@cmodjs/core/utils/text.js
+function listed(items) {
+  if (items.length <= 1)
+    return items.join("");
+  return `${items.slice(0, -1).join(", ")} and ${items.at(-1)}`;
+}
+function firstLine(text) {
+  return text.split(`
+`).find((line) => line.trim() !== "")?.trim() ?? "";
+}
+function messageOf(error) {
+  return error instanceof Error ? error.message : String(error);
+}
+function formatExit(code, reason) {
+  const exit = code === null ? "was stopped by a signal" : `exited ${code}`;
+  const clause = reason.trim().replace(/[.!?]+$/, "");
+  return clause ? `${exit}: ${clause}` : exit;
+}
 
-${G.stack}`:"";const Y=async(R)=>_(await U(),R,`${F}${K===undefined?"":`
-${K}`}${_e}`);const ue=async(R=0)=>{const M=await wi(e);const Ae=await U();const le={mod:t,id:k,message:F,details:_(Ae,be,`${F}${K===undefined?"":`
-${K}`}${_e}`),at:be.toISOString(),isCritical:ie,root:ae,...M===undefined?{}:{contact:M},level:"error",version:Ae,core:Gt};const xe=await B(le,ie);const Me=mi[R];if(xe==="unanswered"&&Me!==undefined)return void e.clock.after(Me,()=>void ue(R+1));if(xe==="unanswered")e.ui.log(`${t}: cmod did not answer ${mi.length+1} times, so ${k} reached no Log and shows its toast`,{to:"debug"});if(ie)return;if(xe!==false)return I();e.ui.log(`${t}: ${F}${K===undefined?"":`: ${K}`}`,{to:"debug"})};const I=()=>{if(o.get(k)===fe)return;o.delete(k);const R=s.get(k);const M=K??F;const Ae=R===undefined?[...s.values()].find((xe)=>xe.hides!==undefined&&xe.trying===undefined&&(xe.options.description??xe.message)===M):R.hides===fe&&R.trying===undefined&&R.options.description===K?R:undefined;if(Ae!==undefined){if(Ae!==R)Ae.merged.set(k,fe);Ae.count+=1;Ae.at=new Date;b();return}const le=[{label:"Report",onClick:pe},...ee===undefined?[]:[{label:"Retry",onClick:ve}],...ge];J("error",F,{id:k,...K===undefined?{}:{description:K},duration:Infinity},le,fe)};const pe=async()=>{const R=s.get(k);if(R===undefined)return;R.reporting={contact:await wi(e),details:await Y(R.at)};S(R);b();if(y===undefined)return;const M=await e.ui.focus({requestId:y,key:`toast:${k}:ask-claude`});if("deny"in M)j("report:focus",`${t}: the Report choices did not take the keys: ${String(M.deny)}`)};const ve=async()=>{const R=s.get(k);if(R===undefined||ee===undefined||R.trying!==undefined)return;R.trying="Starting";b();try{await ee()}finally{if(s.get(k)===R){R.trying=undefined;b()}}};const ge=[{sentence:es,label:"Plugins",onClick:()=>e.command.run({command:"plugin"})},{sentence:_t,label:"Open /config",onClick:()=>e.command.run({command:"config"})}].filter(({sentence:R})=>`${F}
-${K??""}`.includes(R));if(ie)I();e.clock.after(0,()=>void ue());return k};const V=(k)=>()=>{k.isOpen=!k.isOpen;S(k);b()};const de=(k,F)=>{const{description:G}=k.options;const K=typeof G==="string";const ee=k.type==="loading"||k.trying!==undefined?{glyph:v(k)?gi[d%gi.length]:ru,color:"claude"}:ou[k.type];const ie=K?Je({plain:true,key:`toast:${k.id}:open`,label:k.message,onPress:V(k)}):$e({children:k.message});const ae=!K?G:$e({dimColor:true,wrap:k.isOpen?"wrap":"truncate-end",children:k.isOpen?G:ln(G)});const fe=(ve)=>je({flexShrink:0,children:ve});const be=Je({plain:true,dimColor:true,key:`toast:${k.id}:close`,label:"✕",onPress:()=>X(k)});const we=k.actions.map((ve,ge)=>Je({plain:true,key:`toast:${k.id}:${ge===0?"action":`action-${ge}`}`,label:ve.label,onPress:x(k,ve.onClick)}));const _e=$e({dimColor:true,children:k.count>1?`${yi(k.at)} · ${k.count} times`:yi(k.at)});const Y=we.length===0?[]:[je({gap:er,flexWrap:"wrap",children:[...we,_e].map(fe)})];const ue=k.trying===undefined?undefined:je({gap:1,children:[$e({dimColor:true,children:"Trying again:"}),typeof k.trying==="string"?$e({dimColor:true,wrap:"truncate-end",children:k.trying}):k.trying]});const I=ae===undefined?[]:[ue??ae];const pe=ue!==undefined&&ae===undefined?[ue]:k.reporting===undefined?Y:ne(k,k.reporting);return je({width:F,gap:er,justifyContent:"space-between",children:[je({gap:er,flexShrink:1,children:[fe($e({...ee.color===undefined?{}:{color:ee.color},children:ee.glyph})),fe($e({dimColor:true,children:t.padEnd(nu)})),je({flexDirection:"column",flexShrink:1,children:[ie,...I,...pe]})]}),fe(be)]})};const ne=(k,{contact:F,details:G,status:K})=>{const ee=(we)=>{k.reporting={contact:F,details:G,status:we};b()};const ie=()=>{k.reporting=undefined;b()};const ae=async()=>{await e.prompt.submit({text:au(t,F,G),asUser:true});ie()};const fe=async()=>{const we=await e.ui.copy({text:G});ee(we.isCopied?"Copied the error.":`Could not copy it: ${we.reason}`)};const be=F===undefined?[]:[iu(`toast:${k.id}:report`,F,t,k.message,G)];return[$e({dimColor:true,children:"Claude writes up the problem and files it with your tools. You approve each step before anything is posted."}),je({gap:2,flexWrap:"wrap",children:[Je({plain:true,key:`toast:${k.id}:ask-claude`,label:"Ask Claude to report it",onPress:x(k,ae)}),...be,Je({plain:true,key:`toast:${k.id}:copy`,label:"Copy the error",onPress:x(k,fe)}),Je({plain:true,dimColor:true,key:`toast:${k.id}:back`,label:"Back",onPress:ie})]}),...K===undefined?[]:[$e({dimColor:true,children:K})]]};return{toast:A,copy:W,fail:Q,warn:j,get shown(){return[...s.values()].map(({type:k,message:F,options:G})=>({type:k,message:F,...typeof G.description==="string"?{description:G.description}:{}}))},draw(k,F,G,K){y=K;f=G.hasSurvey===true;if(f||s.size===0)return k;const ee=[...s.values()];const ie=g?0:Math.max(ee.length-hi,0);for(const fe of ee.slice(ie))N(fe);const ae=Je({plain:true,dimColor:true,key:"toasts:more",label:`+${ie} more`,onPress:()=>{g=true;b()}});return Ze(F,()=>je({flexDirection:"column",children:[k,...ie>0?[ae]:[],...ee.slice(ie).map((fe)=>de(fe,G.bodyColumns))]}))}}}function qn(e){const t=[];for(let n=e;n!==undefined;n=n instanceof Error?n.cause:undefined){const s=re(n);if(!t.some((o)=>o.includes(s)||s.includes(o)))t.push(s)}return t.join(`
-`)}async function wi(e){const t=await e.fs.read(`${e.plugin.root}/.claude-plugin/plugin.json`).then((a)=>JSON.parse(a)).catch((a)=>{e.ui.log(`${e.plugin.name}: could not read whom to report to: ${re(a)}`,{to:"debug"});return{}});const n=Re(t["repository"])?t["repository"]["url"]:t["repository"];const s=[t["supportUrl"],n].map((a)=>typeof a==="string"?Qd.exec(a)?.[1]:undefined).find((a)=>a!==undefined);if(s!==undefined)return{kind:"github",repository:s};const o=t["author"];const r=Re(o)?o["email"]:undefined;return typeof r==="string"&&r!==""?{kind:"email",address:r}:undefined}function iu(e,t,n,s,o){const r=`${n}: ${s}`.slice(0,120);const a=(c)=>t.kind==="github"?`https://github.com/${t.repository}/issues/new?title=${encodeURIComponent(r)}&body=${encodeURIComponent(c)}`:`mailto:${t.address}?subject=${encodeURIComponent(r)}&body=${encodeURIComponent(c)}`;let d=o;while(a(d).length>Yd&&d.length>0)d=`${d.slice(0,Math.floor(d.length*0.8))}…`;return Je({plain:true,key:e,href:a(d),label:t.kind==="github"?"Report it on GitHub (opens your browser)":"Email the author (opens your mail app)"})}function au(e,t,n){const s=t===undefined?`${e} names no place to report it, so find its author from its plugin.json or its marketplace.`:t.kind==="github"?`Report it as an issue on https://github.com/${t.repository}.`:`Email it to ${t.address}.`;return`The ${e} mod failed. Report it to its author. ${s} First check whether it is reported already, and add to that report instead of filing a new one. Show me the report before you post it.
+// node_modules/@cmodjs/core/records.js
+var listPermissions = ["network", "run", "files", "config"];
+var flagPermissions = ["conversation", "prompt", "model", "tasks", "tools", "approve"];
+var permissionNames = [...listPermissions, ...flagPermissions];
+var hostName = /^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*$/;
+var programName = /^[A-Za-z0-9][A-Za-z0-9._+-]*$/;
+var releaseVersion = /^\d+\.\d+\.\d+$/;
+var settingPath = /^[A-Za-z][A-Za-z0-9]*(\.[A-Za-z0-9_@-]+)*$/;
+var listItemHint = {
+  network: 'a host alone, such as "api.github.com", or a socket path, such as "/var/run/docker.sock"',
+  run: `a program's command, such as "gh"`,
+  files: 'a path that starts with ~/ or /, such as "~/.zshrc"',
+  config: `a Claude Code setting's name, or a key path inside one, such as "cleanupPeriodDays" or "env.ANTHROPIC_BASE_URL"`
+};
+var pluginName = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
+function xdgFolder(env, variable, underHome) {
+  const base = env[variable];
+  const home = env["HOME"];
+  if (base)
+    return `${base}/cmod`;
+  if (!home)
+    throw new Error(`Neither ${variable} nor HOME is set, so cmod has no folder there. Set HOME.`);
+  return `${home}/${underHome}/cmod`;
+}
+function storeFolder(env) {
+  return xdgFolder(env, "XDG_DATA_HOME", ".local/share");
+}
+function recordPath(store, name) {
+  return `${store}/records/${checkedName(name)}.json`;
+}
+function programPath(store, program, version) {
+  return `${store}/bin/${checkedName(program)}/${version}/${program}`;
+}
+function linkedProgramPath(store, program, version) {
+  return `${programPath(store, program, version)}.linked`;
+}
+async function programModifiedMs(modifiedMs, store, record) {
+  if (record.program === null)
+    return;
+  const times = await Promise.all([programPath(store, record.program, record.version), linkedProgramPath(store, record.program, record.version)].map(modifiedMs));
+  const found = times.filter((time) => time !== undefined);
+  return found.length === 0 ? undefined : Math.max(...found);
+}
+function isProgramNewer(record, programModifiedMs) {
+  return record.program !== null && (programModifiedMs === undefined || programModifiedMs > Date.parse(record.installedAt));
+}
+async function readCmodVersion(files, store) {
+  if (!await files.exists(`${store}/programs/cmod`))
+    return;
+  const newestFirst = (await files.list(`${store}/bin/cmod`)).filter((name) => releaseVersion.test(name)).toSorted((one, other) => isAtLeast(one, other) ? -1 : 1);
+  for (const version of newestFirst)
+    if (await files.exists(programPath(store, "cmod", version)) || await files.exists(linkedProgramPath(store, "cmod", version)))
+      return version;
+  return;
+}
+function dataFolder(store, name) {
+  return `${store}/data/${checkedName(name)}`;
+}
+function cacheFolder(env, name) {
+  return `${xdgFolder(env, "XDG_CACHE_HOME", ".cache")}/${checkedName(name)}`;
+}
+function configFolder(env, name) {
+  const configRoot = env["CLAUDE_CONFIG_DIR"];
+  const home = env["HOME"];
+  if (configRoot)
+    return `${configRoot}/cmods/${checkedName(name)}`;
+  if (!home)
+    throw new Error(`Neither CLAUDE_CONFIG_DIR nor HOME is set, so ${name} has no config folder. Set HOME.`);
+  return `${home}/.claude/cmods/${checkedName(name)}`;
+}
+function configFolders(env, name, root) {
+  return [
+    { tier: "system", folder: configFolder(env, name) },
+    { tier: "project", folder: projectConfigFolder(root, name) }
+  ];
+}
+function projectConfigFolder(root, name) {
+  return `${root}/.claude/cmods/${checkedName(name)}`;
+}
+function checkedName(name) {
+  if (!pluginName.test(name) || name.includes("..")) {
+    throw new Error(`"${name}" is not a plugin name: use letters, digits, ".", "_", and "-", starting with a letter or digit.`);
+  }
+  return name;
+}
+async function readRecord(read, store, name) {
+  const path = recordPath(store, name);
+  const text = await read(path);
+  if (text === undefined)
+    return;
+  return parseRecord(text, path);
+}
+function parseRecord(text, path) {
+  const fix = `Delete ${path} and run cmod setup on the plugin again.`;
+  let value;
+  try {
+    value = JSON.parse(text);
+  } catch (error) {
+    throw new Error(`${path} is not JSON (${messageOf(error)}). ${fix}`);
+  }
+  if (!isObject(value))
+    throw new Error(`${path} is not a cmod install record. ${fix}`);
+  for (const key of ["name", "version", "root", "installedAt", "scriptsSha256"]) {
+    if (typeof value[key] !== "string")
+      throw new Error(`${path} has no "${key}" text. ${fix}`);
+  }
+  const uninstall = value["uninstall"];
+  if (uninstall !== null && typeof uninstall !== "string")
+    throw new Error(`${path} has an "uninstall" that is neither a path nor null. ${fix}`);
+  const program = value["program"];
+  if (program !== null && typeof program !== "string")
+    throw new Error(`${path} has a "program" that is neither a command name nor null. ${fix}`);
+  const keys = value["keys"] ?? {};
+  if (!isObject(keys) || Object.values(keys).some((command) => typeof command !== "string"))
+    throw new Error(`${path} has "keys" that are not key bindings. ${fix}`);
+  const permissions = value["permissions"] ?? null;
+  if (permissions !== null && !isTextList(permissions))
+    throw new Error(`${path} has "permissions" that are not a list of permissions. ${fix}`);
+  const grantedOnUpdate = value["grantedOnUpdate"] ?? [];
+  if (!isTextList(grantedOnUpdate))
+    throw new Error(`${path} has a "grantedOnUpdate" that is not a list of permissions. ${fix}`);
+  const installedBy = value["installedBy"] ?? null;
+  if (installedBy !== null && !(isObject(installedBy) && (installedBy["session"] === null || typeof installedBy["session"] === "string") && typeof installedBy["pid"] === "number"))
+    throw new Error(`${path} has an "installedBy" that names no session and process. ${fix}`);
+  return {
+    name: value["name"],
+    version: value["version"],
+    root: value["root"],
+    installedAt: value["installedAt"],
+    scriptsSha256: value["scriptsSha256"],
+    uninstall,
+    program,
+    keys,
+    permissions,
+    grantedOnUpdate,
+    installedBy
+  };
+}
+function readSteps(pkg) {
+  if (pkg === undefined)
+    return;
+  if (!isObject(pkg))
+    throw new Error("package.json is not a JSON object.");
+  const steps = pkg["cmod"];
+  if (steps === undefined)
+    return;
+  if (!isObject(steps))
+    throw new Error('package.json has a "cmod" key that is not an object. Write "cmod": { "install": "./setup/install.sh", "uninstall": "./setup/uninstall.sh" }.');
+  const program = steps["program"];
+  if (program !== undefined && (typeof program !== "string" || !pluginName.test(program)))
+    throw new Error(`package.json "cmod.program" must be the program's command, such as "hello".`);
+  const approve = steps["approve"];
+  if (approve !== undefined && approve !== true)
+    throw new Error(`package.json "cmod.approve" is ${JSON.stringify(approve)}. Write "approve": true, or leave it out.`);
+  const permissions = readPermissions(steps);
+  return {
+    ...readCommand(steps, "install"),
+    ...readCommand(steps, "uninstall"),
+    ...program === undefined ? {} : { program },
+    ...readHotkeys(steps["hotkeys"]),
+    ...approve === true || permissions.includes("approve") ? { approve: true } : {},
+    ...permissions.length === 0 ? {} : { permissions }
+  };
+}
+function readPermissions(steps) {
+  const declared = steps["permissions"];
+  if (declared === undefined)
+    return [];
+  const at = 'package.json "cmod.permissions"';
+  if (!isObject(declared))
+    throw new Error(`${at} must be an object, such as { "network": ["api.github.com"], "prompt": true }.`);
+  const items = [];
+  for (const [name, value] of Object.entries(declared)) {
+    if (!permissionNames.includes(name))
+      throw new Error(`${at} names "${name}", which is not a permission. Use ${listed(permissionNames.map((each) => `"${each}"`))}.`);
+    if (flagPermissions.includes(name)) {
+      if (value !== true)
+        throw new Error(`${at} sets "${name}" to ${JSON.stringify(value)}. Write "${name}": true, or leave it out.`);
+      items.push(name);
+      continue;
+    }
+    if (name === "run" && value === "*") {
+      items.push("run:*");
+      continue;
+    }
+    const example = { network: '["api.github.com"]', run: '["gh"], or "*" for any program', files: '["~/.zshrc"]', config: '["cleanupPeriodDays"]' }[name];
+    if (!Array.isArray(value) || value.length === 0 || !value.every((each) => typeof each === "string"))
+      throw new Error(`${at} sets "${name}" to ${JSON.stringify(value)}. Write a list, such as "${name}": ${example}.`);
+    for (const each of value) {
+      const isPath = /^(~\/|\/)/.test(each) && !each.split("/").includes("..");
+      const isValid = { network: hostName.test(each) || isPath, run: programName.test(each), files: isPath, config: settingPath.test(each) }[name];
+      if (isValid !== true)
+        throw new Error(`${at} lists "${each}" under "${name}". Write ${listItemHint[name]}.`);
+      items.push(`${name}:${each}`);
+    }
+  }
+  return items;
+}
+var installFix = "Install it in Plugins.";
+var secretFix = "Set it in /config, where Claude Code keeps it in your keychain.";
+var pendingStepsMethod = "cmod:pendingSteps";
+var finishStepsMethod = "cmod:finishSteps";
+function instanceFolder(store, mod) {
+  return `${store}/instances/${checkedName(mod)}`;
+}
+function instancePath(store, mod, executable) {
+  return `${instanceFolder(store, mod)}/${executable}.json`;
+}
+var processTypes = ["Interactive", "Background"];
+var interfaceName = /^[a-z0-9][\w.-]*\/[A-Z]\w*$/;
+function serviceFolder(store, mod) {
+  return `${store}/services/${checkedName(mod)}`;
+}
+function browserCommand(env, href) {
+  if (env.browser === "true")
+    return;
+  if (env.browser)
+    return [env.browser, href];
+  if (env.sshConnection)
+    return;
+  if (env.os === "darwin")
+    return ["open", href];
+  return env.display || env.waylandDisplay ? ["xdg-open", href] : undefined;
+}
+function readHotkeys(hotkeys) {
+  if (hotkeys === undefined)
+    return {};
+  const fix = "cmod check writes it from the hotkeys defineMod declares, so run cmod check.";
+  if (!isObject(hotkeys) || !Object.values(hotkeys).every((each) => isObject(each) && typeof each["title"] === "string" && (each["default"] === undefined || typeof each["default"] === "string")))
+    throw new Error(`package.json "cmod.hotkeys" is not a map of hotkeys to their title and optional default combo. ${fix}`);
+  return { hotkeys: checkHotkeys('package.json "cmod"', hotkeys) };
+}
+var coreVersion = "8.0.0";
+var oldestCmodVersion = "8.0.0";
+function hotkeyCommand(mod, hotkey) {
+  return `${mod}--${hotkey}`;
+}
+function boundCombos(keybindings) {
+  const blocks = isObject(keybindings) && Array.isArray(keybindings["bindings"]) ? keybindings["bindings"] : [];
+  const combos = new Map;
+  for (const block of blocks) {
+    if (!isObject(block) || block["context"] !== "Chat" || !isObject(block["bindings"]))
+      continue;
+    for (const [combo, action] of Object.entries(block["bindings"]))
+      if (typeof action === "string" && action.startsWith("command:"))
+        combos.set(action.slice("command:".length), combo);
+  }
+  return combos;
+}
+function readCommand(steps, key) {
+  const command = steps[key];
+  if (command === undefined)
+    return {};
+  if (typeof command !== "string" || command.trim() === "")
+    throw new Error(`package.json "cmod.${key}" must be a command, such as "./setup/${key}.sh".`);
+  if (/[\n\t]/.test(command))
+    throw new Error(`package.json "cmod.${key}" holds a line break or a tab. Write one command, such as "./setup/${key}.sh".`);
+  const atRoot = scriptPaths(command).find((path) => folderOf(path) === ".");
+  if (atRoot !== undefined)
+    throw new Error(`package.json "cmod.${key}" names ${atRoot}, a script at the plugin root. Move it into a folder, such as ./setup/${key}.sh: cmod runs the steps again whenever anything in a script's folder changes.`);
+  return { [key]: command };
+}
+function scriptPaths(command) {
+  const words = command.split(/[\s;&|()<>]+/).map((word) => word.replace(/^['"]|['"]$/g, "")).filter((word) => word.includes("/") && !word.startsWith("-") && !word.startsWith("/") && !word.startsWith("~") && !word.startsWith("$") && !word.includes("=") && !word.split("/").includes(".."));
+  return [...new Set(words)];
+}
+function folderOf(path) {
+  return path.slice(0, path.lastIndexOf("/"));
+}
+async function scriptsSha256(steps, files) {
+  const folders = new Set;
+  for (const key of ["install", "uninstall"]) {
+    const command = steps[key];
+    if (command === undefined)
+      continue;
+    const scriptFolders = [];
+    for (const path of scriptPaths(command)) {
+      if (await files.read(path) !== undefined)
+        scriptFolders.push(folderOf(path));
+    }
+    if (scriptFolders.length === 0)
+      throw new Error(`package.json "cmod.${key}" runs "${command}", which names no script file in the mod, so cmod cannot tell when what it runs changes. Put the commands in a script, such as ./setup/${key}.sh.`);
+    for (const folder of scriptFolders)
+      folders.add(folder);
+  }
+  let text = [
+    steps.install ?? "",
+    steps.uninstall ?? "",
+    steps.program ?? "",
+    ...steps.hotkeys === undefined ? [] : [JSON.stringify(Object.entries(steps.hotkeys).sort())],
+    ...steps.permissions === undefined ? [] : [JSON.stringify([...steps.permissions].sort())]
+  ].join("\x00");
+  for (const folder of [...folders].sort()) {
+    for (const name of (await files.list(folder)).sort()) {
+      const path = `${folder}/${name}`;
+      const content = await files.read(path);
+      if (content === undefined)
+        throw new Error(`${path} links to a folder or to nothing, so cmod cannot tell when it changes. Point the link at a file, or delete it.`);
+      text += `\x00${path}\x00${content}`;
+    }
+  }
+  const digest = await crypto.subtle.digest("SHA-256", Uint8Array.from(new TextEncoder().encode(text)));
+  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+function parseEvent(line) {
+  const progress = /^progress (\d+) (\d+)(?: (.*))?$/.exec(line);
+  if (progress !== null)
+    return { type: "progress", done: Number(progress[1]), total: Number(progress[2]), label: progress[3] ?? "" };
+  const consent = /^needs-consent (\S+)\t([^\t]*)\t([^\t]*)(?:\t(.*))?$/.exec(line);
+  if (consent !== null) {
+    const [hotkeys = "", ...permissions] = (consent[4] ?? "").split("\t");
+    return { type: "needs-consent", sha256: consent[1], install: consent[2], uninstall: consent[3], hotkeys, permissions: permissions.filter((item) => item !== "") };
+  }
+  const done = /^done (\S+)(?: (\S+))?$/.exec(line);
+  if (done !== null)
+    return { type: "done", name: done[1], ...done[2] === undefined ? {} : { version: done[2] } };
+  const missing = /^missing (\S+)$/.exec(line);
+  if (missing !== null)
+    return { type: "missing", name: missing[1] };
+  const failed = /^failed (-?\d+)(?:\t(.*))?$/.exec(line);
+  if (failed !== null)
+    return { type: "failed", code: Number(failed[1]), message: failed[2] ?? "" };
+  const retries = /^retries (changed|later)$/.exec(line);
+  if (retries !== null)
+    return { type: "retries", when: retries[1] };
+  return { type: "log", text: line.replace(/^log /, "") };
+}
+function isAtLeast(version, minimum) {
+  const parts = version.split(".").map(Number);
+  const least = minimum.split(".").map(Number);
+  for (let index = 0;index < Math.max(parts.length, least.length); index += 1) {
+    const difference = (parts[index] ?? 0) - (least[index] ?? 0);
+    if (difference !== 0)
+      return difference > 0;
+  }
+  return true;
+}
+function isObject(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+function isTextList(value) {
+  return Array.isArray(value) && value.every((item) => typeof item === "string");
+}
 
-${n}`}function yi(e){return`${String(e.getHours()).padStart(2,"0")}:${String(e.getMinutes()).padStart(2,"0")}`}async function cu(e,t){if(t===undefined)return new Map;const n=await e.fs.read(`${t}/keybindings.json`).catch(Te("{}"));try{return yr(JSON.parse(n))}catch(s){e.ui.warn("hotkeys:read",`${t}/keybindings.json is not JSON, so cmod reads no combos from it: ${re(s)}`);return new Map}}async function bi({name:e,declared:t,configRoot:n,claude:s,router:o,answerInput:r,report:a}){if(e===Pe){o.add("command.describe",async(y,E)=>{const v=await E(y);return y.command.startsWith(gn(y.provider.plugin.replace(/@[^@]*$/,""),""))?{...v,isHidden:true}:v})}const d=Object.entries(t);if(d.length===0)return{};const c=await cu(s,n);const f=new Map;const g=new Map;for(const[y,{title:E}]of d){f.set(y,new Set);s.command.register({name:gn(e,y),description:E,immediate:true}).then(({command:v})=>void g.set(v,y),(v)=>a({id:`hotkey:${y}`,message:`The ${E} hotkey is not added`,error:v}))}o.add("command.run",async(y,E)=>{const v=g.get(y.command);if(v===undefined)return E(y);return r(async()=>{for(const b of f.get(v)??[]){try{await b()}catch(S){a({id:`hotkey:${v}`,message:`The ${t[v]?.title??v} hotkey failed`,error:S,isCritical:true})}}return{}},()=>E(y))});return Object.fromEntries(d.map(([y,{title:E}])=>[y,{title:E,combo:c.get(gn(e,y)),onPress(v){f.get(y)?.add(v);return{remove:()=>void f.get(y)?.delete(v)}}}]))}var du=200;function ki({claude:e,report:t,press:n}){const s=new Map;const o=new Map;const r=new Map;const a=(c,f)=>`${c}\x00${f}`;const d=(c)=>r.get(c)??0;return{fill(c,f,g,y){const E=a(c,f);const v=d(c);if(s.get(E)?.generation===v)return;const b=(N,z)=>{s.delete(E);s.set(E,{data:N,...z===undefined?{}:{failure:z},generation:v});const[J]=s.keys();if(s.size>du&&J!==undefined)s.delete(J);if(d(c)!==v)e.ui.invalidate("ui.render")};const S=o.get(E)??e.cmod.call({to:c,method:Fe.draw,input:g}).then((N)=>b(N??null),(N)=>{if(st(c,N))return b(s.get(E)?.data??null);t(`draw:${c}`,`${y} drew nothing`,N);b(s.get(E)?.data??null,re(N))}).finally(()=>o.delete(E));o.set(E,S);return S},element(c,f,g,y,E){const v=a(c,f);const b=s.get(v);if(b===undefined)return;s.delete(v);s.set(v,b);const{data:S}=b;if(S===null||S.tree===null)return;try{return nn(S.tree,g,(N,z)=>n(c,{draw:S.draw,handler:N,args:z}))}catch(N){t(E,`${y} could not draw`,N);return}},failure(c,f){return s.get(a(c,f))?.failure},forget(c){r.set(c,d(c)+1)}}}var uu=500;var fu=4;var vi=2000;function Si(e,t){const n=new Set;let s;let o=false;let r=0;const a=async(g)=>{const{paths:y}=g;const E=new Map;const v=new Set;const b=r%fu===0?new Set:g.missing;const S=async(N)=>{const z=await e.fs.stat(N).catch(Te(undefined));if(z===undefined)return;if(z.kind!=="dir"){if(E.size===vi)throw new Error(`fs.onChange watches at most ${vi} files, and ${y.join(", ")} holds more, so it stopped. Watch a smaller folder.`);return void E.set(N,z.mtimeMs)}for(const J of await e.fs.list(N).catch(Te([])))await S(`${N}/${J.name}`)};for(const N of y){if(b.has(N)){v.add(N);continue}await S(N);if(![...E.keys()].some((z)=>z===N||z.startsWith(`${N}/`)))v.add(N)}g.missing=v;return E};const d=(g)=>{n.delete(g);if(n.size>0)return;s?.cancel();s=undefined};const c=(g)=>a(g).catch((y)=>{d(g);t({id:"fs:onChange",message:"Could not read the files fs.onChange watches",error:y});return});const f=async()=>{if(o)return;o=true;r+=1;try{for(const g of n){const y=await c(g);if(y===undefined)continue;const E=g.seen;g.seen=y;if(E===undefined)continue;const v=[...[...y].filter(([b,S])=>E.has(b)&&E.get(b)!==S).map(([b])=>({path:b,type:"change"})),...[...y.keys()].filter((b)=>!E.has(b)).map((b)=>({path:b,type:"add"})),...[...E.keys()].filter((b)=>!y.has(b)).map((b)=>({path:b,type:"unlink"}))];for(const b of v)await Promise.resolve().then(()=>g.listener(b)).catch((S)=>t({id:"fs:onChange",message:"The fs.onChange listener failed",error:S}))}}finally{o=false}};return{add(g,y){const E={paths:g,listener:y,seen:undefined,missing:new Set};n.add(E);c(E).then((v)=>void(E.seen??=v));s??=e.clock.every(uu,()=>void f());return{remove:()=>d(E)}}}}function Oi({value:e,width:t=24}){const n=Math.round(Math.min(Math.max(e,0),100)/100*t);return $e({children:[$e({color:"claude",children:"█".repeat(n)}),$e({color:"subtle",children:"░".repeat(t-n)})]})}var Mi=[Ne.subscribe,Ne.watchBefore];var lu=[...Mi,Fe.draw];var Ai="cmod:announced";var tr="cmod:cmod-updated-for";var Ht="cmod:install";var Ci="cmod:asking";var Ei="cmod:record";var _i=[2,4,8,16,32,64,128];var pu=1000;var mu=1000;var hu=1000;var gu=60000;var wu=1e4;var Pi=Pn/2;var yu=30000;var $u=3;var xu=60000;var bu=["Bash","PowerShell"];async function Ii(e){const{name:t,root:n}=e.plugin;const s=async(v)=>{const b=await e.fs.stat(v).catch(Te(undefined));return b?.kind==="file"?e.fs.read(v):undefined};const o=await Ri(s,`${n}/.claude-plugin/plugin.json`);const r=typeof o?.version==="string"?o.version:undefined;const a=yt({HOME:await e.env.home(),XDG_DATA_HOME:await e.env.dataHome()});const d=lr(await Ri(s,`${n}/package.json`))??{};if(t===Pe){const v=await It(e);return{name:t,root:n,version:r,store:a,steps:d,isInstalled:r!==undefined&&v!==undefined&&yn(v,r),shouldRecord:false}}const c={name:t,root:n,version:r,store:a,steps:d};const f=await fr(s,a,t);if(Object.keys(d).length===0)return{...c,isInstalled:true,shouldRecord:f?.version!==r};const g=await br(d,{read:(v)=>s(`${n}/${v}`),list:(v)=>Li(e,`${n}/${v}`)});if(r===undefined||f?.scriptsSha256!==g)return{...c,isInstalled:false,shouldRecord:false};const y=f.version===r||f.root===n;const E=f.program===null?undefined:(await e.fs.stat(Qn(a,f.program,f.version)).catch(Te(undefined)))?.mtimeMs;return{...c,isInstalled:y,shouldRecord:y&&(f.version!==r||dr(f,E))}}async function Li(e,t){const n=await e.fs.list(t);const s=await Promise.all(n.map(async({name:o,kind:r,isLink:a})=>{if(r==="file"||a)return[o];if(r==="dir")return(await Li(e,`${t}/${o}`)).map((d)=>`${o}/${d}`);return[]}));return s.flat()}async function Ri(e,t){const n=await e(t);if(n===undefined)return;try{return JSON.parse(n)}catch(s){throw new Error(`${t} is not JSON (${re(s)}). Fix it, then press Retry.`)}}function Ni(e,t=()=>{return},n={},s=true,o){let r=Ys();let a;let d="starting";let c;let f;let g;let y;let E;const v=async()=>{await V().cmod.call({to:Pe,method:Fe.changed,input:{requests:[{settings:true}],isAsked:true}})};let b;let S;let N;let z=n;let J=0;const oe=()=>J+=1;const X=ii(e.name,()=>V(),{show:(P)=>{if(d!=="active")c?.toaster.toast.dismiss(Ht);c?.toaster.toast.info("Installing",{id:Ci,description:"Waiting for your answer",duration:Infinity,action:{label:"Answer",onClick:P}})},hide:()=>c?.toaster.toast.dismiss(Ci)},oe);let A=false;let W;let x;let Z=false;const U=new Map;let _=()=>{return};const T=new Promise((P)=>_=P);let j;let B=()=>{return};const Q=()=>d==="installing"||d==="waiting"?j??=new Promise((P)=>{B=()=>{j=undefined;P()}}):undefined;const V=()=>{if(c===undefined)throw new Error(`${e.name}: the lifecycle has not started. registerMod(addHook, mod, options) starts it at session.start.`);return c.claude};const de=(P)=>c?.toaster.toast.loading("Installing",{id:Ht,...P===undefined?{}:{description:P}});const ne=(P)=>c?.toaster.fail(P);const k=(P,D,te,ce)=>{d="failed";B();N??=new Error(`${e.name}: ${P}${/[.!?]$/.test(P)?"":"."}${D===undefined?"":` ${D}`}`,{cause:ce});const he=te===undefined?{}:{retry:()=>(N=undefined,ae(),te().catch(Ie))};ne({id:Ht,message:P,...D===undefined?{}:{description:D},...ce===undefined?{}:{error:ce},...he,isCritical:true});l()};const F=()=>{const P=N===undefined?"":re(N);const D=`${e.name}: `;return P===""?`${e.name} is not set up.`:`${e.name} is not set up: ${P.startsWith(D)?P.slice(D.length):P}`};const G=()=>Ae();const K=()=>V().store.delete(tr).then(G);let ee;const ie=(P)=>{const D=_i[Math.min(P.tries,_i.length-1)];ee?.timer.cancel();ee={...P,tries:P.tries+1,timer:V().clock.after(D*1000,()=>void be().catch(Ie))};k(P.reason,`Trying again in ${D} s.`,G)};const ae=()=>{ee?.timer.cancel();ee=undefined};const fe=(P,D)=>{if(D===undefined){ae();return k(P,undefined,G)}ie({when:D,tries:ee?.when===D?ee.tries:0,reason:P})};const be=async()=>{if(d!=="failed"||ee===undefined)return;if(await L()){ae();return C()}await Ae(true);await C()};const we=async()=>{await f?.refresh();d="ready";y??=new Promise((P)=>V().clock.after(0,()=>P(R().catch(Ie))));B();V().ui.invalidate("ui.render")};const _e=async()=>{if(g===undefined||await It(V())===undefined)return;let P;const{code:D,lastError:te}=await Ot(V().process.spawn({argv:["cmod","setup",g.root,"--events"]}),(ce)=>{const he=wn(ce);if(he.type==="done")A=false;if(he.type==="failed")P=he.message});if(!A){c?.toaster.toast.dismiss(Ei);return f?.refresh()}if(P!==undefined)return void ne({id:Ei,message:P,retry:Y,isCritical:true});throw new Error(`cmod setup ${Ve(D,te)}`)};const Y=()=>{W??=_e().catch((P)=>V().ui.warn("record",`${e.name} has no cmod record yet: ${re(P)}`)).finally(()=>{W=undefined})};const ue=async(P,D)=>{const te=e.options?.[P];if(te===undefined||g===undefined)return`${e.name} has no option ${P}.`;const ce=te.type==="number"?Number(D):te.type==="toggle"?D.trim()==="true":te.type==="list"?D.split(",").map((ke)=>ke.trim()).filter((ke)=>ke!==""):D;const he=te.type==="toggle"&&!["true","false"].includes(D.trim())?"takes true or false":tn(te,ce);if(he!==undefined)return`${te.title} ${he}.`;const Ce=await V().process.run(["cmod","option",g.name,P,Array.isArray(ce)?ce.join(","):String(ce)]);return Ce.exitCode===0?undefined:In(Ce.stderr,"option")||`cmod option ${Ve(Ce.exitCode,"")}.`};const I=async(P)=>{if(!s||g===undefined||(await V().session.surfaces()).length===0)return false;const D=e.options??{};const te=P.keys.flatMap((Ce)=>{const ke=D[Ce];return ke===undefined?[]:[[Ce,ke]]});if(!await X.options(te,ue))return false;const ce=`${g.name}.`;const he=await V().config.list();z={...z,...Object.fromEntries(he.filter((Ce)=>Ce.key.startsWith(ce)).map((Ce)=>[Ce.key.slice(ce.length),Ce.value]))};return true};const pe=async(P,D)=>{try{return await D.isDone(P)}catch(te){ne({id:`step:${D.title}`,message:`The ${D.title} step's isDone failed`,error:te});return false}};const ve=async(P)=>{const D=[];for(const te of e.installer??[])if(!await pe(P,te))D.push(te.title);return D};const ge=async(P)=>{const D=s?e.installer??[]:[];try{for(const[te,ce]of D.entries()){if(await pe(P,ce))continue;const he=(await V().session.surfaces()).length>0&&await X.step(P,ce,te+1,D.length);if(!he){c?.toaster.toast.warning(D.length-te===1?"Needs one more step":`Needs ${D.length-te} more steps`,{id:"cmod:steps",description:`Starting with ${ce.title}.`,duration:Infinity,action:{label:"Finish",onClick:()=>ge(P)}});break}}}finally{await X.close()}};const R=async()=>{if(c===undefined||g===undefined)return;const P=Ys();a=P;const D=await ku(e,{...c,router:P,dataFolder:Yn(g.store,g.name),store:g.store,permissionRoutes:t,options:z,nextDraw:oe,installer:X,serveCmodPlugin:o}).catch(async(ke)=>{if(ke instanceof an&&await I(ke))return;await X.close();k(re(ke),ke instanceof an?`Retry asks for ${ke.keys.length===1?"it":"them"}.`:undefined,Ee,ke);throw ke}).finally(()=>{a=undefined});if(D===undefined)return R();const{added:te}=D;E=D.mod;b=D.imports;S=D.raise;r=P;d="active";O();const ce=[...U.values()];U.clear();for(const ke of ce){const Le=(Be)=>void ne({id:`listens:${String(ke.caller)}`,message:`${String(ke.caller)} hears nothing from this session`,error:Be});P.dispatch("cmod.call",ke,async()=>({deny:`${e.name} has no method ${ke.method}.`})).then((Be)=>("deny"in Be)?Le(new Error(Be.deny)):undefined,Le)}c.claude.ui.invalidate("ui.render");if(e.name===Pe)c.claude.ui.invalidate("command.describe");ge(D.mod).catch((ke)=>ne({id:"cmod:steps",message:"Its installer stopped",error:ke,isCritical:true}));const he=x;x=undefined;if(he!==undefined)await M(he);if(await c.claude.store.get(Ai)!==undefined){c.toaster.toast.dismiss(Ht);return}await c.claude.store.set(Ai,{version:g.version??""});const{toaster:Ce}=c;Co(c.claude,g,te,v).then(({message:ke,...Le})=>Ce.toast.success(ke,{id:Ht,duration:Ao,...Le})).catch((ke)=>ne({id:Ht,message:"Could not say what it installed",error:ke}))};const M=async(P)=>{Z=true;const D=await r.dispatch("classic.SessionStart",P,async()=>({})).catch((he)=>{ne({id:"classic.SessionStart",message:"The SessionStart hook failed",error:he});return{}});const{additionalContext:te,...ce}=D;for(const he of te??[]){const Ce=await V().session.append({message:{type:"user",content:[{type:"text",text:he}]}});if(Ce.deny!==undefined)V().ui.warn("session-start:note",`${e.name}: Claude Code refused its SessionStart note: ${Ce.deny}`)}if(Object.keys(ce).length>0){V().ui.warn("session-start:late",`${e.name} started after Claude Code's SessionStart, so Claude Code did not read ${Object.keys(ce).join(", ")} from its SessionStart hooks.`)}};const Ae=async(P=false)=>{if(g===undefined)return;if(g.name===Pe)return Me(g.root);d="installing";const D=await It(V());if(!le(D))return xe(D);if(!P)de();let te;let ce;const{code:he,lastError:Ce}=await Ot(V().process.spawn({argv:["cmod","setup",g.root,"--events"]}),(ke)=>{const Le=wn(ke);if(Le.type==="progress"&&!P)de(ji(Le));if(Le.type==="retries")ce=Le.when;if(Le.type==="done"||Le.type==="failed")te=Le});if(te?.type==="done"){ae();return we()}return fe(te?.type==="failed"?te.message:`cmod setup ${Ve(he,Ce)}`,ce)};const le=(P)=>P!==undefined&&yn(P,Pt);const xe=(P)=>{d="waiting";de("Waiting for cmod");let D=P;let te;const ce=()=>{Ce.cancel();ke.cancel()};const he=(Le)=>V().clock.every(Le,()=>{te??=It(V()).then((Be)=>{te=undefined;D=Be;if(!le(Be))return;ce();return Ae()}).catch((Be)=>{ce();Ie(Be)})});let Ce=he(pu);const ke=V().clock.after(gu,()=>{Ce.cancel();Ce=he(wu);if(D===undefined)return de("Still waiting for cmod to download cmod. See cmod's own line.");const Le=D;const Be=`${Le} to ${Pt}`;return V().store.get(tr).then(async(Et)=>{if(Et===Be){ce();return k(`${e.name} needs cmod ${Pt} or later, and the newest cmod is ${Le}.`,undefined,K)}await V().store.set(tr,Be);de(`${e.name} needs cmod ${Pt} or later, and this computer has cmod ${Le}, so cmod is updating itself.`);const{code:it,lastError:wt}=await Ot(V().process.spawn({argv:["cmod","update","cmod"]}),()=>{return});if(it===0)return;ce();k(`${e.name} needs cmod ${Pt} or later, and updating cmod ${Le} ${Ve(it,wt)}`,undefined,K)}).catch(Ie)})};const Me=async(P)=>{de();d="installing";const{code:D,lastError:te}=await Ot(V().process.spawn({argv:["sh","-c","./setup/bootstrap.sh"],cwd:P}),(ce)=>{const he=wn(ce);if(he.type==="progress")de(ji(he))});if(D===0)return we();k(`bootstrap ${Ve(D,te)}`,undefined,()=>Me(P))};const Ee=async()=>{if(w===undefined)return;const P=await w(V());g=P;We=await De(mn(P.store,P.name));if(P.isInstalled){A=P.shouldRecord;if(A)Y();y=undefined;return R()}if(P.version===undefined)return k("no version to install",'Its author adds "version" to .claude-plugin/plugin.json.');Ae().catch(Ie)};const Ie=(P)=>{N=P;if(d!=="failed")k(re(P),undefined,Ee,P)};const De=async(P)=>{const D=await V().fs.stat(P).catch(Te(undefined));return D?.kind==="file"?D.mtimeMs:0};let We=0;let w;const m=async()=>{if(g===undefined||w===undefined)return false;const P=await De(mn(g.store,g.name));if(P===We)return false;We=P;const D=await w(V());if(!D.isInstalled)return false;g=D;return true};const L=async()=>{if(d!=="failed"||!await m())return false;N=undefined;y=undefined;await we();return true};let u;let i;let p;const l=()=>{u??=V().clock.every(mu,()=>{i??=L().then(()=>{return}).catch((P)=>V().ui.warn("record:watch",`${e.name} could not read whether another cmod installed it: ${re(P)}`)).finally(()=>{i=undefined})})};const O=()=>{u?.cancel();u=undefined};const C=async()=>{if(d==="ready")y??=R().catch(Ie);if(y!==undefined&&d!=="active")await y};const H=(P,D)=>c===undefined?P.then(()=>false):new Promise((te)=>{const ce=V().clock.after(Pi,()=>te(true));if(D?.aborted===true)te(false);D?.addEventListener("abort",()=>te(false),{once:true});P.then(()=>{ce.cancel();te(false)})});const q=(P)=>H(T.then(C),P);const se=(P)=>H(T.then(Q).then(C),P);const me=(P)=>{const D=C();return y!==undefined&&d!=="active"?H(D,P):D.then(()=>false)};const ye=async(P,D,te,ce)=>{if(b!==undefined)Nt(b);const he=D;if(P==="cmod.call"&&he.to===e.name&&he.caller===Pe){if(he.method===Fe.shown)X.hear(he.input);const at=X.answer(he.method,he.input);if(at!==undefined)return await at.catch((Ut)=>({deny:`${e.name}: ${re(Ut)}`}));if(he.method===Fe.shown&&d!=="active")return{value:null}}if(P==="classic.SessionStart"){x=undefined;Z=true}if(P==="classic.SessionStart"&&c===undefined){x=D;return te(D)}if(A&&P==="classic.UserPromptSubmit")Y();if(P==="classic.UserPromptSubmit"||P==="classic.SessionStart")await L().catch((at)=>V().ui.warn("recover",`${e.name} stays stopped: ${re(at)}`));const Ce=D.tool;const ke=P==="cmod.call"&&D.to===e.name||P==="tool.call"&&typeof Ce==="string"&&Ce.startsWith(`mcp__${e.name}__`);if(P==="cmod.call"&&!ke)return te(D);const Le=ke&&P==="cmod.call"&&Mi.includes(he.method);if(Le&&d!=="active"){U.set(`${he.caller}
-${he.method}
-${String(he.input.session)}`,he);T.then(Q).then(C);return{value:null}}const Be=ke&&!(P==="cmod.call"&&lu.includes(he.method));const Et=await(Be?se(ce):P==="classic.SessionStart"||P==="session.append"||ke?q(ce):me(ce));if(P==="classic.SessionStart"&&d!=="active"){x=D;return te(D)}if(ke&&d!=="active")return{deny:d==="failed"?F():Tn(e.name)};if(Et&&d!=="active")return(a??r).dispatchFailure(P,D,new Error(`it was still starting after ${Pi/1000} s`),te,false);const it=D;if(P==="cmod.call"&&it.to===e.name&&E!==undefined){if(it.method===pr)return{value:await ve(E)};if(it.method===mr){const at=E;const Ut=await X.collect(()=>Promise.race([ge(at).catch((Zn)=>void ne({id:"cmod:steps",message:"Could not finish the setup",error:Zn,isCritical:true})),X.shown()]));return{value:Ut}}}if(P==="classic.UserPromptSubmit"&&d==="active"&&!Z){const{session_id:at,transcript_path:Ut,cwd:Zn}=D;await M({session_id:at,transcript_path:Ut,cwd:Zn,hook_event_name:"SessionStart",source:"resume"})}const wt=r.dispatch(P,D,te,ce);const un=D;if(P!=="ui.render"||un.component!=="AbovePrompt"||c===undefined)return wt;return c.toaster.draw(await wt,c.claude.ui.resolve(un),un.props,un.requestId)};return{get phase(){return d},get mod(){return E},get failure(){return N},get toasts(){return c?.toaster.shown??[]},async raise(P,D){if(S===undefined||b===undefined)throw new Error(`${e.name} has not started, so ${P} has no listener yet.`);Nt(b);return S(P,D,Xn)},async start(P,D){if(c!==undefined)return;const te=(Ce,ke)=>void ri(P,Ce,ke.surface).then((Le)=>Le==="copied"&&c?.toaster.toast.success("Copied the link",{description:"Paste it in your browser."}),(Le)=>ne({id:"open-link",message:"Could not open the link",error:Le,isCritical:true}));const ce={...P,ui:{...P.ui,warn:(Ce,ke)=>c===undefined?P.ui.warn(Ce,ke):c.toaster.warn(Ce,ke),resolve:(Ce)=>Uo(P.ui.resolve(Ce),Ce.surface,te)},session:{...P.session,id:async()=>p??P.session.id()}};f=Kr(ce);const he={...ce,cmod:{async call(Ce){if(Ce.to===e.name)await q();return as(P,r).cmod.call(Ce)}}};c={claude:f.claude,toaster:xi(he,e.name,()=>g?.version)};w=D;try{J=await P.clock.now()*hu;await f.refresh();await Ee().catch(Ie)}finally{_()}},async route(P,D,te,ce){if(P!=="classic.SessionStart")return Qt(ye(P,D,te,ce),ce);const he=D.session_id;p=he;try{return await Qt(ye(P,D,te,ce),ce)}finally{if(p===he)p=undefined}},async caught(P,D,te,{error:{kind:ce,message:he},called:Ce}){const ke=D;const Le=P==="cmod.call"&&ke.to===e.name&&nr(ke)!==undefined;const Be={timeout:cs,throw:he??"it threw"};const Et=Be[ce];if(Et===undefined)return Le?{value:null}:te(D);const it=new Error(Et);const wt=Ce&&ce==="throw"?await te(D).then(()=>{return},re):undefined;if(wt===undefined||wt!==he)ne({id:`stopped:${P}`,message:`Claude Code stopped its ${P.replace(/^classic\./,"")} hook`,error:it});return(a??r).dispatchFailure(P,D,it,te,Ce)}}}async function ku(e,t){const{router:n,toaster:s}=t;const o=(u)=>void s.fail(u);const r=new Set;const a=as(Rn(t.claude),n);const d=(u)=>{a.ui.invalidate(u);if(u==="ui.render")for(const i of r)i()};const c={...a,ui:{...a.ui,invalidate:d}};const f=[];const g=(u)=>{f.push(u)};const[y,E,v,b,S]=await Promise.all([c.session.id(),c.session.root(),c.session.cwd(),c.env.home(),c.env.configHome()]);const N=S??(b===undefined?undefined:`${b}/.claude`);const z={home:b,configRoot:N,projectRoot:()=>de.root};const J=Do({name:e.name,claude:c,places:z,report:o});let oe=v;let X=v;let A;let W;let x;let Z=true;let U;let _;const T=(u,i,p,l)=>{const O=`The markdown style of ${u}`;_?.fill(u,i,p,O)?.then(()=>c.ui.invalidate("ui.render"));return _?.element(u,i,`${u}/markdown:${l}:`,O,`markdown:${u}`)};const j=oi({name:e.name,claude:c,router:n,report:o,announce:g,mod:()=>ue,borrowed:T,nextDraw:t.nextDraw});const B=async()=>{if(e.name===Pe)return;try{const u=await c.cmod.call({to:Pe,method:"forkParent",input:null});return typeof u==="string"?u:undefined}catch(u){c.ui.warn("fork:values",`${e.name} starts without the session values of the conversation it was forked from: ${re(u)}`);return}};const Q=()=>x??=B().then((u)=>{W=u;return u});const V=()=>{j.changed();t.installer.changed()};const de=ui({name:e.name,initial:e.state??{},session:y,root:E,claude:c,report:o,changed:V,forkParent:Q});const ne=ci({name:e.name,declared:e.options??{},fromClaude:t.options,claude:c,report:o,changed:de.changed});const k=(u,i,p)=>n.add(`classic.${u}`,ao(u,i,o),p===undefined?undefined:co(p));const F=(u)=>qt.test(u)?Dt(u,z):u;const G=(u)=>({read:()=>c.settings.read({source:u}),async update(i){await c.cmod.call({to:Pe,method:"updateSettings",input:{mod:e.name,source:u,project:de.root,values:i}})}});const K=yo({name:e.name,claude:c,report:(u,i,p)=>o({id:u,message:i,error:p}),hookOn:(u,i,p)=>k(u,i,p),routeOn:(u,i,p)=>n.add(u,i,p),permissionRoutes:t.permissionRoutes});let ee;const ie=Si(c,o);const ae=(u,i)=>{if(ee===undefined)return;ee={...ee,project:u,cwd:i};K.follow(ee)};let fe;const be={sessions:K.sessions,commands:{list:async()=>(await c.command.list()).map(({name:u,description:i,source:p,plugin:l})=>({name:u,description:i,source:p,...l===undefined?{}:{plugin:l}})),run:async(u,i)=>{const{text:p,context:l}=await c.command.run({command:u,...i===undefined?{}:{args:i}});return{...p===undefined?{}:{text:p},...l===undefined||l.length===0?{}:{note:l.join(`
-`)}}},beforeRun:(...u)=>K.listen("beforeRun",u),onRun:(...u)=>K.listen("onRun",u)},config:{list:async()=>(await c.config.list()).map(({key:u,label:i,description:p,kind:l,value:O,options:C,provider:H,isLocked:q})=>({key:u,label:i,kind:l,value:O,isLocked:q,...p===undefined?{}:{description:p},...C===undefined?{}:{options:C},...H.plugin==="engine"?{}:{plugin:H.plugin}}))},settings:{user:G("user"),project:G("project"),local:G("local"),beforeFileChange:(u,i)=>{const p=i??u;const l=i===undefined?undefined:u;return k("ConfigChange",async({source:O,file_path:C})=>{const H={source:O==="skills"?"skills":O.replace("_settings",""),...C===undefined?{}:{path:C}};if(l!==undefined&&!tt(H,l))return;const q=(await p(H))?.refuse;return typeof q==="string"?{block:q}:undefined})}},model:{complete:(u,i)=>c.model.complete(u,i)},fs:{read:(u)=>c.fs.read(F(u)),write:(u,i)=>c.fs.write(F(u),i),exists:(u)=>c.fs.exists(F(u)),find:(u)=>J.find(u),list:async(u)=>(await c.fs.list(u===undefined?undefined:F(u))).map(({name:i,kind:p,size:l,mtimeMs:O,isLink:C})=>({name:i,isFile:p==="file",isFolder:p==="dir",isLink:C,size:l,modifiedAt:O})),async stat(u,i){const{kind:p,size:l,mtimeMs:O,isLink:C,realPath:H}=await c.fs.stat(F(u),i);return{isFile:p==="file",isFolder:p==="dir",isLink:C,size:l,modifiedAt:O,...H===undefined?{}:{realPath:H}}},onChange:({path:u},i)=>ie.add([u].flat().map((p)=>Dt(p,z)),(p)=>{Nt(be);return i(p)})},metadata:{read:(u)=>J.read(u),update:(u,i)=>J.update(u,i)},process:{run:(u,i)=>c.process.run(u,i),spawn:(u,i)=>c.process.spawn({...i,argv:u})},http:{fetch:(u,i)=>c.http.fetch(u,i)},device:{read:()=>fe??=c.device.read().catch((u)=>{fe=undefined;throw u})},clipboard:{async write(u){await s.copy(u)}},mods:{isLoaded:async(u)=>await c.cmod.call({to:Pe,method:Br,input:{name:u}})===true}};const we=(u,i,p,l)=>{let O=false;let C=true;let H=0;let q=false;const se=async()=>{const D=await c.clock.now()-H;if(q||D<Math.max(ye*$u,xu))return;q=true;c.ui.warn(`${i}:${u}:stalled`,`${e.name}: one run of its ${i} ${u} ms timer has gone on for ${Math.round(D/1000)} s, so the timer skipped every tick since. Give what the listener awaits a deadline.`)};const me=()=>{if(!p)C=false;if(O){se();return}O=true;q=false;Promise.resolve().then(async()=>{H=await c.clock.now();Nt(be);return l()}).catch((D)=>o({id:`${i}:${u}`,message:`The ${i} ${u} ms timer failed`,error:D})).finally(()=>{O=false})};const ye=Su(e.name,`mod.${i}`,u);const P=p?c.clock.every(ye,me):c.clock.after(ye,me);return{get isRunning(){return C},stop(){C=false;P.cancel()}}};const _e=await bi({name:e.name,declared:e.hotkeys??{},configRoot:N,claude:c,router:n,answerInput:j.answerInput,report:o});const Y=async(u,i,p)=>{const{exitCode:l,stdout:O,stderr:C}=await c.process.run(["cmod","secret",u,e.name,i],p===undefined?undefined:{stdin:p});if(l!==0)throw new Error(`${e.name}: mod.secrets.${u}: ${In(C,"secret")||`cmod secret ${Ve(l,"")}.`}`);return O};const ue={name:e.name,folder:c.plugin.root,dataFolder:t.dataFolder,secrets:{get:async(u)=>await Y("get",u)||undefined,store:async(u,i)=>void await Y("store",u,i),delete:async(u)=>void await Y("delete",u)},state:de.state,get options(){return ne.values},hotkeys:_e,every:(u,i)=>we(u,"every",true,i),after:(u,i)=>we(u,"after",false,i),use:(u)=>u({mod:ue,announce:g,reserveName:We}),log:(u,i)=>{if(i?.level==="error")o({id:`log:${u}`,message:u});else if(i?.level==="warning")c.ui.warn(`log:${u}`,`${e.name}: ${u}`);else c.ui.log(`${e.name}: ${u}`,{to:i?.to??"debug"})},panes:j.panes,sidebar:j.sidebar,settings:j.settings,widgets:j.widgets,styles:j.styles,toast:s.toast,ask:(u,i)=>c.ui.ask(u,i),dependencies:zr(c,(u,i)=>jt(c,{ms:yu},u,i))};Nt(be);const I=async(u=false)=>{try{const[i,p]=await Promise.all([c.session.root(),c.session.cwd()]);const l=oe;const O=i!==de.root;if(u&&O&&os(i,p)===undefined)A=p;if(p!==A)A=undefined;const C=A===undefined?p:i;if(!O&&C===l)return;oe=C;ae(i,C);await de.moveTo(i).catch((q)=>{if(oe===C)oe=X;ae(de.root,oe);throw q});if(O)await ne.load(i);X=C;if(!O)j.changed();if(C===l)return;const H={session_id:await c.session.id(),cwd:C,hook_event_name:"CwdChanged",old_cwd:l,new_cwd:C};await n.dispatch("classic.CwdChanged",H,async()=>({}))}catch(i){o({id:"cmod:follow",message:`Keeps the state of ${de.root} until the next prompt or folder move`,error:i})}};const pe=async(u,i)=>{const[p,l]=await Promise.all([c.session.model(),c.session.usage()]);ee={id:u,title:i??"",project:de.root,cwd:oe,model:p,startedAt:new Date(l.startedAt).toISOString(),...W===undefined?{}:{forkedFrom:W},...U===undefined?{}:{agentType:U}};K.follow(ee)};n.add("classic.SessionStart",async(u,i)=>{U=u.agent_id===undefined?u.agent_type:U;const p=ee?.id;if(u.source==="fork"&&p!==undefined&&p!==u.session_id)W=p;else if(u.session_id!==p){W=undefined;x=undefined}Z=u.source!=="startup"&&u.source!=="clear";await pe(u.session_id,u.session_title).catch((l)=>o({id:"cmod:current",message:"Kept the details of the session from before",error:l}));await de.switchSession(u.session_id,u.source,u.transcript_path).catch((l)=>{o({id:"cmod:session",message:`Kept its session values from before the ${u.source}`,error:l})});return i(u)});n.add("classic.UserPromptSubmit",async(u,i)=>{A=undefined;await I();const p=u.source===undefined||u.source==="user"||u.source==="sdk";await pe(u.session_id,u.session_title||(p&&!Z&&K.sessions.current.title===""?ln(u.prompt):undefined)).catch((l)=>o({id:"cmod:current",message:"Kept the details of the session from before",error:l}));return i(u)});for(const u of["classic.PostToolUse","classic.PostToolUseFailure"]){n.add(u,async(i,p)=>{if(bu.includes(i.tool_name))await I();return p(i)})}n.add("command.run",async(u,i)=>{const p=await i(u);if(u.command==="cd"){await I(true);xe?.moved()}return p});n.add("skill.prompt",uo(c));n.add("ui.press",(u,i)=>j.asked(()=>i(u)));let ve={};let ge;const R=(u,i,p)=>o({id:u,message:i,error:p});const M=(u,i)=>{if(re(i).includes(rn))s.toast.warning(`The ${u} button was from an older drawing, so nothing ran`,{id:`press:${u}`,description:"Press the button it shows now."});else o({id:`press:${u}`,message:`${u} did not take the press`,error:i,isCritical:true})};const Ae=(u,i)=>void c.cmod.call({to:u,method:Fe.press,input:i}).catch((p)=>{_?.forget(u);c.ui.invalidate("ui.render");M(u,p)});_=ki({claude:c,report:R,press:(u,i)=>ge===undefined?Ae(u,i):ge.press(u,i)});const le=t.serveCmodPlugin?.({claude:c,router:n,store:t.store,project:()=>de.root,report:R,clear:(u)=>s.toast.dismiss(u),tellRefusedPress:M,parts:_,markdownIn:j.markdownIn,tellStylers:j.restyled});const xe=le?.conversations;const Me=le?.widgets;ge=le?.pages;const Ee=(u,i)=>{if(i.session===""||u===Pe)return;c.clock.after(0,()=>void c.cmod.call({to:u,method:Ne.sessionColor,input:i}).catch((p)=>{if(!st(u,p))c.ui.warn("color:tell",`cmod: ${u} did not hear the session's color: ${re(p)}`)}))};xe?.onColor((u)=>{K.recolor(u);for(const{mod:i}of ge?.declared()??[])Ee(i,u)});n.add("cmod.call",async(u,i)=>{if(u.to!==e.name)return i(u);const p=u;if(u.method===Ne.changed&&p.caller===Pe){const{session:C,change:H,isInProject:q}=u.input;K.changed(C,H,q!==false,i.signal);return{value:null}}if(u.method===Ne.sessionColor&&p.caller===Pe){K.recolor(u.input);return{value:null}}const l=nr(p);if(l!==undefined)return{value:await K.answerBefore(l.session,l.event,l.change,l.isInProject,i.signal)??null};if(u.method===Fe.changed&&p.caller!==undefined&&ge!==undefined){const C=u.input;if(C.parts!==undefined&&xe!==undefined)Ee(p.caller,xe.color());return{value:{isHeld:ge.update(p.caller,C),stylers:ge.stylers()}}}if(p.caller!==undefined){const C=u.method===Fe.draw?u.input.turn:undefined;const H=j.answer(u.method,C===undefined?u.input:{...u.input,turn:K.turn(C)},p.caller);if(H!==undefined)return H.catch((q)=>({deny:`${e.name}: ${re(q)}`}))}const O=await xe?.answer(p);return O??Hr(e.name,ve,u)},(u,i)=>{if(u.to!==e.name)return;const p=nr(u);return p===undefined?{deny:`${e.name}: ${i.message}`}:{value:K.failedBefore(p.session,p.event,p.change,p.isInProject,i)??null}});const Ie=Ur(c,n);_o(ue,{claude:c,router:n,toolCalls:Ie,report:o,hasPermissionCheck:()=>t.permissionRoutes()!==undefined,answerInput:j.answerInput,spawnCmod:(u,i)=>Ln(c,u,y,i),watches:ie,onRedraw(u){r.add(u);return{remove:()=>void r.delete(u)}},...Me===undefined?{}:{widgets:Me},...ge===undefined?{}:{pages:ge}});const De=new Set;const We=(u,i,p)=>{const l=`${u}:${i}`;if(De.has(l))throw new Error(p);De.add(l);return{remove:()=>void De.delete(l)}};const w=async()=>{for(const{name:u}of await c.fs.list(gr(t.store,e.name)).catch(Te([]))){const i=u.endsWith(".json")?u.slice(0,-".json".length):undefined;if(i!==undefined&&!De.has(`service:${i}`))await ps(c,["program",e.name,"--remove-service","--",i],y)}};await dn("its state did not load",()=>de.load());await dn("its options did not load",()=>ne.load(E));const m=ne.missing;if(m.length>0)throw new an(m,m.map((u)=>e.options?.[u]?.title??u));await dn("the details of its session did not load",()=>pe(y,undefined));const L=await dn("its setup function threw",()=>e.setup(ue));ve=vu(e.name,L);await dn("its open panes did not load",()=>j.restorePanes());j.started();w().catch((u)=>o({id:"program:services",message:"Could not stop a service it no longer runs",error:u}));return{mod:ue,added:f,imports:be,raise:K.raise,area:j}}function vu(e,t){if(t===undefined||t===null)return{};if(typeof t!=="object"||!Object.values(t).every((n)=>typeof n==="function"))throw new Error(`${e}: setup returns its API, an object of methods other mods call, or nothing. It returned ${typeof t==="object"?"an object with values that are not methods":typeof t}.`);return t}var Ti=2147483647;function Su(e,t,n){if(!Number.isInteger(n)||n<=0||n>Ti)throw new Error(`${e}: ${t} is ${n}. Give a whole number of milliseconds above 0 and at most ${Ti}.`);return n}function nr(e){if(e.method!==Ne.before||e.caller!==Pe)return;const{session:t,event:n,change:s,isInProject:o}=e.input;return{session:t,event:n,change:s,isInProject:o!==false}}async function dn(e,t){try{return await t()}catch(n){throw new Error(`${e}: ${re(n)}`,{cause:n})}}function ji({done:e,total:t,label:n}){return je({gap:2,children:[Oi({value:t>0?e/t*100:0}),$e({dimColor:true,wrap:"truncate-end",children:n})]})}var zt;var Fi;var Cu;var Eu=[100,300,600];var _u="Lock file is already being held";var Pu=globalThis;async function Di(e){for(const t of Eu){try{return await e()}catch(n){if(!re(n).includes(_u))throw n;await new Promise((s)=>void Pu.setTimeout(s,t))}}return e()}async function Ru(e,t,n){const s={plugin:{name:e.plugin.name,root:e.plugin.root},ui:{log:(r,a)=>e.ui.log(r,a),warn:(r,a)=>e.ui.log(a,{to:"debug"}),notice:(r,a)=>e.ui.notice(r,a),toast:(r,a)=>e.ui.toast(r,a),invalidate:(r)=>e.ui.invalidate(r),ask:(r,a)=>e.ui.ask(r,a),open:(r)=>e.ui.open(r),close:(r)=>e.ui.close(r),panes:()=>e.ui.panes(),scroll:(r)=>e.ui.scroll(r),copy:(r)=>e.ui.copy(r),focus:(r)=>e.ui.focus(r),resolve:(r)=>e.ui.resolve(r)},process:{run:(r,a)=>e.process.run(r,a),spawn:(r)=>e.process.spawn(r)},fs:{read:(r)=>e.fs.read(r),write:(r,a)=>e.fs.write(r,a),list:(r)=>e.fs.list(r),exists:(r)=>e.fs.exists(r),stat:(r,a)=>e.fs.stat(r,a)},http:{fetch:(r,a)=>e.http.fetch(r,a)},settings:{read:(r)=>e.settings.read(r)},config:{list:()=>e.config.list()},store:{get:(r)=>e.store.get(r),set:(r,a)=>Di(()=>e.store.set(r,a)),delete:(r)=>Di(()=>e.store.delete(r)),keys:()=>e.store.keys()},clock:{now:()=>e.clock.now(),after:(r,a)=>e.clock.after(r,a),every:(r,a)=>e.clock.every(r,a)},session:{id:()=>e.session.id(),root:()=>e.session.root(),cwd:()=>e.session.cwd(),model:()=>e.session.model(),usage:()=>e.session.usage(),surfaces:()=>e.session.surfaces(),version:async()=>(await e.session.version()).version,messages:(r)=>r===undefined?e.session.messages():e.session.messages(r),append:(r)=>e.session.append(r),send:(r)=>e.session.send(r)},prompt:{submit:(r)=>e.prompt.submit(r)},turn:{abort:(r)=>e.turn.abort(r)},model:{complete:(r,a)=>e.model.complete(r,a)},command:{register:(r)=>e.command.register(r),list:()=>e.command.list(),run:(r)=>e.command.run(r)},tool:{register:(r)=>e.tool.register(r),call:(r)=>e.tool.call(r)},agent:{list:()=>e.agent.list(),spawn:(r)=>e.agent.spawn(r)},env:{home:()=>e.env.get("HOME"),dataHome:()=>e.env.get("XDG_DATA_HOME"),configHome:()=>e.env.get("CLAUDE_CONFIG_DIR"),browser:()=>e.env.get("BROWSER"),sshConnection:()=>e.env.get("SSH_CONNECTION"),display:()=>e.env.get("DISPLAY"),waylandDisplay:()=>e.env.get("WAYLAND_DISPLAY")},device:{read:()=>Oo(s)},cmod:{call:(r)=>e.cmod.call(r)}};const[,o]=await Qt(Promise.all([zt.start(s,Ii),n(t)]),n.signal);return o}function Se(e,t,n){return zt.route(n.event,t,(s)=>n(s),n.signal)}function Oe(e,t,n){return zt.caught(n.event,t,(s)=>n(s),n)}var Wi=(e,t)=>({...e,caller:t.origin.plugin});var Bi=(e)=>(t)=>e(Object.fromEntries(Object.entries(t).filter(([n])=>n!=="caller")));function Tu(e,t,n){return zt.route("cmod.call",Wi(t,n),Bi(n),n.signal)}function ju(e,t,n){return zt.caught("cmod.call",Wi(t,n),Bi(n),n)}function Hi(e,t,n){Mu(e,t,n);e("ui.render",Se).catch(Oe)}function Mu(e,t,n,s){Fi=undefined;Cu=t;zt=Ni(t,()=>Fi,n,true,s);e("session.start",Ru);e("classic.Setup",Se).catch(Oe);e("classic.SessionStart",Se).catch(Oe);e("classic.SessionEnd",Se).catch(Oe);e("classic.UserPromptSubmit",Se).catch(Oe);e("classic.UserPromptExpansion",Se).catch(Oe);e("classic.InstructionsLoaded",Se).catch(Oe);e("classic.ConfigChange",Se).catch(Oe);e("classic.DirectoryAdded",Se).catch(Oe);e("classic.PreModelSwitch",Se).catch(Oe);e("classic.PostModelSwitch",Se).catch(Oe);e("classic.PermissionDenied",Se).catch(Oe);e("classic.PostToolUse",Se).catch(Oe);e("classic.PostToolUseFailure",Se).catch(Oe);e("classic.PostToolBatch",Se).catch(Oe);e("classic.MessageDisplay",Se).catch(Oe);e("classic.SubagentStart",Se).catch(Oe);e("classic.SubagentStop",Se).catch(Oe);e("classic.TaskCreated",Se).catch(Oe);e("classic.TaskCompleted",Se).catch(Oe);e("classic.TeammateIdle",Se).catch(Oe);e("classic.Elicitation",Se).catch(Oe);e("classic.ElicitationResult",Se).catch(Oe);e("classic.Notification",Se).catch(Oe);e("classic.PreCompact",Se).catch(Oe);e("classic.PostCompact",Se).catch(Oe);e("classic.Stop",Se).catch(Oe);e("classic.StopFailure",Se).catch(Oe);e("classic.WorktreeCreate",Se).catch(Oe);e("classic.WorktreeRemove",Se).catch(Oe);e("tool.call",Se).catch(Oe);e("prompt.submit",Se).catch(Oe);e("prompt.context",Se).catch(Oe);e("command.run",Se).catch(Oe);e("session.measure",Se).catch(Oe);e("skill.prompt",Se).catch(Oe);e("ui.press",Se).catch(Oe);e("ui.scroll",Se).catch(Oe);e("ui.close",Se).catch(Oe);e("cmod.call",{to:t.name},Tu).catch(ju);e("session.compact",Se).catch(Oe)}var Iu=/^[A-Za-z0-9_-]{1,64}$/;function zi(e,t){const n=new Set;for(const s of t){if(!Iu.test(s.id))throw new Error(`${e}: the install step "${s.id}" has no valid id. Use 1 to 64 letters, digits, "_", or "-".`);if(s.title.trim()==="")throw new Error(`${e}: the install step "${s.id}" needs a title, the line the installer shows above it.`);if(n.has(s.id))throw new Error(`${e}: two install steps have the id "${s.id}". Give each step its own id.`);n.add(s.id)}}var gt={get current(){return ze().sessions.current},list:(e)=>ze().sessions.list(e),search:(e,t,n)=>ze().sessions.search(e,t,n),...Object.fromEntries(Object.keys(vt).map((e)=>[`on${e}`,(...t)=>ze().sessions[`on${e}`](...t)]))};var Ui={read:(e)=>ze().fs.read(e),write:(e,t)=>ze().fs.write(e,t),exists:(e)=>ze().fs.exists(e),find:(e)=>ze().fs.find(e),list:(e)=>ze().fs.list(e),stat:(e,t)=>ze().fs.stat(e,t),onChange:(e,t)=>ze().fs.onChange(e,t)};var sr={run:(e,t)=>ze().process.run(e,t),spawn:(e,t)=>ze().process.spawn(e,t)};var Gi={fetch:(e,t)=>ze().http.fetch(e,t)};function Ki(e){if(e.name.trim()==="")throw new Error("defineMod: the mod needs a name, such as the name in .claude-plugin/plugin.json.");if(e.options!==undefined)Wo(e.name,e.options);if(e.hotkeys!==undefined)fn(e.name,e.hotkeys);if(e.installer!==undefined)zi(e.name,e.installer);return e}var Ji=[1,2,4,8,16];var Lu=5000;var Vi=15000;var Nu=1000;function qi(e){const{command:t,environment:n,singleInstance:s=false,isService:o=false}=e;return({mod:r,announce:a,reserveName:d})=>{const{claude:c,report:f,spawnCmod:g,watches:y}=Ft(r);const[E]=t;if(E===undefined)throw new Error(`${r.name}: the program has no command. Name the program on PATH and its arguments, such as ['preview-server', '--port', '0'].`);if(o)for(const ne of["program","service"])d(ne,Ke(E),`${r.name}: the service ${E} is already added. Give each isService program its own executable.`);else if(s)d("program",Ke(E),`${r.name}: the single instance of ${E} is already added. Give each singleInstance program its own executable.`);const v=s||o;const b={argv:t,...n===undefined?{}:{env:n}};let S="stopped";let N;let z;let J=0;const oe=[];let X=false;let A=false;let W;let x;const Z=()=>{if(o)return g(["program",r.name,"--service",...Object.keys(n??{}).flatMap((ne)=>["--env",ne]),"--",...t],n);return s?g(["program",r.name,"--no-wait","--",...t],n):c.process.spawn(b)};const U=()=>W??=Promise.all([c.env.home(),c.env.dataHome()]).then(([ne,k])=>hr(yt({HOME:ne,XDG_DATA_HOME:k}),r.name,Ke(E)));const _=(ne)=>void ne.catch((k)=>f({id:`program:${E}:follow`,message:`Could not follow the ${E} program`,error:k}));const T=(ne)=>{N=undefined;S="fatal";z=new Error(`${r.name}: the ${E} program stopped: ${ne}`);const k=()=>{J=0;z=undefined;de()};f({id:`program:${E}`,message:`The ${E} program stopped`,description:ne,retry:k});for(const F of oe.splice(0))F.reject(z)};const j=(ne)=>{N=ne;S="running";J=0;for(const k of oe.splice(0))k.resolve(ne)};const B=(ne)=>x??=(async()=>{if(!X||await ls(c,`${ne}.lock`,Vi))return;X=false;de()})().finally(()=>{x=undefined});const Q=async(ne)=>{if(!X)return;const k=await c.fs.read(ne).catch(Te(undefined));const F=k===undefined?undefined:Xi(String(JSON.parse(k).address).trim());if(F!==undefined)return j(F);N=undefined;S="starting";c.clock.after(Math.random()*Nu,()=>_(B(ne)))};const V=async(ne)=>{X=true;if(!A){A=true;y.add([ne],()=>_(Q(ne)));c.clock.every(Lu,()=>_(B(ne)))}await Q(ne)};const de=async()=>{X=false;N=undefined;S="starting";let ne="";let k="";let F=false;try{if(s){const K=await U();if(await ls(c,`${K}.lock`,Vi))return await V(K)}for await(const K of await Z()){if(K.stream==="stderr"){k=K.text.trim().split(`
-`).at(-1)??k;continue}if(F)continue;const ee=`${ne}${K.text}`.split(`
-`);ne=ee.pop()??"";for(const ie of ee.slice(0,1)){if(v&&ie.trim()==="held")return await V(await U());const ae=Xi(ie.trim());if(ae===undefined){T(`its first line is "${ie.trim()}". Write 127.0.0.1:<port> or unix:<socket path> as the first line on standard output.`);return}j(ae);F=true}}}catch(K){k=re(K)}N=undefined;J+=1;const G=Ji[J-1];if(G===undefined){T(`it did not start again after ${Ji.length} tries: ${k===""?"no standard error":k}.`);return}S="backoff";c.clock.after(G*1000,()=>void de())};a(`the ${E} program`);c.session.surfaces().then((ne)=>{if(ne.length>0&&S==="stopped")de()});return{get state(){return S},ready(){if(S==="running"&&N!==undefined)return Promise.resolve(N);if(S==="fatal")return Promise.reject(z);if(S==="stopped")de();return new Promise((ne,k)=>oe.push({resolve:ne,reject:k}))}}}}function Xi(e){const t=/^127\.0\.0\.1:(\d{1,5})$/.exec(e);if(t!==null)return{url:`http://127.0.0.1:${t[1]}`};const n=/^unix:(\/.+)$/.exec(e);if(n?.[1]!==undefined)return{url:"http://localhost",socketPath:n[1]};return}function Zi(e,t,n,s){return jt(Ft(e).claude,t,n,Promise.resolve().then(s))}var Fu={ms:30000,job:"slashCommand"};var Du=/^[A-Za-z0-9_-]{1,64}$/;function Qi(e){const{name:t,description:n,argumentHint:s,immediate:o,reply:r}=e;return(a)=>{const{mod:d,announce:c,reserveName:f}=a;const{claude:g,router:y,report:E,answerInput:v}=Ft(d);if(!Du.test(t))throw new Error(`${d.name}: "${t}" is not a slash command name. Use 1 to 64 letters, digits, "_", or "-", without the slash.`);const b=f("slashCommand",t,`${d.name}: the slash command /${t} is already added. Give each slashCommand its own name.`);let S;g.command.register({name:t,description:n,...s===undefined?{}:{argumentHint:s},...o===undefined?{}:{immediate:o}}).then(({command:z})=>{S=z},(z)=>{E({id:`command:${t}`,message:`/${t} is not added`,error:z})});c(`/${t}`);const N=y.add("command.run",async(z,J)=>{if(z.command!==S)return J(z);try{return await v(async()=>Wu(d.name,await Zi(d,Fu,`/${t}`,()=>r({args:z.args,positionals:Bu(z.args)},d))),()=>J(z))}catch(oe){return{text:`/${t} failed: ${Hu(oe)}`}}});return{name:t,remove(){N.remove();b.remove()}}}}function Wu(e,t){if(t===undefined)return{};if(typeof t==="string")return{text:t};return{...t.text===undefined?{}:{text:t.text},...t.note===undefined?{}:{context:[et(e,t.note)]}}}function Bu(e){return An(e,(t)=>`$${t}`).flatMap((t)=>{if(typeof t==="string")return[t];if("comment"in t)return[];if(t.op==="glob")return[t.pattern];return[t.op]})}function Hu(e){return re(e).replace(/\s*\n\s*/g," ")}var Yi={id:"results",title:"rulebook",render:(e)=>{const{run:t}=e.state.memory;if(t.status==="idle")return h($e,{dimColor:true},"Run /rulebook to check every Prompt in this project.");if(t.status==="running")return h($e,{dimColor:true},t.files.length===0?"Checking every Prompt in this project with every rule…":`Checking ${t.files.join(", ")} with every rule…`);if(t.status==="failed")return h($e,null,`rulebook failed: ${t.error}`);return h(zu,{reports:t.reports,failures:t.failures})}};function zu({reports:e,failures:t}){const n=e.flatMap((r)=>r.findings);const s=n.filter(({level:r})=>r==="error").length;const o=e.filter((r)=>r.findings.length>0||r.failures.length>0);return h(je,{flexDirection:"column",gap:1},h($e,{bold:true},`${s} ${s===1?"error":"errors"}, ${n.length-s} ${n.length-s===1?"warning":"warnings"} in ${e.length} ${e.length===1?"file":"files"}`),t.map((r)=>h($e,{key:r,wrap:"wrap"},r)),o.map((r)=>h(je,{key:r.path,flexDirection:"column"},h($e,{bold:true},r.path),r.findings.map((a)=>h($e,{key:`${a.rule}:${a.line}`,wrap:"wrap"},`  ${a.line}  ${a.level}  ${a.rule}  ${a.message}`)),r.failures.map((a)=>h($e,{key:`failure:${a.rule}`,dimColor:true,wrap:"wrap"},`  ${a.rule} did not run: ${a.reason}`)))))}var ea={memory:{run:{status:"idle"},shown:{},refusedTurn:undefined}};var ra=Ki({name:"rulebook",state:ea,setup(e){const t=e.sidebar.add(Yi);const n=gt.current.goal;const s=e.use(qi({command:["rulebook","__run_server"],singleInstance:true}));let o;const r=async(S,N,z)=>{o??=Gu().catch((W)=>{o=undefined;throw W});const{url:J,socketPath:oe}=await s.ready();const X=`{"input":${JSON.stringify(N)},"environment":${await o}}`;const A=await Gi.fetch(`${J}/${S}`,{method:"POST",body:X,...oe===undefined?{}:{socketPath:oe},...z===undefined?{}:{signal:z}});if(!A.ok)throw new Error(`rulebook ${S} failed: ${A.text}`);return JSON.parse(A.text)};let a;let d;let c=[];let f;const g=()=>{f?.remove();if(c.length===0)return;const S=Ui.onChange({path:c},()=>{if(f!==S)return;f=undefined;S.remove();d=undefined});f=S};const y=()=>{a=gt.current.project;const S=r("rules",{cwd:a}).then(Ku);d=S;S.then((N)=>{c=N.sources;for(const z of N.failures)e.toast.warning(z)},()=>{if(d===S)d=undefined}).then(g);return S};const E=()=>d!==undefined&&a===gt.current.project?d:y();const v=(S)=>{for(const N of S.failures)e.log(N,{level:"warning"});if(S.refuse!==undefined)return{refuse:S.refuse};if(S.note!==undefined)return{note:S.note};return};const b=async(S,N,z)=>{const{root:J,folders:oe}=await E();const X=new Set(z?[]:e.state.memory.shown[S]);const A=(U,_)=>{const T=oe.find((B)=>B.path===""||U===B.path||U.startsWith(`${B.path}/`));const j=(T?.rules??[]).filter((B)=>!X.has(B.id)&&_(B));for(const{id:B}of j)X.add(B);return j.map(({description:B})=>`- ${B}`).join(`
-`)};const W=A(sa(J,gt.current.project),({isEverywhere:U})=>U);const x=[...new Set(N)].map((U)=>{const _=sa(J,U);const T=A(_,({covers:j})=>j(_));return T===""?"":`Rules for ${_}:
-${T}`});const Z=[W,...x].filter((U)=>U!=="").join(`
+// node_modules/@cmodjs/core/session/goal/task.js
+var Task = "task";
+var TaskStart = "taskStart";
+var TaskEnd = "taskEnd";
 
-`);if(Z!==""||z)e.state.memory.shown={...e.state.memory.shown,[S]:[...X]};return Z===""?undefined:{note:Z}};n.beforeSessionStart((S)=>b(S.task??S.session,[],true));n.beforePrompt({task:/./},(S)=>b(S.task??S.session,[],false));n.beforeToolResult((S)=>b(S.task??S.session,[...S.files.read,...S.files.changed],false));n.beforeToolCall({name:/^(Edit|Write|MultiEdit|NotebookEdit)$/},async(S,{signal:N})=>v(await r("edit",{tool_name:S.name,tool_input:S.input,cwd:S.cwd,...ta(S)},N)),{timeoutMs:lt});n.beforeToolCall(async(S,{signal:N})=>{const z=(await E()).messages.find(({isSentBy:J})=>J(S.name));return z===undefined?undefined:v(await r("text",{name:z.name,input:S.input,cwd:S.cwd,tool_name:S.name,...ta(S)},N))},{timeoutMs:lt});gt.current.beforeTurnEnd(async(S,{signal:N})=>{const z=(await S.messages()).findLast((X)=>X.type===Kt);if(z===undefined)return;const J=await r("text",{name:"@reply",text:z.text,cwd:gt.current.cwd},N);const oe=v(J);if(J.refuse!==undefined&&e.state.memory.refusedTurn!==S.prompt.id){e.state.memory.refusedTurn=S.prompt.id;return oe}if(J.findings.length>0)e.toast.warning(J.findings.map(({line:X,rule:A,message:W})=>`Reply line ${X}: ${W} (${A})`).join(`
-`));return},{timeoutMs:lt});e.use(Qi({name:"rulebook",description:"Check every Prompt in this project, or the files named, with every rulebook rule",argumentHint:"[files]",reply:async({positionals:S})=>{e.state.memory.run={status:"running",files:S};Uu(e,S);await t.open();return}}))}});async function Uu(e,t){try{const n=await sr.run(["rulebook","check","--reporter=json",...t],{cwd:gt.current.cwd,timeoutMs:lt});if(n.exitCode>1)throw new Error(n.stderr.trim());const{reports:s,failures:o}=JSON.parse(n.stdout);e.state.memory.run={status:"done",reports:s,failures:o}}catch(n){e.state.memory.run={status:"failed",error:re(n)}}}async function Gu(){const e=await sr.run(["env","-0"]);if(e.exitCode!==0)throw new Error(`env -0 exited ${e.exitCode}: ${e.stderr.trim()}`);return JSON.stringify(Object.fromEntries(e.stdout.split("\x00").filter((t)=>t.includes("=")).map((t)=>[t.slice(0,t.indexOf("=")),t.slice(t.indexOf("=")+1)])))}function Ku({root:e,sources:t,folders:n,messages:s,failures:o}){return{root:e,sources:t,failures:o,folders:[...n].sort((r,a)=>a.path.length-r.path.length).map(({path:r,rules:a})=>({path:r,rules:a.map((d)=>({...d,covers:na(d.files)}))})),messages:s.map((r)=>({...r,isSentBy:na(r.tools)}))}}function ta(e){return{session_id:e.session,...e.agentType===undefined?{}:{agent_type:e.agentType},...e.task===undefined?{}:{agent_id:e.task}}}function na(e){const t=e.map(({source:n,flags:s})=>new RegExp(n,s));return(n)=>t.some((s)=>s.test(n))}function sa(e,t){const n=rs(e,t);return n.startsWith("..")||Vt(n)?t:n}function Rw(e,t){Hi(e,ra,t)}export{Rw as register};
+// node_modules/@cmodjs/core/session/context/turn/message/note.js
+var Note = "note";
+var modNoteBlock = new RegExp(`<(${pluginName.source.slice(1, -1)})_mod>\\n([\\s\\S]*?)\\n</\\1_mod>`, "g");
+function modNote(mod, text) {
+  return `<${mod}_mod>
+${text}
+</${mod}_mod>`;
+}
+
+// node_modules/@cmodjs/core/session/context/turn/message/reply.js
+var Reply = "reply";
+
+// node_modules/@cmodjs/core/session/context/turn/message/sender.js
+var Person = "person";
+var Mod = "mod";
+var Schedule = "schedule";
+var Channel = "channel";
+var Sdk = "sdk";
+var Engine = "engine";
+var personOrigins = ["human", "composer", "bridge", "slack-ping"];
+var sessionOrigins = ["peer", "peer-send-message", "coordinator", "projects-relay", "observer", "observer-activity"];
+function senderOf(origin, isInTask) {
+  const fields = isObject(origin) ? origin : {};
+  const kind = typeof fields["kind"] === "string" ? fields["kind"] : undefined;
+  if (kind === undefined)
+    return { type: isInTask ? Task : Person };
+  if (personOrigins.includes(kind))
+    return { type: Person };
+  if (sessionOrigins.includes(kind))
+    return { type: "session" };
+  if (kind === "auto-continuation")
+    return { type: Engine };
+  if (kind === "plugin" && typeof fields["name"] === "string")
+    return { type: Mod, name: fields["name"], ...fields["asUser"] === true ? { as: Person } : {} };
+  if (kind === "scheduled-trigger")
+    return { type: Schedule };
+  if (kind === "channel" && typeof fields["server"] === "string")
+    return { type: Channel, name: fields["server"] };
+  if (kind === "sdk")
+    return { type: Sdk };
+  if (kind === "task-notification")
+    return { type: Task };
+  return { type: isInTask ? Task : Person };
+}
+
+// node_modules/@cmodjs/core/session/context/turn/message/tool-call.js
+var ToolCall = "toolCall";
+
+// node_modules/@cmodjs/core/session/context/turn/message/tool-result.js
+var ToolResult = "toolResult";
+
+// node_modules/@cmodjs/core/session/context/turn/message/message.js
+var Message = "message";
+
+// node_modules/@cmodjs/core/session/context/context.js
+var ContextStart = "contextStart";
+var ContextEnd = "contextEnd";
+
+// node_modules/@cmodjs/core/session/context/turn/turn.js
+var TurnStart = "turnStart";
+var TurnEnd = "turnEnd";
+
+// node_modules/@cmodjs/core/session/goal/goal.js
+var GoalChange = "goalChange";
+
+// node_modules/@cmodjs/core/session/conversation.js
+var forkAgentType = "fork";
+var searchLimit = 50;
+
+// node_modules/@cmodjs/core/session/session.js
+var Session = "session";
+var sessionEvents = {
+  Message: "message",
+  Prompt: "prompt",
+  Note: "note",
+  Reply: "reply",
+  ToolCall: "toolCall",
+  ToolResult: "toolResult",
+  Skill: "skill",
+  InstructionFile: "instructionFile",
+  AttachedFile: "attachedFile",
+  Notice: "notice",
+  ContextStart: "contextStart",
+  ContextEnd: "contextEnd",
+  TurnStart: "turnStart",
+  TurnEnd: "turnEnd",
+  TaskStart: "taskStart",
+  TaskEnd: "taskEnd",
+  GoalChange: "goalChange",
+  UsageChange: "usageChange"
+};
+var beforeEvents = ["Prompt", "Note", "Skill", "InstructionFile", "AttachedFile", "Reply", "ToolCall", "ToolResult", "Notice", "TaskStart", "TurnEnd", "ContextEnd"];
+var processEvents = {
+  ProjectSetup: { on: "Setup", before: "Setup" },
+  SessionStart: { on: "SessionStart", before: "SessionStart" },
+  SessionEnd: { on: "SessionEnd" },
+  ModelChange: { on: "PostModelSwitch", before: "PreModelSwitch" },
+  CwdChange: { on: "CwdChanged" },
+  DirectoryAdd: { on: "DirectoryAdded" },
+  WorktreeCreate: { on: "WorktreeCreate", before: "WorktreeCreate" },
+  WorktreeRemove: { on: "WorktreeRemove" },
+  Notification: { on: "Notification" },
+  Elicitation: { on: "Elicitation", before: "Elicitation" },
+  ElicitationResponse: { on: "ElicitationResult", before: "ElicitationResult" },
+  PermissionCheck: { on: "tool.check", before: "tool.check" },
+  PermissionRequest: { on: "PermissionRequest", before: "PermissionRequest" },
+  PermissionDenial: { on: "PermissionDenied", before: "PermissionDenied" },
+  ToolBatch: { on: "PostToolBatch", before: "PostToolBatch" },
+  TodoCreate: { on: "TaskCreated", before: "TaskCreated" },
+  TodoComplete: { on: "TaskCompleted", before: "TaskCompleted" },
+  ReplyDisplay: { on: "MessageDisplay", before: "MessageDisplay" }
+};
+
+// node_modules/@cmodjs/core/utils/matcher.js
+function matches(value, matcher) {
+  if (matcher instanceof RegExp)
+    return value !== undefined && value !== null && matcher.test(String(value));
+  if (Array.isArray(matcher))
+    return matcher.some((each) => matches(value, each));
+  if (typeof matcher !== "object" || matcher === null)
+    return value === matcher;
+  if (Array.isArray(value))
+    return value.some((each) => matches(each, matcher));
+  if (typeof value !== "object" || value === null)
+    return false;
+  return Object.entries(matcher).every(([key, wanted]) => wanted === undefined || matches(value[key], wanted));
+}
+function sentMatcher(matcher) {
+  if (matcher instanceof RegExp)
+    return { regexp: matcher.source, flags: matcher.flags };
+  if (Array.isArray(matcher))
+    return matcher.map(sentMatcher);
+  if (typeof matcher !== "object" || matcher === null)
+    return matcher;
+  return Object.fromEntries(Object.entries(matcher).filter(([, value]) => value !== undefined).map(([key, value]) => [key, sentMatcher(value)]));
+}
+
+// node_modules/@cmodjs/core/vendor.js
+var Bt = Object.create;
+var { getPrototypeOf: jt, defineProperty: Ve, getOwnPropertyNames: Gt } = Object;
+var Ye = Object.prototype.hasOwnProperty;
+function Ut(e) {
+  return this[e];
+}
+var qt;
+var Ft;
+var Kt = (e, r, t) => {
+  var n = e != null && typeof e === "object";
+  if (n) {
+    var o = r ? qt ??= new WeakMap : Ft ??= new WeakMap, u = o.get(e);
+    if (u)
+      return u;
+  }
+  t = e != null ? Bt(jt(e)) : {};
+  let s = r || !e || !e.__esModule || !Ye.call(e, "default") ? Ve(t, "default", { value: e, enumerable: true }) : t;
+  if (e && typeof e === "object" || typeof e === "function") {
+    for (let i of Gt(e))
+      if (!Ye.call(s, i))
+        Ve(s, i, { get: Ut.bind(e, i), enumerable: true });
+  }
+  if (n)
+    o.set(e, s);
+  return s;
+};
+var me = (e, r) => () => (r || e((r = { exports: {} }).exports, r), r.exports);
+var Se = me(function(Qn, dt) {
+  var lt = { DOT_LITERAL: "\\.", PLUS_LITERAL: "\\+", QMARK_LITERAL: "\\?", SLASH_LITERAL: "\\/", ONE_CHAR: "(?=.)", QMARK: "[^/]", END_ANCHOR: "(?:\\/|$)", DOTS_SLASH: "\\.{1,2}(?:\\/|$)", NO_DOT: "(?!\\.)", NO_DOTS: "(?!(?:^|\\/)\\.{1,2}(?:\\/|$))", NO_DOT_SLASH: "(?!\\.{0,1}(?:\\/|$))", NO_DOTS_SLASH: "(?!\\.{1,2}(?:\\/|$))", QMARK_NO_DOT: "[^.\\/]", STAR: "[^/]*?", START_ANCHOR: "(?:^|\\/)", SEP: "/" }, wr = { ...lt, SLASH_LITERAL: "[\\\\/]", QMARK: "[^\\\\/]", STAR: "[^\\\\/]*?", DOTS_SLASH: "\\.{1,2}(?:[\\\\/]|$)", NO_DOT: "(?!\\.)", NO_DOTS: "(?!(?:^|[\\\\/])\\.{1,2}(?:[\\\\/]|$))", NO_DOT_SLASH: "(?!\\.{0,1}(?:[\\\\/]|$))", NO_DOTS_SLASH: "(?!\\.{1,2}(?:[\\\\/]|$))", QMARK_NO_DOT: "[^.\\\\/]", START_ANCHOR: "(?:^|[\\\\/])", END_ANCHOR: "(?:[\\\\/]|$)", SEP: "\\" }, Or = { __proto__: null, alnum: "a-zA-Z0-9", alpha: "a-zA-Z", ascii: "\\x00-\\x7F", blank: " \\t", cntrl: "\\x00-\\x1F\\x7F", digit: "0-9", graph: "\\x21-\\x7E", lower: "a-z", print: "\\x20-\\x7E ", punct: "\\-!\"#$%&'()\\*+,./:;<=>?@[\\]^_`{|}~", space: " \\t\\r\\n\\v\\f", upper: "A-Z", word: "A-Za-z0-9_", xdigit: "A-Fa-f0-9" };
+  dt.exports = { DEFAULT_MAX_EXTGLOB_RECURSION: 0, MAX_LENGTH: 65536, POSIX_REGEX_SOURCE: Or, REGEX_BACKSLASH: /\\(?![*+?^${}(|)[\]])/g, REGEX_NON_SPECIAL_CHARS: /^[^@![\].,$*+?^{}()|\\/]+/, REGEX_SPECIAL_CHARS: /[-*+?.^${}(|)[\]]/, REGEX_SPECIAL_CHARS_BACKREF: /(\\?)((\W)(\3*))/g, REGEX_SPECIAL_CHARS_GLOBAL: /([-*+?.^${}(|)[\]])/g, REGEX_REMOVE_BACKSLASH: /(?:\[.*?[^\\]\]|\\(?=.))/g, REPLACEMENTS: { __proto__: null, "***": "*", "**/**": "**", "**/**/**": "**" }, CHAR_0: 48, CHAR_9: 57, CHAR_UPPERCASE_A: 65, CHAR_LOWERCASE_A: 97, CHAR_UPPERCASE_Z: 90, CHAR_LOWERCASE_Z: 122, CHAR_LEFT_PARENTHESES: 40, CHAR_RIGHT_PARENTHESES: 41, CHAR_ASTERISK: 42, CHAR_AMPERSAND: 38, CHAR_AT: 64, CHAR_BACKWARD_SLASH: 92, CHAR_CARRIAGE_RETURN: 13, CHAR_CIRCUMFLEX_ACCENT: 94, CHAR_COLON: 58, CHAR_COMMA: 44, CHAR_DOT: 46, CHAR_DOUBLE_QUOTE: 34, CHAR_EQUAL: 61, CHAR_EXCLAMATION_MARK: 33, CHAR_FORM_FEED: 12, CHAR_FORWARD_SLASH: 47, CHAR_GRAVE_ACCENT: 96, CHAR_HASH: 35, CHAR_HYPHEN_MINUS: 45, CHAR_LEFT_ANGLE_BRACKET: 60, CHAR_LEFT_CURLY_BRACE: 123, CHAR_LEFT_SQUARE_BRACKET: 91, CHAR_LINE_FEED: 10, CHAR_NO_BREAK_SPACE: 160, CHAR_PERCENT: 37, CHAR_PLUS: 43, CHAR_QUESTION_MARK: 63, CHAR_RIGHT_ANGLE_BRACKET: 62, CHAR_RIGHT_CURLY_BRACE: 125, CHAR_RIGHT_SQUARE_BRACKET: 93, CHAR_SEMICOLON: 59, CHAR_SINGLE_QUOTE: 39, CHAR_SPACE: 32, CHAR_TAB: 9, CHAR_UNDERSCORE: 95, CHAR_VERTICAL_LINE: 124, CHAR_ZERO_WIDTH_NOBREAK_SPACE: 65279, extglobChars(e) {
+    return { "!": { type: "negate", open: "(?:(?!(?:", close: `))${e.STAR})` }, "?": { type: "qmark", open: "(?:", close: ")?" }, "+": { type: "plus", open: "(?:", close: ")+" }, "*": { type: "star", open: "(?:", close: ")*" }, "@": { type: "at", open: "(?:", close: ")" } };
+  }, globChars(e) {
+    return e === true ? wr : lt;
+  } };
+});
+var Te = me(function(kr) {
+  var { REGEX_BACKSLASH: vr, REGEX_REMOVE_BACKSLASH: Tr, REGEX_SPECIAL_CHARS: Ir, REGEX_SPECIAL_CHARS_GLOBAL: Cr } = Se();
+  kr.isObject = (e) => e !== null && typeof e === "object" && !Array.isArray(e);
+  kr.hasRegexChars = (e) => Ir.test(e);
+  kr.isRegexChar = (e) => e.length === 1 && kr.hasRegexChars(e);
+  kr.escapeRegex = (e) => e.replace(Cr, "\\$1");
+  kr.toPosixSlashes = (e) => e.replace(vr, "/");
+  kr.isWindows = () => {
+    if (typeof navigator < "u" && navigator.platform) {
+      let e = navigator.platform.toLowerCase();
+      return e === "win32" || e === "windows";
+    }
+    return false;
+  };
+  kr.removeBackslashes = (e) => e.replace(Tr, (r) => r === "\\" ? "" : r);
+  kr.escapeLast = (e, r, t) => {
+    let n = e.lastIndexOf(r, t);
+    if (n === -1)
+      return e;
+    if (e[n - 1] === "\\")
+      return kr.escapeLast(e, r, n - 1);
+    return `${e.slice(0, n)}\\${e.slice(n)}`;
+  };
+  kr.removePrefix = (e, r = {}) => {
+    let t = e;
+    if (t.startsWith("./"))
+      t = t.slice(2), r.prefix = "./";
+    return t;
+  };
+  kr.wrapOutput = (e, r = {}, t = {}) => {
+    let n = t.contains ? "" : "^", o = t.contains ? "" : "$", u = `${n}(?:${e})${o}`;
+    if (r.negated === true)
+      u = `(?:^(?!${u}).*$)`;
+    return u;
+  };
+  kr.basename = (e, { windows: r } = {}) => {
+    let t = e.split(r ? /[\\/]/ : "/"), n = t[t.length - 1];
+    if (n === "")
+      return t[t.length - 2];
+    return n;
+  };
+});
+var xt = me(function(Vn, _t) {
+  var Ce = Te(), { CHAR_ASTERISK: Be, CHAR_AT: Gr, CHAR_BACKWARD_SLASH: xe, CHAR_COMMA: Ur, CHAR_DOT: je, CHAR_EXCLAMATION_MARK: Ge, CHAR_FORWARD_SLASH: gt, CHAR_LEFT_CURLY_BRACE: Ue, CHAR_LEFT_PARENTHESES: Ie, CHAR_LEFT_SQUARE_BRACKET: qr, CHAR_PLUS: Fr, CHAR_QUESTION_MARK: ht, CHAR_RIGHT_CURLY_BRACE: Kr, CHAR_RIGHT_PARENTHESES: $t, CHAR_RIGHT_SQUARE_BRACKET: Wr } = Se(), mt = (e) => e === gt || e === xe, yt = (e) => {
+    if (e.isPrefix !== true)
+      e.depth = e.isGlobstar ? 1 / 0 : 1;
+  }, Xr = (e, r) => {
+    let t = r || {}, n = e.length - 1, o = t.parts === true || t.tokens === true || t.scanToEnd === true, u = [], s = [], i = [], h2 = e, N = -1, _ = 0, w = 0, M = false, K = false, g = false, k = false, ee = false, q = false, L = false, H = false, ne = false, X = false, T = 0, V, A, I = { value: "", depth: 0, isGlob: false }, a = () => N >= n, Q = () => h2.charCodeAt(N + 1), C = () => (V = A, h2.charCodeAt(++N));
+    while (N < n) {
+      A = C();
+      let P;
+      if (A === xe) {
+        if (L = I.backslashes = true, A = C(), A === Ue)
+          q = true;
+        continue;
+      }
+      if (q === true || A === Ue) {
+        T++;
+        while (a() !== true && (A = C())) {
+          if (A === xe) {
+            L = I.backslashes = true, C();
+            continue;
+          }
+          if (A === Ue) {
+            T++;
+            continue;
+          }
+          if (q !== true && A === je && (A = C()) === je) {
+            if (M = I.isBrace = true, g = I.isGlob = true, X = true, o === true)
+              continue;
+            break;
+          }
+          if (q !== true && A === Ur) {
+            if (M = I.isBrace = true, g = I.isGlob = true, X = true, o === true)
+              continue;
+            break;
+          }
+          if (A === Kr) {
+            if (T--, T === 0) {
+              q = false, M = I.isBrace = true, X = true;
+              break;
+            }
+          }
+        }
+        if (o === true)
+          continue;
+        break;
+      }
+      if (A === gt) {
+        if (u.push(N), s.push(I), I = { value: "", depth: 0, isGlob: false }, X === true)
+          continue;
+        if (V === je && N === _ + 1) {
+          _ += 2;
+          continue;
+        }
+        w = N + 1;
+        continue;
+      }
+      if (t.noext !== true) {
+        if ((A === Fr || A === Gr || A === Be || A === ht || A === Ge) === true && Q() === Ie) {
+          if (g = I.isGlob = true, k = I.isExtglob = true, X = true, A === Ge && N === _)
+            ne = true;
+          if (o === true) {
+            let te = 0;
+            while (a() !== true && (A = C())) {
+              if (A === xe) {
+                L = I.backslashes = true, C();
+                continue;
+              }
+              if (A === Ie) {
+                te++;
+                continue;
+              }
+              if (A === $t && --te === 0) {
+                X = true;
+                break;
+              }
+            }
+            continue;
+          }
+          break;
+        }
+      }
+      if (A === Be) {
+        if (V === Be)
+          ee = I.isGlobstar = true;
+        if (g = I.isGlob = true, X = true, o === true)
+          continue;
+        break;
+      }
+      if (A === ht) {
+        if (g = I.isGlob = true, X = true, o === true)
+          continue;
+        break;
+      }
+      if (A === qr) {
+        while (a() !== true && (P = C())) {
+          if (P === xe) {
+            L = I.backslashes = true, C();
+            continue;
+          }
+          if (P === Wr) {
+            K = I.isBracket = true, g = I.isGlob = true, X = true;
+            break;
+          }
+        }
+        if (o === true)
+          continue;
+        break;
+      }
+      if (t.nonegate !== true && A === Ge && N === _) {
+        H = I.negated = true, _++;
+        continue;
+      }
+      if (t.noparen !== true && A === Ie) {
+        if (g = I.isGlob = true, o === true) {
+          let J = 1;
+          while (a() !== true && (A = C())) {
+            if (A === xe) {
+              L = I.backslashes = true, C();
+              continue;
+            }
+            if (A === Ie) {
+              J++;
+              continue;
+            }
+            if (A === $t && --J === 0) {
+              X = true;
+              break;
+            }
+          }
+          continue;
+        }
+        break;
+      }
+      if (g === true) {
+        if (X = true, o === true)
+          continue;
+        break;
+      }
+    }
+    if (t.noext === true)
+      k = false, g = false;
+    let B = h2, l = "", f = "";
+    if (_ > 0)
+      l = h2.slice(0, _), h2 = h2.slice(_), w -= _;
+    if (B && g === true && w > 0)
+      B = h2.slice(0, w), f = h2.slice(w);
+    else if (g === true)
+      B = "", f = h2;
+    else
+      B = h2;
+    if (B && B !== "" && B !== "/" && B !== h2) {
+      if (mt(B.charCodeAt(B.length - 1)))
+        B = B.slice(0, -1);
+    }
+    if (t.unescape === true) {
+      if (f)
+        f = Ce.removeBackslashes(f);
+      if (B && L === true)
+        B = Ce.removeBackslashes(B);
+    }
+    let Y = { prefix: l, input: e, start: _, base: B, glob: f, isBrace: M, isBracket: K, isGlob: g, isExtglob: k, isGlobstar: ee, negated: H, negatedExtglob: ne };
+    if (t.tokens === true) {
+      if (Y.maxDepth = 0, !mt(A))
+        s.push(I);
+      Y.tokens = s;
+    }
+    if (t.parts === true || t.tokens === true) {
+      let P;
+      for (let W = 0;W < u.length; W++) {
+        let ue = P !== undefined ? P + 1 : _, $e = u[W], fe = e.slice(ue, $e);
+        if (t.tokens) {
+          if (W === 0 && _ !== 0)
+            s[W].isPrefix = true, s[W].value = l;
+          else
+            s[W].value = fe;
+          yt(s[W]), Y.maxDepth += s[W].depth;
+        }
+        if ($e >= _)
+          i.push(fe), P = $e;
+      }
+      let J = P !== undefined ? P + 1 : _, te = e.slice(J);
+      if (i.push(te), t.tokens && P && P + 1 < e.length)
+        s[s.length - 1].value = te, yt(s[s.length - 1]), Y.maxDepth += s[s.length - 1].depth;
+      Y.slashes = u, Y.parts = i;
+    }
+    return Y;
+  };
+  _t.exports = Xr;
+});
+var St = me(function(Yn, Et) {
+  var he = Se(), G = Te(), { MAX_LENGTH: ke, POSIX_REGEX_SOURCE: Qr, REGEX_NON_SPECIAL_CHARS: Zr, REGEX_SPECIAL_CHARS_BACKREF: Vr, REPLACEMENTS: At } = he, Yr = (e, r) => {
+    if (typeof r.expandRange === "function")
+      return r.expandRange(...e, r);
+    e.sort();
+    let t = `[${e.join("-")}]`;
+    try {
+      new RegExp(t);
+    } catch (n) {
+      return e.map((o) => G.escapeRegex(o)).join("..");
+    }
+    return t;
+  }, Ae = (e, r) => `Missing ${e}: "${r}" - use "\\\\${r}" to match literal characters`, Rt = (e) => {
+    let r = [], t = 0, n = 0, o = 0, u = "", s = false;
+    for (let i of e) {
+      if (s === true) {
+        u += i, s = false;
+        continue;
+      }
+      if (i === "\\") {
+        u += i, s = true;
+        continue;
+      }
+      if (i === '"') {
+        o = o === 1 ? 0 : 1, u += i;
+        continue;
+      }
+      if (o === 0) {
+        if (i === "[")
+          t++;
+        else if (i === "]" && t > 0)
+          t--;
+        else if (t === 0) {
+          if (i === "(")
+            n++;
+          else if (i === ")" && n > 0)
+            n--;
+          else if (i === "|" && n === 0) {
+            r.push(u), u = "";
+            continue;
+          }
+        }
+      }
+      u += i;
+    }
+    return r.push(u), r;
+  }, Jr = (e) => {
+    let r = false;
+    for (let t of e) {
+      if (r === true) {
+        r = false;
+        continue;
+      }
+      if (t === "\\") {
+        r = true;
+        continue;
+      }
+      if (/[?*+@!()[\]{}]/.test(t))
+        return false;
+    }
+    return true;
+  }, Fe = (e) => {
+    let r = e.trim(), t = true;
+    while (t === true)
+      if (t = false, /^@\([^\\()[\]{}|]+\)$/.test(r))
+        r = r.slice(2, -1), t = true;
+    if (!Jr(r))
+      return;
+    return r.replace(/\\(.)/g, "$1");
+  }, en = (e) => {
+    let r = e.map(Fe).filter(Boolean);
+    for (let t = 0;t < r.length; t++)
+      for (let n = t + 1;n < r.length; n++) {
+        let o = r[t], u = r[n], s = o[0];
+        if (!s || o !== s.repeat(o.length) || u !== s.repeat(u.length))
+          continue;
+        if (o === u || o.startsWith(u) || u.startsWith(o))
+          return true;
+      }
+    return false;
+  }, qe = (e, r = true) => {
+    if (e[0] !== "+" && e[0] !== "*" || e[1] !== "(")
+      return;
+    let t = 0, n = 0, o = 0, u = false;
+    for (let s = 1;s < e.length; s++) {
+      let i = e[s];
+      if (u === true) {
+        u = false;
+        continue;
+      }
+      if (i === "\\") {
+        u = true;
+        continue;
+      }
+      if (i === '"') {
+        o = o === 1 ? 0 : 1;
+        continue;
+      }
+      if (o === 1)
+        continue;
+      if (i === "[") {
+        t++;
+        continue;
+      }
+      if (i === "]" && t > 0) {
+        t--;
+        continue;
+      }
+      if (t > 0)
+        continue;
+      if (i === "(") {
+        n++;
+        continue;
+      }
+      if (i === ")") {
+        if (n--, n === 0) {
+          if (r === true && s !== e.length - 1)
+            return;
+          return { type: e[0], body: e.slice(2, s), end: s };
+        }
+      }
+    }
+  }, tn = (e) => `${e.length === 1 ? G.escapeRegex(e[0]) : `[${e.map((t) => G.escapeRegex(t)).join("")}]`}*`, rn = (e) => {
+    let r = 0, t = [];
+    while (r < e.length) {
+      let n = qe(e.slice(r), false);
+      if (!n || n.type !== "*")
+        return;
+      let o = Rt(n.body).map((s) => s.trim());
+      if (o.length !== 1)
+        return;
+      let u = Fe(o[0]);
+      if (!u || u.length !== 1)
+        return;
+      t.push(u), r += n.end + 1;
+    }
+    if (t.length < 1)
+      return;
+    return t;
+  }, nn = (e) => {
+    let r = 0, t = e.trim(), n = qe(t);
+    while (n)
+      r++, t = n.body.trim(), n = qe(t);
+    return r;
+  }, sn = (e, r) => {
+    if (r.maxExtglobRecursion === false)
+      return { risky: false };
+    let t = typeof r.maxExtglobRecursion === "number" ? r.maxExtglobRecursion : he.DEFAULT_MAX_EXTGLOB_RECURSION, n = Rt(e).map((i) => i.trim());
+    if (n.length > 1) {
+      if (n.some((i) => i === "") || n.some((i) => /^[*?]+$/.test(i)) || en(n))
+        return { risky: true };
+    }
+    let o = [], u = false, s = true;
+    for (let i of n) {
+      let h2 = rn(i);
+      if (h2) {
+        u = true, o.push(...h2);
+        continue;
+      }
+      let N = Fe(i);
+      if (N && N.length === 1) {
+        o.push(N);
+        continue;
+      }
+      if (s = false, nn(i) > t)
+        return { risky: true };
+    }
+    if (u)
+      return s ? { risky: true, safeOutput: tn([...new Set(o)]) } : { risky: true };
+    return { risky: false };
+  }, Ke = (e, r) => {
+    if (typeof e !== "string")
+      throw TypeError("Expected a string");
+    e = At[e] || e;
+    let t = { ...r }, n = typeof t.maxLength === "number" ? Math.min(ke, t.maxLength) : ke, o = e.length;
+    if (o > n)
+      throw SyntaxError(`Input length: ${o}, exceeds maximum allowed length: ${n}`);
+    let u = { type: "bos", value: "", output: t.prepend || "" }, s = [u], i = t.capture ? "" : "?:", h2 = he.globChars(t.windows), N = he.extglobChars(h2), { DOT_LITERAL: _, PLUS_LITERAL: w, SLASH_LITERAL: M, ONE_CHAR: K, DOTS_SLASH: g, NO_DOT: k, NO_DOT_SLASH: ee, NO_DOTS_SLASH: q, QMARK: L, QMARK_NO_DOT: H, STAR: ne, START_ANCHOR: X } = h2, T = (p) => `(${i}(?:(?!${X}${p.dot ? g : _}).)*?)`, V = t.dot ? "" : k, A = t.dot ? L : H, I = t.bash === true ? T(t) : ne;
+    if (t.capture)
+      I = `(${I})`;
+    if (typeof t.noext === "boolean")
+      t.noextglob = t.noext;
+    let a = { input: e, index: -1, start: 0, dot: t.dot === true, consumed: "", output: "", prefix: "", backtrack: false, negated: false, brackets: 0, braces: 0, parens: 0, quotes: 0, globstar: false, tokens: s };
+    e = G.removePrefix(e, a), o = e.length;
+    let Q = [], C = [], B = [], l = u, f, Y = () => a.index === o - 1, P = a.peek = (p = 1) => e[a.index + p], J = a.advance = () => e[++a.index] || "", te = () => e.slice(a.index + 1), W = (p = "", j = 0) => {
+      a.consumed += p, a.index += j;
+    }, ue = (p) => {
+      a.output += p.output != null ? p.output : p.value, W(p.value);
+    }, $e = () => {
+      let p = 1;
+      while (P() === "!" && (P(2) !== "(" || P(3) === "?"))
+        J(), a.start++, p++;
+      if (p % 2 === 0)
+        return false;
+      return a.negated = true, a.start++, true;
+    }, fe = (p) => {
+      a[p]++, B.push(p);
+    }, ae = (p) => {
+      a[p]--, B.pop();
+    }, R = (p) => {
+      if (l.type === "globstar") {
+        let j = a.braces > 0 && (p.type === "comma" || p.type === "brace"), d = p.extglob === true || Q.length && (p.type === "pipe" || p.type === "paren");
+        if (p.type !== "slash" && p.type !== "paren" && !j && !d)
+          a.output = a.output.slice(0, -l.output.length), l.type = "star", l.value = "*", l.output = I, a.output += l.output;
+      }
+      if (Q.length && p.type !== "paren")
+        Q[Q.length - 1].inner += p.value;
+      if (p.value || p.output)
+        ue(p);
+      if (l && l.type === "text" && p.type === "text") {
+        l.output = (l.output || l.value) + p.value, l.value += p.value;
+        return;
+      }
+      p.prev = l, s.push(p), l = p;
+    }, de = (p, j) => {
+      let d = { ...N[j], conditions: 1, inner: "" };
+      d.prev = l, d.parens = a.parens, d.output = a.output, d.startIndex = a.index, d.tokensIndex = s.length;
+      let O = (t.capture ? "(" : "") + d.open;
+      fe("parens"), R({ type: p, value: j, output: a.output ? "" : K }), R({ type: "paren", extglob: true, value: J(), output: O }), Q.push(d);
+    }, Re = (p) => {
+      let j = e.slice(p.startIndex, a.index + 1), d = e.slice(p.startIndex + 2, a.index), O = sn(d, t);
+      if ((p.type === "plus" || p.type === "star") && O.risky) {
+        let z = O.safeOutput ? (p.output ? "" : K) + (t.capture ? `(${O.safeOutput})` : O.safeOutput) : undefined, re = s[p.tokensIndex];
+        re.type = "text", re.value = j, re.output = z || G.escapeRegex(j);
+        for (let ie = p.tokensIndex + 1;ie < s.length; ie++)
+          s[ie].value = "", s[ie].output = "", delete s[ie].suffix;
+        a.output = p.output + re.output, a.backtrack = true, R({ type: "paren", extglob: true, value: f, output: "" }), ae("parens");
+        return;
+      }
+      let D = p.close + (t.capture ? ")" : ""), U;
+      if (p.type === "negate") {
+        let z = I;
+        if (p.inner && p.inner.length > 1 && p.inner.includes("/"))
+          z = T(t);
+        if (z !== I || Y() || /^\)+$/.test(te()))
+          D = p.close = `)$))${z}`;
+        if (p.inner.includes("*") && (U = te()) && /^\.[^\\/.]+$/.test(U)) {
+          let re = Ke(U, { ...r, fastpaths: false }).output;
+          D = p.close = `)${re})${z})`;
+        }
+        if (p.prev.type === "bos")
+          a.negatedExtglob = true;
+      }
+      R({ type: "paren", extglob: true, value: f, output: D }), ae("parens");
+    };
+    if (t.fastpaths !== false && !/(^[*!]|[/()[\]{}"])/.test(e)) {
+      let p = false, j = e.replace(Vr, (d, O, D, U, z, re) => {
+        if (U === "\\")
+          return p = true, d;
+        if (U === "?") {
+          if (O)
+            return O + U + (z ? L.repeat(z.length) : "");
+          if (re === 0)
+            return A + (z ? L.repeat(z.length) : "");
+          return L.repeat(D.length);
+        }
+        if (U === ".")
+          return _.repeat(D.length);
+        if (U === "*") {
+          if (O)
+            return O + U + (z ? I : "");
+          return I;
+        }
+        return O ? d : `\\${d}`;
+      });
+      if (p === true)
+        if (t.unescape === true)
+          j = j.replace(/\\/g, "");
+        else
+          j = j.replace(/\\+/g, (d) => d.length % 2 === 0 ? "\\\\" : d ? "\\" : "");
+      if (j === e && t.contains === true)
+        return a.output = e, a;
+      return a.output = G.wrapOutput(j, a, r), a;
+    }
+    while (!Y()) {
+      if (f = J(), f === "\x00")
+        continue;
+      if (f === "\\") {
+        let d = P();
+        if (d === "/" && t.bash !== true)
+          continue;
+        if (d === "." || d === ";")
+          continue;
+        if (!d) {
+          f += "\\", R({ type: "text", value: f });
+          continue;
+        }
+        let O = /^\\+/.exec(te()), D = 0;
+        if (O && O[0].length > 2) {
+          if (D = O[0].length, a.index += D, D % 2 !== 0)
+            f += "\\";
+        }
+        if (t.unescape === true)
+          f = J();
+        else
+          f += J();
+        if (a.brackets === 0) {
+          R({ type: "text", value: f });
+          continue;
+        }
+      }
+      if (a.brackets > 0 && (f !== "]" || l.value === "[" || l.value === "[^")) {
+        if (t.posix !== false && f === ":") {
+          let d = l.value.slice(1);
+          if (d.includes("[")) {
+            if (l.posix = true, d.includes(":")) {
+              let O = l.value.lastIndexOf("["), D = l.value.slice(0, O), U = l.value.slice(O + 2), z = Qr[U];
+              if (z) {
+                if (l.value = D + z, a.backtrack = true, J(), !u.output && s.indexOf(l) === 1)
+                  u.output = K;
+                continue;
+              }
+            }
+          }
+        }
+        if (f === "[" && P() !== ":" || f === "-" && P() === "]")
+          f = `\\${f}`;
+        if (f === "]" && (l.value === "[" || l.value === "[^"))
+          f = `\\${f}`;
+        if (t.posix === true && f === "!" && l.value === "[")
+          f = "^";
+        l.value += f, ue({ value: f });
+        continue;
+      }
+      if (a.quotes === 1 && f !== '"') {
+        f = G.escapeRegex(f), l.value += f, ue({ value: f });
+        continue;
+      }
+      if (f === '"') {
+        if (a.quotes = a.quotes === 1 ? 0 : 1, t.keepQuotes === true)
+          R({ type: "text", value: f });
+        continue;
+      }
+      if (f === "(") {
+        fe("parens"), R({ type: "paren", value: f });
+        continue;
+      }
+      if (f === ")") {
+        if (a.parens === 0 && t.strictBrackets === true)
+          throw SyntaxError(Ae("opening", "("));
+        let d = Q[Q.length - 1];
+        if (d && a.parens === d.parens + 1) {
+          Re(Q.pop());
+          continue;
+        }
+        R({ type: "paren", value: f, output: a.parens ? ")" : "\\)" }), ae("parens");
+        continue;
+      }
+      if (f === "[") {
+        if (t.nobracket === true || !te().includes("]")) {
+          if (t.nobracket !== true && t.strictBrackets === true)
+            throw SyntaxError(Ae("closing", "]"));
+          f = `\\${f}`;
+        } else
+          fe("brackets");
+        R({ type: "bracket", value: f });
+        continue;
+      }
+      if (f === "]") {
+        if (t.nobracket === true || l && l.type === "bracket" && l.value.length === 1) {
+          R({ type: "text", value: f, output: `\\${f}` });
+          continue;
+        }
+        if (a.brackets === 0) {
+          if (t.strictBrackets === true)
+            throw SyntaxError(Ae("opening", "["));
+          R({ type: "text", value: f, output: `\\${f}` });
+          continue;
+        }
+        ae("brackets");
+        let d = l.value.slice(1);
+        if (l.posix !== true && d[0] === "^" && !d.includes("/"))
+          f = `/${f}`;
+        if (l.value += f, ue({ value: f }), t.literalBrackets === false || G.hasRegexChars(d))
+          continue;
+        let O = G.escapeRegex(l.value);
+        if (a.output = a.output.slice(0, -l.value.length), t.literalBrackets === true) {
+          a.output += O, l.value = O;
+          continue;
+        }
+        l.value = `(${i}${O}|${l.value})`, a.output += l.value;
+        continue;
+      }
+      if (f === "{" && t.nobrace !== true) {
+        fe("braces");
+        let d = { type: "brace", value: f, output: "(", outputIndex: a.output.length, tokensIndex: a.tokens.length };
+        C.push(d), R(d);
+        continue;
+      }
+      if (f === "}") {
+        let d = C[C.length - 1];
+        if (t.nobrace === true || !d) {
+          R({ type: "text", value: f, output: f });
+          continue;
+        }
+        let O = ")";
+        if (d.dots === true) {
+          let D = s.slice(), U = [];
+          for (let z = D.length - 1;z >= 0; z--) {
+            if (s.pop(), D[z].type === "brace")
+              break;
+            if (D[z].type !== "dots")
+              U.unshift(D[z].value);
+          }
+          O = Yr(U, t), a.backtrack = true;
+        }
+        if (d.comma !== true && d.dots !== true) {
+          let D = a.output.slice(0, d.outputIndex), U = a.tokens.slice(d.tokensIndex);
+          d.value = d.output = "\\{", f = O = "\\}", a.output = D;
+          for (let z of U)
+            a.output += z.output || z.value;
+        }
+        R({ type: "brace", value: f, output: O }), ae("braces"), C.pop();
+        continue;
+      }
+      if (f === "|") {
+        if (Q.length > 0)
+          Q[Q.length - 1].conditions++;
+        R({ type: "text", value: f });
+        continue;
+      }
+      if (f === ",") {
+        let d = f, O = C[C.length - 1];
+        if (O && B[B.length - 1] === "braces")
+          O.comma = true, d = "|";
+        R({ type: "comma", value: f, output: d });
+        continue;
+      }
+      if (f === "/") {
+        if (l.type === "dot" && a.index === a.start + 1) {
+          a.start = a.index + 1, a.consumed = "", a.output = "", s.pop(), l = u;
+          continue;
+        }
+        R({ type: "slash", value: f, output: M });
+        continue;
+      }
+      if (f === ".") {
+        if (a.braces > 0 && l.type === "dot") {
+          if (l.value === ".")
+            l.output = _;
+          let d = C[C.length - 1];
+          l.type = "dots", l.output += f, l.value += f, d.dots = true;
+          continue;
+        }
+        if (a.braces + a.parens === 0 && l.type !== "bos" && l.type !== "slash") {
+          R({ type: "text", value: f, output: _ });
+          continue;
+        }
+        R({ type: "dot", value: f, output: _ });
+        continue;
+      }
+      if (f === "?") {
+        if (!(l && l.value === "(") && t.noextglob !== true && P() === "(" && P(2) !== "?") {
+          de("qmark", f);
+          continue;
+        }
+        if (l && l.type === "paren") {
+          let O = P(), D = f;
+          if (l.value === "(" && !/[!=<:]/.test(O) || O === "<" && !/<([!=]|\w+>)/.test(te()))
+            D = `\\${f}`;
+          R({ type: "text", value: f, output: D });
+          continue;
+        }
+        if (t.dot !== true && (l.type === "slash" || l.type === "bos")) {
+          R({ type: "qmark", value: f, output: H });
+          continue;
+        }
+        R({ type: "qmark", value: f, output: L });
+        continue;
+      }
+      if (f === "!") {
+        if (t.noextglob !== true && P() === "(") {
+          if (P(2) !== "?" || !/[!=<:]/.test(P(3))) {
+            de("negate", f);
+            continue;
+          }
+        }
+        if (t.nonegate !== true && a.index === 0) {
+          $e();
+          continue;
+        }
+      }
+      if (f === "+") {
+        if (t.noextglob !== true && P() === "(" && P(2) !== "?") {
+          de("plus", f);
+          continue;
+        }
+        if (l && l.value === "(" || t.regex === false) {
+          R({ type: "plus", value: f, output: w });
+          continue;
+        }
+        if (l && (l.type === "bracket" || l.type === "paren" || l.type === "brace") || a.parens > 0) {
+          R({ type: "plus", value: f });
+          continue;
+        }
+        R({ type: "plus", value: w });
+        continue;
+      }
+      if (f === "@") {
+        if (t.noextglob !== true && P() === "(" && P(2) !== "?") {
+          R({ type: "at", extglob: true, value: f, output: "" });
+          continue;
+        }
+        R({ type: "text", value: f });
+        continue;
+      }
+      if (f !== "*") {
+        if (f === "$" || f === "^")
+          f = `\\${f}`;
+        let d = Zr.exec(te());
+        if (d)
+          f += d[0], a.index += d[0].length;
+        R({ type: "text", value: f });
+        continue;
+      }
+      if (l && (l.type === "globstar" || l.star === true)) {
+        l.type = "star", l.star = true, l.value += f, l.output = I, a.backtrack = true, a.globstar = true, W(f);
+        continue;
+      }
+      let p = te();
+      if (t.noextglob !== true && /^\([^?]/.test(p)) {
+        de("star", f);
+        continue;
+      }
+      if (l.type === "star") {
+        if (t.noglobstar === true) {
+          W(f);
+          continue;
+        }
+        let d = l.prev, O = d.prev, D = d.type === "slash" || d.type === "bos", U = O && (O.type === "star" || O.type === "globstar");
+        if (t.bash === true && (!D || p[0] && p[0] !== "/")) {
+          R({ type: "star", value: f, output: "" });
+          continue;
+        }
+        let z = a.braces > 0 && (d.type === "comma" || d.type === "brace"), re = Q.length && (d.type === "pipe" || d.type === "paren");
+        if (!D && d.type !== "paren" && !z && !re) {
+          R({ type: "star", value: f, output: "" });
+          continue;
+        }
+        while (p.slice(0, 3) === "/**") {
+          let pe = e[a.index + 4];
+          if (pe && pe !== "/")
+            break;
+          p = p.slice(3), W("/**", 3);
+        }
+        let ie = Y() || a.parens > 0 && p === ")".repeat(a.parens) && !Q.some((pe) => pe.type === "negate");
+        if (d.type === "bos" && Y()) {
+          l.type = "globstar", l.value += f, l.output = T(t), a.output = l.output, a.globstar = true, W(f);
+          continue;
+        }
+        if (d.type === "slash" && d.prev.type !== "bos" && !U && ie) {
+          a.output = a.output.slice(0, -(d.output + l.output).length), d.output = `(?:${d.output}`, l.type = "globstar", l.output = T(t) + (t.strictSlashes ? ")" : "|$)"), l.value += f, a.globstar = true, a.output += d.output + l.output, W(f);
+          continue;
+        }
+        if (d.type === "slash" && d.prev.type !== "bos" && p[0] === "/") {
+          let pe = p[1] !== undefined ? "|$" : "";
+          a.output = a.output.slice(0, -(d.output + l.output).length), d.output = `(?:${d.output}`, l.type = "globstar", l.output = `${T(t)}${M}|${M}${pe})`, l.value += f, a.output += d.output + l.output, a.globstar = true, W(f + J()), R({ type: "slash", value: "/", output: "" });
+          continue;
+        }
+        if (d.type === "bos" && p[0] === "/") {
+          l.type = "globstar", l.value += f, l.output = `(?:^|${M}|${T(t)}${M})`, a.output = l.output, a.globstar = true, W(f + J()), R({ type: "slash", value: "/", output: "" });
+          continue;
+        }
+        a.output = a.output.slice(0, -l.output.length), l.type = "globstar", l.output = T(t), l.value += f, a.output += l.output, a.globstar = true, W(f);
+        continue;
+      }
+      let j = { type: "star", value: f, output: I };
+      if (t.bash === true) {
+        if (j.output = ".*?", l.type === "bos" || l.type === "slash")
+          j.output = V + j.output;
+        R(j);
+        continue;
+      }
+      if (l && (l.type === "bracket" || l.type === "paren") && t.regex === true) {
+        j.output = f, R(j);
+        continue;
+      }
+      if (a.index === a.start || l.type === "slash" || l.type === "dot") {
+        if (l.type === "dot")
+          a.output += ee, l.output += ee;
+        else if (t.dot === true)
+          a.output += q, l.output += q;
+        else
+          a.output += V, l.output += V;
+        if (P() !== "*")
+          a.output += K, l.output += K;
+      }
+      R(j);
+    }
+    while (a.brackets > 0) {
+      if (t.strictBrackets === true)
+        throw SyntaxError(Ae("closing", "]"));
+      a.output = G.escapeLast(a.output, "["), ae("brackets");
+    }
+    while (a.parens > 0) {
+      if (t.strictBrackets === true)
+        throw SyntaxError(Ae("closing", ")"));
+      a.output = G.escapeLast(a.output, "("), ae("parens");
+    }
+    while (a.braces > 0) {
+      if (t.strictBrackets === true)
+        throw SyntaxError(Ae("closing", "}"));
+      a.output = G.escapeLast(a.output, "{"), ae("braces");
+    }
+    if (t.strictSlashes !== true && (l.type === "star" || l.type === "bracket"))
+      R({ type: "maybe_slash", value: "", output: `${M}?` });
+    if (a.backtrack === true) {
+      a.output = "";
+      for (let p of a.tokens)
+        if (a.output += p.output != null ? p.output : p.value, p.suffix)
+          a.output += p.suffix;
+    }
+    return a;
+  };
+  Ke.fastpaths = (e, r) => {
+    let t = { ...r }, n = typeof t.maxLength === "number" ? Math.min(ke, t.maxLength) : ke, o = e.length;
+    if (o > n)
+      throw SyntaxError(`Input length: ${o}, exceeds maximum allowed length: ${n}`);
+    e = At[e] || e;
+    let { DOT_LITERAL: u, SLASH_LITERAL: s, ONE_CHAR: i, DOTS_SLASH: h2, NO_DOT: N, NO_DOTS: _, NO_DOTS_SLASH: w, STAR: M, START_ANCHOR: K } = he.globChars(t.windows), g = t.dot ? _ : N, k = t.dot ? w : N, ee = t.capture ? "" : "?:", q = { negated: false, prefix: "" }, L = t.bash === true ? ".*?" : M;
+    if (t.capture)
+      L = `(${L})`;
+    let H = (V) => {
+      if (V.noglobstar === true)
+        return L;
+      return `(${ee}(?:(?!${K}${V.dot ? h2 : u}).)*?)`;
+    }, ne = (V) => {
+      switch (V) {
+        case "*":
+          return `${g}${i}${L}`;
+        case ".*":
+          return `${u}${i}${L}`;
+        case "*.*":
+          return `${g}${L}${u}${i}${L}`;
+        case "*/*":
+          return `${g}${L}${s}${i}${k}${L}`;
+        case "**":
+          return g + H(t);
+        case "**/*":
+          return `(?:${g}${H(t)}${s})?${k}${i}${L}`;
+        case "**/*.*":
+          return `(?:${g}${H(t)}${s})?${k}${L}${u}${i}${L}`;
+        case "**/.*":
+          return `(?:${g}${H(t)}${s})?${u}${i}${L}`;
+        default: {
+          let A = /^(.*?)\.(\w+)$/.exec(V);
+          if (!A)
+            return;
+          let I = ne(A[1]);
+          if (!I)
+            return;
+          return I + u + A[2];
+        }
+      }
+    }, X = G.removePrefix(e, q), T = ne(X);
+    if (T && t.strictSlashes !== true)
+      T += `${s}?`;
+    return T;
+  };
+  Et.exports = Ke;
+});
+var wt = me(function(Jn, bt) {
+  var on = xt(), He = St(), Ne = Te(), un = Se(), an = (e) => e && typeof e === "object" && !Array.isArray(e), Z = (e, r, t = false) => {
+    if (Array.isArray(e)) {
+      let _ = e.map((M) => Z(M, r, t));
+      return (M) => {
+        for (let K of _) {
+          let g = K(M);
+          if (g)
+            return g;
+        }
+        return false;
+      };
+    }
+    let n = an(e) && e.tokens && e.input;
+    if (e === "" || typeof e !== "string" && !n)
+      throw TypeError("Expected pattern to be a non-empty string");
+    let o = r || {}, u = o.windows, s = n ? Z.compileRe(e, r) : Z.makeRe(e, r, false, true), i = s.state;
+    delete s.state;
+    let h2 = () => false;
+    if (o.ignore) {
+      let _ = { ...r, ignore: null, onMatch: null, onResult: null };
+      h2 = Z(o.ignore, _, t);
+    }
+    let N = (_, w = false) => {
+      let { isMatch: M, match: K, output: g } = Z.test(_, s, r, { glob: e, posix: u }), k = { glob: e, state: i, regex: s, posix: u, input: _, output: g, match: K, isMatch: M };
+      if (typeof o.onResult === "function")
+        o.onResult(k);
+      if (M === false)
+        return k.isMatch = false, w ? k : false;
+      if (h2(_)) {
+        if (typeof o.onIgnore === "function")
+          o.onIgnore(k);
+        return k.isMatch = false, w ? k : false;
+      }
+      if (typeof o.onMatch === "function")
+        o.onMatch(k);
+      return w ? k : true;
+    };
+    if (t)
+      N.state = i;
+    return N;
+  };
+  Z.test = (e, r, t, { glob: n, posix: o } = {}) => {
+    if (typeof e !== "string")
+      throw TypeError("Expected input to be a string");
+    if (e === "")
+      return { isMatch: false, output: "" };
+    let u = t || {}, s = u.format || (o ? Ne.toPosixSlashes : null), i = e === n, h2 = i && s ? s(e) : e;
+    if (i === false)
+      h2 = s ? s(e) : e, i = h2 === n;
+    if (i === false || u.capture === true)
+      if (u.matchBase === true || u.basename === true)
+        i = Z.matchBase(e, r, t, o);
+      else
+        i = r.exec(h2);
+    return { isMatch: Boolean(i), match: i, output: h2 };
+  };
+  Z.matchBase = (e, r, t, n = t && t.windows) => (r instanceof RegExp ? r : Z.makeRe(r, t)).test(Ne.basename(e, { windows: n }));
+  Z.isMatch = (e, r, t) => Z(r, t)(e);
+  Z.parse = (e, r) => {
+    if (Array.isArray(e))
+      return e.map((t) => Z.parse(t, r));
+    return He(e, { ...r, fastpaths: false });
+  };
+  Z.scan = (e, r) => on(e, r);
+  Z.compileRe = (e, r, t = false, n = false) => {
+    if (t === true)
+      return e.output;
+    let o = r || {}, u = o.contains ? "" : "^", s = o.contains ? "" : "$", i = `${u}(?:${e.output})${s}`;
+    if (e && e.negated === true)
+      i = `^(?!${i}).*$`;
+    let h2 = Z.toRegex(i, r);
+    if (n === true)
+      h2.state = e;
+    return h2;
+  };
+  Z.makeRe = (e, r = {}, t = false, n = false) => {
+    if (!e || typeof e !== "string")
+      throw TypeError("Expected a non-empty string");
+    let o = { negated: false, fastpaths: true };
+    if (r.fastpaths !== false && (e[0] === "." || e[0] === "*"))
+      o.output = He.fastpaths(e, r);
+    if (!o.output)
+      o = He(e, r);
+    return Z.compileRe(o, r, t, n);
+  };
+  Z.toRegex = (e, r) => {
+    try {
+      let t = r || {};
+      return new RegExp(e, t.flags || (t.nocase ? "i" : ""));
+    } catch (t) {
+      if (r && r.debug === true)
+        throw t;
+      return /$^/;
+    }
+  };
+  Z.constants = un;
+  bt.exports = Z;
+});
+var vt = me(function(es, Ot) {
+  var fn = ["||", "&&", ";;&", ";;", ";&", "|&", "<(", ">(", "<<<", "<<-", "<<", ">>", ">&", ">|", "&>>", "&>", "<&", "<>", "&", ";", "(", ")", "|", "<", ">"], We = /[\n\r\u2028\u2029]/, ln = /[\s#!"$&'():;<=>@\\^`|~]/g;
+  Ot.exports = function(r) {
+    var t = false;
+    return r.map(function(n) {
+      if (t && typeof n === "string" && We.test(n))
+        throw TypeError("a token after a `comment` must not contain line terminators");
+      if (n === "")
+        return "''";
+      if (n && typeof n === "object") {
+        if ("op" in n && n.op === "glob") {
+          if (typeof n.pattern !== "string")
+            throw TypeError("glob token requires a string `pattern`");
+          if (We.test(n.pattern))
+            throw TypeError("glob `pattern` must not contain line terminators");
+          if (n.pattern === "")
+            return "''";
+          return n.pattern.replace(ln, "\\$&");
+        }
+        if ("op" in n && typeof n.op === "string") {
+          if (fn.indexOf(n.op) < 0)
+            throw TypeError("invalid `op` value: " + JSON.stringify(n.op));
+          return n.op.replace(/[\s\S]/g, "\\$&");
+        }
+        if ("comment" in n && typeof n.comment === "string") {
+          if (We.test(n.comment))
+            throw TypeError("`comment` must not contain line terminators");
+          return t = true, "#" + n.comment;
+        }
+        throw TypeError("unrecognized object token shape");
+      }
+      if (/'/.test(n) && /!/.test(n))
+        return "'" + n.replace(/'/g, `'"'"'`) + "'";
+      if (/["\s\\]/.test(n) && !/'/.test(n))
+        return "'" + n + "'";
+      if (/["'\s]/.test(n))
+        return '"' + n.replace(/(["\\$`])/g, "\\$1") + '"';
+      return String(n).replace(/([A-Za-z]:)?([#!"$&'()*,:;<=>?@[\\\]^`{|}~])/g, "$1\\$2");
+    }).join(" ");
+  };
+});
+var Pt = me(function(ts, Lt) {
+  var Ht = "(?:" + ["\\|\\|", "\\&(?:\\&|>>?)", ";;\\&?", "[;|]\\&", "\\<\\(", "\\<\\<\\<", "\\<\\<-", "\\<\\<(?!\\()", ">>", ">[&|(]", "<[&>]", "[&;()|<>]"].join("|") + ")", Tt = new RegExp("^" + Ht + "$"), It = "|&;()<> \\t", dn = "'([^']*?)'", Nt = "(?:\\\\[\\s\\S]|[^\\\\'])*?", Ct = "\\$'" + Nt + "'", Pe = new RegExp("\\$'" + Nt + "(?:(')|\\\\?$)", "g"), pn = "abeEfnrtv", cn = `\x07\b\x1B\x1B\f
+\r	\v`, hn = /^#$/, Xe = "'", kt = '"', be = "$", ge = "", $n = 4294967296;
+  for (Le = 0;Le < 4; Le++)
+    ge += ($n * Math.random()).toString(16);
+  var Le, mn = new RegExp("^" + ge);
+  function yn(e, r) {
+    var t = r.lastIndex, n = [], o;
+    while (o = r.exec(e))
+      if (n[n.length] = o, r.lastIndex === o.index)
+        r.lastIndex += 1;
+    return r.lastIndex = t, n;
+  }
+  function gn(e, r, t) {
+    var n = typeof e === "function" ? e(t) : e[t];
+    if (typeof n > "u" && t != "")
+      n = "";
+    else if (typeof n > "u")
+      n = "$";
+    if (typeof n === "object")
+      return r + ge + JSON.stringify(n) + ge;
+    return r + n;
+  }
+  var _n = /\\([0-7]{1,3}|x[\dA-Fa-f]{1,2}|u[\dA-Fa-f]{1,4}|U[\dA-Fa-f]{1,8}|c(?:\\\\|[\s\S])|[abeEfnrtv\\'"?])/g;
+  function xn(e, r) {
+    var t = r.charAt(0);
+    if (t === "c") {
+      var n = r.charAt(1);
+      return n === "?" ? "\u007f" : String.fromCharCode(n.charCodeAt(0) & 31);
+    }
+    if (t === "x" || t === "u" || t === "U") {
+      var o = parseInt(r.slice(1), 16);
+      if (o > 1114111)
+        return e;
+      return String.fromCharCode.apply(null, o > 65535 ? [55232 + (o >> 10), 56320 + (o & 1023)] : [o]);
+    }
+    if (t >= "0" && t <= "7")
+      return String.fromCharCode(parseInt(r, 8) & 255);
+    var u = pn.indexOf(r);
+    return u < 0 ? r : cn.charAt(u);
+  }
+  function An(e) {
+    return e.replace(_n, xn).split("\x00")[0];
+  }
+  function Rn(e, r) {
+    return Pe.lastIndex = r, !!Pe.exec(e)[1];
+  }
+  function En(e, r, t) {
+    if (!t)
+      t = {};
+    var n = t.escape || "\\", o = t.splitUnquoted === true ? ` 	
+` : typeof t.splitUnquoted === "string" ? t.splitUnquoted : "", u = "(\\" + n + `['"$\\` + n + It + "]|\\$\\$|\\$(?!" + Ct.slice(2) + `)|[^\\s'"$` + It + "])+", s = '"(?:\\' + n + '[\\s\\S]|[^"\\' + n + '])*"', i = new RegExp(["(" + Ht + ")", "(" + Ct + "|" + u + "|" + s + "|" + dn + ")+"].join("|"), "g"), h2 = yn(e, i);
+    if (h2.length === 0)
+      return [];
+    if (!r)
+      r = {};
+    var N = false;
+    return h2.map(function(_) {
+      var w = _[0];
+      if (!w || N)
+        return;
+      if (Tt.test(w))
+        return { op: w };
+      var M = false, K = false, g = "", k = [], ee = false, q = null, L = false, H;
+      function ne() {
+        H += 1;
+        var C, B, l = w.charAt(H);
+        if (l === "{") {
+          if (H += 1, w.charAt(H) === "}")
+            throw Error("Bad substitution: " + w.slice(H - 2, H + 1));
+          var f = 1;
+          C = H;
+          while (f > 0 && C < w.length) {
+            if (w.charAt(C) === "{" && w.charAt(C - 1) === "$")
+              f += 1;
+            else if (w.charAt(C) === "}")
+              f -= 1;
+            C += 1;
+          }
+          if (f !== 0)
+            throw Error("Bad substitution: " + w.slice(H));
+          C -= 1, B = w.slice(H, C), H = C;
+        } else if (/[*@#?$!-]/.test(l))
+          B = l;
+        else {
+          var Y = w.slice(H);
+          if (C = Y.match(/[^\w\d_]/), !C)
+            B = Y, H = w.length;
+          else
+            B = Y.slice(0, C.index), H += C.index - 1;
+        }
+        return gn(r, "", B);
+      }
+      function X() {
+        if (q === null)
+          return;
+        if (q === 0) {
+          if (g !== "")
+            k[k.length] = g, g = "";
+        } else {
+          k[k.length] = g, g = "";
+          for (var C = 1;C < q; C += 1)
+            k[k.length] = "";
+        }
+        q = null;
+      }
+      for (H = 0;H < w.length; H++) {
+        var T = w.charAt(H);
+        if (o && T !== be)
+          X();
+        if (L = L || !M && (T === "*" || T === "?"), K)
+          g += T, K = false;
+        else if (M)
+          if (T === M)
+            M = false;
+          else if (M == Xe)
+            g += T;
+          else if (T === n)
+            if (H += 1, T = w.charAt(H), T === kt || T === n || T === be)
+              g += T;
+            else
+              g += n + T;
+          else if (T === be)
+            g += ne();
+          else
+            g += T;
+        else if (T === kt || T === Xe)
+          M = T, ee = true;
+        else if (Tt.test(T))
+          return { op: w };
+        else if (hn.test(T)) {
+          N = true;
+          var V = { comment: e.slice(_.index + H + 1) };
+          if (g.length)
+            return [g, V];
+          return [V];
+        } else if (T === n)
+          K = true;
+        else if (T === be && w.charAt(H + 1) === Xe && Rn(w, H))
+          X(), ee = true, g += An(w.slice(H + 2, Pe.lastIndex - 1)), H = Pe.lastIndex - 1;
+        else if (T === be) {
+          var A = ne();
+          if (!o)
+            g += A;
+          else
+            for (var I = 0;I < A.length; I += 1) {
+              var a = A.charAt(I);
+              if (o.indexOf(a) < 0)
+                X(), g += a;
+              else if (q === null)
+                q = a === " " || a === "\t" || a === `
+` ? 0 : 1;
+              else if (a !== " " && a !== "\t" && a !== `
+`)
+                q += 1;
+            }
+        } else
+          g += T;
+      }
+      if (L)
+        return { op: "glob", pattern: g };
+      if (o) {
+        if (q !== null && q > 0) {
+          k[k.length] = g, g = "";
+          for (var Q = 1;Q < q; Q += 1)
+            k[k.length] = "";
+        }
+        if (g !== "" || ee && k.length === 0)
+          k[k.length] = g;
+        return k;
+      }
+      return g;
+    }).reduce(function(_, w) {
+      if (typeof w > "u")
+        return _;
+      return [].concat(w).forEach(function(M) {
+        _[_.length] = M;
+      }), _;
+    }, []);
+  }
+  Lt.exports = function(r, t, n) {
+    var o = En(r, t, n);
+    if (typeof t !== "function")
+      return o;
+    return o.reduce(function(u, s) {
+      if (typeof s === "object")
+        return u[u.length] = s, u;
+      var i = s.split(RegExp("(" + ge + ".*?" + ge + ")", "g"));
+      if (i.length === 1)
+        return u[u.length] = i[0], u;
+      return i.filter(Boolean).forEach(function(h2) {
+        u[u.length] = mn.test(h2) ? JSON.parse(h2.split(ge)[1]) : h2;
+      }), u;
+    }, []);
+  };
+});
+var Vt = typeof self < "u" && self.location && self.location.origin !== "null" ? new URL(self.location.origin + self.location.pathname + location.search) : new URL("https://github.com/cfworker");
+var Yt = /^(\d\d\d\d)-(\d\d)-(\d\d)$/;
+var Jt = [0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+var er = /^(\d\d):(\d\d):(\d\d)(\.\d+)?(z|[+-]\d\d(?::?\d\d)?)?$/i;
+var tr = /^(?=.{1,253}\.?$)[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[-0-9a-z]{0,61}[0-9a-z])?)*\.?$/i;
+var rr = /^(?:[a-z][a-z0-9+\-.]*:)?(?:\/?\/(?:(?:[a-z0-9\-._~!$&'()*+,;=:]|%[0-9a-f]{2})*@)?(?:\[(?:(?:(?:(?:[0-9a-f]{1,4}:){6}|::(?:[0-9a-f]{1,4}:){5}|(?:[0-9a-f]{1,4})?::(?:[0-9a-f]{1,4}:){4}|(?:(?:[0-9a-f]{1,4}:){0,1}[0-9a-f]{1,4})?::(?:[0-9a-f]{1,4}:){3}|(?:(?:[0-9a-f]{1,4}:){0,2}[0-9a-f]{1,4})?::(?:[0-9a-f]{1,4}:){2}|(?:(?:[0-9a-f]{1,4}:){0,3}[0-9a-f]{1,4})?::[0-9a-f]{1,4}:|(?:(?:[0-9a-f]{1,4}:){0,4}[0-9a-f]{1,4})?::)(?:[0-9a-f]{1,4}:[0-9a-f]{1,4}|(?:(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}(?:25[0-5]|2[0-4]\d|[01]?\d\d?))|(?:(?:[0-9a-f]{1,4}:){0,5}[0-9a-f]{1,4})?::[0-9a-f]{1,4}|(?:(?:[0-9a-f]{1,4}:){0,6}[0-9a-f]{1,4})?::)|[Vv][0-9a-f]+\.[a-z0-9\-._~!$&'()*+,;=:]+)\]|(?:(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}(?:25[0-5]|2[0-4]\d|[01]?\d\d?)|(?:[a-z0-9\-._~!$&'"()*+,;=]|%[0-9a-f]{2})*)(?::\d*)?(?:\/(?:[a-z0-9\-._~!$&'"()*+,;=:@]|%[0-9a-f]{2})*)*|\/(?:(?:[a-z0-9\-._~!$&'"()*+,;=:@]|%[0-9a-f]{2})+(?:\/(?:[a-z0-9\-._~!$&'"()*+,;=:@]|%[0-9a-f]{2})*)*)?|(?:[a-z0-9\-._~!$&'"()*+,;=:@]|%[0-9a-f]{2})+(?:\/(?:[a-z0-9\-._~!$&'"()*+,;=:@]|%[0-9a-f]{2})*)*)?(?:\?(?:[a-z0-9\-._~!$&'"()*+,;=:@/?]|%[0-9a-f]{2})*)?(?:#(?:[a-z0-9\-._~!$&'"()*+,;=:@/?]|%[0-9a-f]{2})*)?$/i;
+var nr = /^(?:(?:[^\x00-\x20"'<>%\\^`{|}]|%[0-9a-f]{2})|\{[+#./;?&=,!@|]?(?:[a-z0-9_]|%[0-9a-f]{2})+(?::[1-9][0-9]{0,3}|\*)?(?:,(?:[a-z0-9_]|%[0-9a-f]{2})+(?::[1-9][0-9]{0,3}|\*)?)*\})*$/i;
+var sr = /^(?:(?:https?|ftp):\/\/)(?:\S+(?::\S*)?@)?(?:(?!10(?:\.\d{1,3}){3})(?!127(?:\.\d{1,3}){3})(?!169\.254(?:\.\d{1,3}){2})(?!192\.168(?:\.\d{1,3}){2})(?!172\.(?:1[6-9]|2\d|3[0-1])(?:\.\d{1,3}){2})(?:[1-9]\d?|1\d\d|2[01]\d|22[0-3])(?:\.(?:1?\d{1,2}|2[0-4]\d|25[0-5])){2}(?:\.(?:[1-9]\d?|1\d\d|2[0-4]\d|25[0-4]))|(?:(?:[a-z\u{00a1}-\u{ffff}0-9]+-?)*[a-z\u{00a1}-\u{ffff}0-9]+)(?:\.(?:[a-z\u{00a1}-\u{ffff}0-9]+-?)*[a-z\u{00a1}-\u{ffff}0-9]+)*(?:\.(?:[a-z\u{00a1}-\u{ffff}]{2,})))(?::\d{2,5})?(?:\/[^\s]*)?$/iu;
+var or = /^(?:urn:uuid:)?[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
+var ur = /^(?:\/(?:[^~/]|~0|~1)*)*$/;
+var ir = /^#(?:\/(?:[a-z0-9_\-.!$&'()*+,;:=@]|%[0-9a-f]{2}|~0|~1)*)*$/i;
+var ar = /^(?:0|[1-9][0-9]*)(?:#|(?:\/(?:[^~/]|~0|~1)*)*)$/;
+var fr = (e) => {
+  if (e[0] === '"')
+    return false;
+  let [r, t, ...n] = e.split("@");
+  if (!r || !t || n.length !== 0 || r.length > 64 || t.length > 253)
+    return false;
+  if (r[0] === "." || r.endsWith(".") || r.includes(".."))
+    return false;
+  if (!/^[a-z0-9.-]+$/i.test(t) || !/^[a-z0-9.!#$%&'*+/=?^_`{|}~-]+$/i.test(r))
+    return false;
+  return t.split(".").every((o) => /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/i.test(o));
+};
+var lr = /^(?:(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}(?:25[0-5]|2[0-4]\d|[01]?\d\d?)$/;
+var dr = /^((([0-9a-f]{1,4}:){7}([0-9a-f]{1,4}|:))|(([0-9a-f]{1,4}:){6}(:[0-9a-f]{1,4}|((25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3})|:))|(([0-9a-f]{1,4}:){5}(((:[0-9a-f]{1,4}){1,2})|:((25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3})|:))|(([0-9a-f]{1,4}:){4}(((:[0-9a-f]{1,4}){1,3})|((:[0-9a-f]{1,4})?:((25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}))|:))|(([0-9a-f]{1,4}:){3}(((:[0-9a-f]{1,4}){1,4})|((:[0-9a-f]{1,4}){0,2}:((25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}))|:))|(([0-9a-f]{1,4}:){2}(((:[0-9a-f]{1,4}){1,5})|((:[0-9a-f]{1,4}){0,3}:((25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}))|:))|(([0-9a-f]{1,4}:){1}(((:[0-9a-f]{1,4}){1,6})|((:[0-9a-f]{1,4}){0,4}:((25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}))|:))|(:(((:[0-9a-f]{1,4}){1,7})|((:[0-9a-f]{1,4}){0,5}:((25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}))|:)))$/i;
+var pr = (e) => e.length > 1 && e.length < 80 && (/^P\d+([.,]\d+)?W$/.test(e) || /^P[\dYMDTHS]*(\d[.,]\d+)?[YMDHS]$/.test(e) && /^P([.,\d]+Y)?([.,\d]+M)?([.,\d]+D)?(T([.,\d]+H)?([.,\d]+M)?([.,\d]+S)?)?$/.test(e));
+function le(e) {
+  return e.test.bind(e);
+}
+var Me = { date: Je, time: et.bind(undefined, false), "date-time": $r, duration: pr, uri: gr, "uri-reference": le(rr), "uri-template": le(nr), url: le(sr), email: fr, hostname: le(tr), ipv4: le(lr), ipv6: le(dr), regex: xr, uuid: le(or), "json-pointer": le(ur), "json-pointer-uri-fragment": le(ir), "relative-json-pointer": le(ar) };
+function cr(e) {
+  return e % 4 === 0 && (e % 100 !== 0 || e % 400 === 0);
+}
+function Je(e) {
+  let r = e.match(Yt);
+  if (!r)
+    return false;
+  let t = +r[1], n = +r[2], o = +r[3];
+  return n >= 1 && n <= 12 && o >= 1 && o <= (n == 2 && cr(t) ? 29 : Jt[n]);
+}
+function et(e, r) {
+  let t = r.match(er);
+  if (!t)
+    return false;
+  let n = +t[1], o = +t[2], u = +t[3], s = !!t[5];
+  return (n <= 23 && o <= 59 && u <= 59 || n == 23 && o == 59 && u == 60) && (!e || s);
+}
+var hr = /t|\s/i;
+function $r(e) {
+  let r = e.split(hr);
+  return r.length == 2 && Je(r[0]) && et(true, r[1]);
+}
+var mr = /\/|:/;
+var yr = /^(?:[a-z][a-z0-9+\-.]*:)(?:\/?\/(?:(?:[a-z0-9\-._~!$&'()*+,;=:]|%[0-9a-f]{2})*@)?(?:\[(?:(?:(?:(?:[0-9a-f]{1,4}:){6}|::(?:[0-9a-f]{1,4}:){5}|(?:[0-9a-f]{1,4})?::(?:[0-9a-f]{1,4}:){4}|(?:(?:[0-9a-f]{1,4}:){0,1}[0-9a-f]{1,4})?::(?:[0-9a-f]{1,4}:){3}|(?:(?:[0-9a-f]{1,4}:){0,2}[0-9a-f]{1,4})?::(?:[0-9a-f]{1,4}:){2}|(?:(?:[0-9a-f]{1,4}:){0,3}[0-9a-f]{1,4})?::[0-9a-f]{1,4}:|(?:(?:[0-9a-f]{1,4}:){0,4}[0-9a-f]{1,4})?::)(?:[0-9a-f]{1,4}:[0-9a-f]{1,4}|(?:(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}(?:25[0-5]|2[0-4]\d|[01]?\d\d?))|(?:(?:[0-9a-f]{1,4}:){0,5}[0-9a-f]{1,4})?::[0-9a-f]{1,4}|(?:(?:[0-9a-f]{1,4}:){0,6}[0-9a-f]{1,4})?::)|[Vv][0-9a-f]+\.[a-z0-9\-._~!$&'()*+,;=:]+)\]|(?:(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}(?:25[0-5]|2[0-4]\d|[01]?\d\d?)|(?:[a-z0-9\-._~!$&'()*+,;=]|%[0-9a-f]{2})*)(?::\d*)?(?:\/(?:[a-z0-9\-._~!$&'()*+,;=:@]|%[0-9a-f]{2})*)*|\/(?:(?:[a-z0-9\-._~!$&'()*+,;=:@]|%[0-9a-f]{2})+(?:\/(?:[a-z0-9\-._~!$&'()*+,;=:@]|%[0-9a-f]{2})*)*)?|(?:[a-z0-9\-._~!$&'()*+,;=:@]|%[0-9a-f]{2})+(?:\/(?:[a-z0-9\-._~!$&'()*+,;=:@]|%[0-9a-f]{2})*)*)(?:\?(?:[a-z0-9\-._~!$&'()*+,;=:@/?]|%[0-9a-f]{2})*)?(?:#(?:[a-z0-9\-._~!$&'()*+,;=:@/?]|%[0-9a-f]{2})*)?$/i;
+function gr(e) {
+  return mr.test(e) && yr.test(e);
+}
+var _r = /[^\\]\\Z/;
+function xr(e) {
+  if (_r.test(e))
+    return false;
+  try {
+    return new RegExp(e, "u"), true;
+  } catch (r) {
+    return false;
+  }
+}
+var Ar = /^[A-Za-z]:\//;
+function Ee(e = "") {
+  if (!e)
+    return e;
+  return e.replace(/\\/g, "/").replace(Ar, (r) => r.toUpperCase());
+}
+var Er = /^[/\\](?![/\\])|^[/\\]{2}(?!\.)|^[A-Za-z]:[/\\]/;
+var nt = /^\/([A-Za-z]:)?$/;
+function br() {
+  return "/";
+}
+var ve = function(...e) {
+  e = e.map((n) => Ee(n));
+  let r = "", t = false;
+  for (let n = e.length - 1;n >= -1 && !t; n--) {
+    let o = n >= 0 ? e[n] : br();
+    if (!o || o.length === 0)
+      continue;
+    r = `${o}/${r}`, t = ye(o);
+  }
+  if (r = ze(r, !t), t && !ye(r))
+    return `/${r}`;
+  return r.length > 0 ? r : ".";
+};
+function ze(e, r) {
+  let t = "", n = 0, o = -1, u = 0, s = null;
+  for (let i = 0;i <= e.length; ++i) {
+    if (i < e.length)
+      s = e[i];
+    else if (s === "/")
+      break;
+    else
+      s = "/";
+    if (s === "/") {
+      if (o === i - 1 || u === 1)
+        ;
+      else if (u === 2) {
+        if (t.length < 2 || n !== 2 || t[t.length - 1] !== "." || t[t.length - 2] !== ".") {
+          if (t.length > 2) {
+            let h2 = t.lastIndexOf("/");
+            if (h2 === -1)
+              t = "", n = 0;
+            else
+              t = t.slice(0, h2), n = t.length - 1 - t.lastIndexOf("/");
+            o = i, u = 0;
+            continue;
+          } else if (t.length > 0) {
+            t = "", n = 0, o = i, u = 0;
+            continue;
+          }
+        }
+        if (r)
+          t += t.length > 0 ? "/.." : "..", n = 2;
+      } else {
+        if (t.length > 0)
+          t += `/${e.slice(o + 1, i)}`;
+        else
+          t = e.slice(o + 1, i);
+        n = i - o - 1;
+      }
+      o = i, u = 0;
+    } else if (s === "." && u !== -1)
+      ++u;
+    else
+      u = -1;
+  }
+  return t;
+}
+var ye = function(e) {
+  return Er.test(e);
+};
+var it = function(e, r) {
+  let t = ve(e).replace(nt, "$1").split("/"), n = ve(r).replace(nt, "$1").split("/");
+  if (n[0][1] === ":" && t[0][1] === ":" && t[0] !== n[0])
+    return n.join("/");
+  let o = [...t];
+  for (let u of o) {
+    if (n[0] !== u)
+      break;
+    t.shift(), n.shift();
+  }
+  return [...t.map(() => ".."), ...n].join("/");
+};
+var ft = function(e, r) {
+  let t = Ee(e).split("/"), n = "";
+  for (let o = t.length - 1;o >= 0; o--) {
+    let u = t[o];
+    if (u) {
+      n = u;
+      break;
+    }
+  }
+  return r && n.endsWith(r) ? n.slice(0, -r.length) : n;
+};
+var Sn = Kt(wt(), 1);
+var Mt = vt();
+var Dt = Pt();
+var $s = Sn.default;
+
+// node_modules/@cmodjs/core/utils/paths.js
+var missingPath = /(?:^|: )(?:ENOENT|ENOTDIR)\b/;
+function isMissing(error) {
+  return missingPath.test(messageOf(error));
+}
+function ifMissing(value) {
+  return (error) => {
+    if (isMissing(error))
+      return value;
+    throw error;
+  };
+}
+var homePrefix = /^(~|\$HOME|\$CLAUDE_CONFIG_DIR)(?=\/|$)/;
+function expandHome(path, home, configRoot = `${home}/.claude`) {
+  const prefix = homePrefix.exec(path)?.[0];
+  if (prefix === undefined)
+    return path;
+  return `${prefix === "$CLAUDE_CONFIG_DIR" ? configRoot : home}${path.slice(prefix.length)}`;
+}
+function relativePath(base, path) {
+  if (path === base)
+    return "";
+  const prefix = base === "/" ? "/" : `${base}/`;
+  return path.startsWith(prefix) ? path.slice(prefix.length) : undefined;
+}
+
+// node_modules/@cmodjs/core/runtime/deadline.js
+var longestMs = 600000;
+var callDeadline = { ms: 30000 };
+var listenerMs = 1e4;
+var hookMs = 1e4;
+
+class PassedTimeout extends Error {
+}
+var timers = globalThis;
+function listenerOf(name, method, args) {
+  const hasMatcher = typeof args[1] === "function";
+  const listener = hasMatcher ? args[1] : args[0];
+  const options = (hasMatcher ? args[2] : args[1]) ?? {};
+  if (typeof listener !== "function")
+    throw new Error(`${name}: ${method} takes a listener, or a matcher and then a listener.`);
+  const { timeoutMs, onFailure } = options;
+  if (timeoutMs !== undefined && (typeof timeoutMs !== "number" || !Number.isInteger(timeoutMs) || timeoutMs <= 0 || timeoutMs > longestMs))
+    throw new Error(`${name}: ${method}'s timeoutMs is ${String(timeoutMs)}. Give a whole number of milliseconds above 0 and at most ${longestMs}.`);
+  if (onFailure !== undefined && onFailure !== "pass" && onFailure !== "refuse")
+    throw new Error(`${name}: ${method}'s onFailure is ${String(onFailure)}. Give 'pass' or 'refuse'.`);
+  return { matcher: hasMatcher ? args[0] : undefined, listener, options };
+}
+async function withinTime(clock, method, { timeoutMs = listenerMs }, cancel, run) {
+  const controller = new AbortController;
+  const deadline = await clock.now() + timeoutMs;
+  cancel.throwIfAborted();
+  let timer;
+  let cancelled = () => {
+    return;
+  };
+  const passed = new Promise((_resolve, reject) => {
+    timer = timers.setTimeout(() => {
+      controller.abort();
+      reject(new PassedTimeout(`${method} passed its ${timeoutMs / 1000} s timeout`));
+    }, timeoutMs);
+    cancelled = () => reject(cancel.reason);
+    cancel.addEventListener("abort", cancelled, { once: true });
+  });
+  try {
+    return await Promise.race([Promise.resolve().then(() => run({ deadline, signal: AbortSignal.any([controller.signal, cancel]) })), passed]);
+  } finally {
+    timers.clearTimeout(timer);
+    cancel.removeEventListener("abort", cancelled);
+  }
+}
+var abortGraceMs = 1000;
+function settledAfterAbort(work, signal) {
+  if (signal === undefined)
+    return work;
+  return new Promise((resolve, reject) => {
+    let timer;
+    const giveUp = () => void (timer = timers.setTimeout(() => reject(signal.reason), abortGraceMs));
+    if (signal.aborted)
+      giveUp();
+    else
+      signal.addEventListener("abort", giveUp, { once: true });
+    work.then(resolve, reject).finally(() => {
+      timers.clearTimeout(timer);
+      signal.removeEventListener("abort", giveUp);
+    });
+  });
+}
+function beforeDeadline(clock, { ms, job }, call, run) {
+  const passed = new AbortController;
+  return new Promise((resolve, reject) => {
+    const deadline = job === undefined ? `its ${ms / 1000} s deadline` : `the ${ms / 1000} s deadline of ${job}`;
+    const timer = clock.after(ms, () => {
+      const error = new Error(`${call} passed ${deadline}`);
+      reject(error);
+      passed.abort(error);
+    });
+    run(passed.signal).then((value) => {
+      timer.cancel();
+      resolve(value);
+    }, (error) => {
+      timer.cancel();
+      reject(error);
+    });
+  });
+}
+
+// node_modules/@cmodjs/core/runtime/dependencies.js
+var cmodPluginName = "cmod";
+var loadedMethod = "cmod:isLoaded";
+async function answerCall(name, api, e) {
+  const method = Object.hasOwn(api, e.method) ? api[e.method] : undefined;
+  if (method === undefined)
+    return { deny: `${name} has no method ${e.method}.` };
+  try {
+    return { value: await method(e.input) };
+  } catch (error) {
+    return { deny: `${name}: ${messageOf(error)}` };
+  }
+}
+function dependencyCalls(claude, within) {
+  const methodsOf = (to) => new Proxy({}, { get: (_methods, method) => typeof method === "string" && method !== "then" ? (input) => within(`mod.dependencies.${to}.${method}`, claude.cmod.call({ to, method, input })) : undefined });
+  return new Proxy({}, { get: (_dependencies, to) => typeof to === "string" && to !== "then" ? methodsOf(to) : undefined });
+}
+function withBareRefusals(claude) {
+  const prefix = `${claude.plugin.name}: $.cmod.call: `;
+  const call = (input) => claude.cmod.call(input).catch((error) => {
+    const message = messageOf(error);
+    throw message.startsWith(prefix) ? new Error(message.slice(prefix.length), { cause: error }) : error;
+  });
+  return { ...claude, cmod: { call } };
+}
+function answeringOwnCalls(claude, router) {
+  const name = claude.plugin.name;
+  const call = async (input) => {
+    if (input.to !== name)
+      return claude.cmod.call(input);
+    const answer = await router.dispatch("cmod.call", { ...input, caller: name }, async () => ({ deny: `${name} has no method ${input.method}.` }));
+    if (answer.deny !== undefined)
+      throw new Error(answer.deny);
+    return answer.value;
+  };
+  return { ...claude, cmod: { call } };
+}
+function stillInstalling(name) {
+  return `${name} is installing. Try again when it's ready.`;
+}
+function isStillInstalling(name, error) {
+  return messageOf(error).endsWith(stillInstalling(name));
+}
+function didNotAnswer(name) {
+  return `${name} did not answer in time, so Claude Code went on without it.`;
+}
+var overranHook = `it ran past the ${hookMs / 1000} s Claude Code gives a hook`;
+function isUnanswered(error) {
+  const refusals = [stillInstalling(""), didNotAnswer(""), `: ${overranHook}`];
+  for (let cause = error;cause !== undefined; cause = cause instanceof Error ? cause.cause : undefined) {
+    const message = messageOf(cause);
+    if (refusals.some((refusal) => message.endsWith(refusal)))
+      return true;
+  }
+  return false;
+}
+
+// node_modules/@cmodjs/core/runtime/tool-calls.js
+function toolCalls(claude, router) {
+  let mainAgentType;
+  const agentIds = new Map;
+  const noteAgent = (e) => {
+    if (e.agent_id === undefined)
+      mainAgentType = e.agent_type;
+  };
+  router.add("classic.SessionStart", (e, next) => {
+    noteAgent(e);
+    return next(e);
+  });
+  router.add("classic.UserPromptSubmit", (e, next) => {
+    noteAgent(e);
+    return next(e);
+  });
+  router.add("tool.call", async (e, next) => {
+    if (e.agentId === undefined)
+      return next(e);
+    agentIds.set(e.tool_use_id, e.agentId);
+    try {
+      return await next(e);
+    } finally {
+      agentIds.delete(e.tool_use_id);
+    }
+  });
+  return {
+    async agentOf(toolUseId) {
+      const agentId = toolUseId === undefined ? undefined : agentIds.get(toolUseId);
+      const agentType = agentId === undefined ? mainAgentType : (await claude.agent.list()).find((agent) => agent.id === agentId)?.type;
+      return { ...agentId === undefined ? {} : { agentId }, ...agentType === undefined ? {} : { agentType } };
+    }
+  };
+}
+
+// node_modules/@cmodjs/core/runtime/before.js
+function withAnswer(change, answer) {
+  if (change.type === Message && answer.output !== undefined && change.message.type === ToolResult)
+    return { ...change, message: { ...change.message, output: answer.output } };
+  if (change.type === Message && answer.text !== undefined)
+    return { ...change, message: { ...change.message, text: answer.text } };
+  if (change.type === Message && answer.input !== undefined && change.message.type === ToolCall)
+    return { ...change, message: { ...change.message, input: answer.input } };
+  if (change.type === TaskStart) {
+    const { agentType, model } = answer.owner ?? {};
+    return { ...change, task: { ...change.task, ...answer.title === undefined ? {} : { title: answer.title }, ...agentType === undefined ? {} : { agentType }, ...model === undefined ? {} : { model } } };
+  }
+  return change;
+}
+var methodOf = (prefix, event) => `${prefix}${Object.entries(sessionEvents).find(([, each]) => each === event)?.[0] ?? event}`;
+var beforeAnswerKeys = {
+  prompt: ["text", "note", "title", "refuse"],
+  note: ["text"],
+  skill: ["text"],
+  instructionFile: ["text", "refuse"],
+  attachedFile: ["text", "refuse"],
+  reply: ["text"],
+  toolCall: ["input", "result", "refuse", "note"],
+  toolResult: ["output", "isError", "note"],
+  notice: ["text"],
+  taskStart: ["prompt", "title", "owner", "isAsync", "refuse"],
+  turnEnd: ["refuse", "note"],
+  contextEnd: ["refuse", "summary"]
+};
+function foldBefore(event, change, askers, report) {
+  return foldAnswers(methodOf("before", event), beforeAnswerKeys[event], ["refuse", "result"], change, askers, report, withAnswer);
+}
+function takenAnswer(method, takes, answer) {
+  if (answer === undefined || answer === null || answer === false)
+    return;
+  if (typeof answer !== "object" || Array.isArray(answer))
+    throw new Error(`it answered ${JSON.stringify(answer)}, but ${method} takes an object or nothing: ${takes.map((key) => `{ ${key} }`).join(", ") || "no answer"}.`);
+  const unread = Object.keys(answer).filter((key) => !takes.includes(key));
+  if (unread.length > 0)
+    throw new Error(`it answered ${unread.join(" and ")}, which ${method} does not take. It takes ${takes.map((key) => `{ ${key} }`).join(", ") || "no answer"}.`);
+  return answer;
+}
+async function foldAnswers(method, takes, ends, change, askers, report, applied = (same) => same) {
+  let latest = change;
+  let result;
+  for (const ask of askers) {
+    try {
+      const answer = takenAnswer(method, takes, await ask(latest));
+      if (typeof answer !== "object" || answer === null)
+        continue;
+      const given = answer;
+      const notes = [result?.["note"], given["note"]].filter((note) => typeof note === "string");
+      result = { ...result, ...given, ...notes.length === 0 ? {} : { note: notes.join(`
+
+`) } };
+      if (ends.some((key) => given[key] !== undefined))
+        return result;
+      latest = applied(latest, answer);
+    } catch (error) {
+      report(error);
+    }
+  }
+  return result;
+}
+
+// node_modules/@cmodjs/core/runtime/device.js
+var cmodAppId = "1fd8a8ee972047c4a89640fd51048522";
+var sha256Block = 64;
+var systems = { Darwin: "darwin", Linux: "linux" };
+var machines = { arm64: "arm64", aarch64: "arm64", x86_64: "x64", amd64: "x64" };
+var platformUuid = /"IOPlatformUUID" = "([0-9A-Fa-f-]{36})"/;
+var machineId = /^[0-9a-f]{32}$/;
+var machineIdFiles = ["/etc/machine-id", "/var/lib/dbus/machine-id"];
+
+class MissingMachineId extends Error {
+}
+async function readDevice(claude) {
+  const output = async (argv) => {
+    const { exitCode, stdout, stderr } = await claude.process.run(argv);
+    if (exitCode !== 0)
+      throw new Error(`cmod could not read this computer: ${argv.join(" ")} ${formatExit(exitCode, stderr)}`);
+    return stdout.trim();
+  };
+  const [system = "", node = "", machine = ""] = (await output(["uname", "-snm"])).split(/\s+/);
+  const os = systems[system];
+  const arch = machines[machine];
+  if (os === undefined)
+    throw new Error(`cmod reads the device of macOS and Linux, and this computer runs ${system}.`);
+  if (arch === undefined)
+    throw new Error(`cmod reads the device of arm64 and x64 computers, and this one is ${machine}.`);
+  if (os === "linux")
+    return { id: await appSpecific(await linuxMachineId(claude.fs)), name: node, os, arch };
+  const [platform, name] = await Promise.all([output(["ioreg", "-rd1", "-c", "IOPlatformExpertDevice"]), output(["scutil", "--get", "LocalHostName"])]);
+  const uuid = platformUuid.exec(platform)?.[1];
+  if (uuid === undefined)
+    throw new Error("cmod could not read this computer: ioreg -rd1 -c IOPlatformExpertDevice names no IOPlatformUUID.");
+  return { id: await appSpecific(uuid.replaceAll("-", "").toLowerCase()), name, os, arch };
+}
+async function linuxMachineId(fs) {
+  for (const path of machineIdFiles) {
+    const id = (await fs.read(path).catch(ifMissing(""))).trim();
+    if (machineId.test(id))
+      return id;
+  }
+  throw new MissingMachineId(`cmod could not read this computer: neither ${machineIdFiles.join(" nor ")} holds a machine id.`);
+}
+async function appSpecific(machine) {
+  if (!machineId.test(machine))
+    throw new Error("cmod could not read this computer: its machine id is not 32 hex digits.");
+  const id = (await hmacSha256(bytesOf(machine), bytesOf(cmodAppId))).slice(0, 16);
+  id[6] = (id[6] ?? 0) & 15 | 64;
+  id[8] = (id[8] ?? 0) & 63 | 128;
+  return [...id].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+async function hmacSha256(key, message) {
+  const sha256 = async (...parts) => new Uint8Array(await crypto.subtle.digest("SHA-256", Uint8Array.from(parts.flatMap((part) => [...part]))));
+  const padded = new Uint8Array(sha256Block);
+  padded.set(key);
+  return sha256(padded.map((byte) => byte ^ 92), await sha256(padded.map((byte) => byte ^ 54), message));
+}
+function bytesOf(hex) {
+  return Uint8Array.from(hex.match(/../g) ?? [], (pair) => Number.parseInt(pair, 16));
+}
+
+// node_modules/@cmodjs/core/runtime/router.js
+var unaborted = new AbortController().signal;
+function createRouter() {
+  const routes = new Map;
+  return {
+    add(event, hook, failed) {
+      const route = { hook, ...failed === undefined ? {} : { failed } };
+      routes.set(event, [...routes.get(event) ?? [], route]);
+      return {
+        remove() {
+          const chain = (routes.get(event) ?? []).filter((each) => each !== route);
+          if (chain.length === 0)
+            routes.delete(event);
+          else
+            routes.set(event, chain);
+        }
+      };
+    },
+    dispatch(event, e, next, signal = unaborted) {
+      const chain = routes.get(event);
+      const call = async (index, current) => {
+        const route = chain?.[index];
+        if (route === undefined)
+          return next(current);
+        return route.hook(current, Object.assign((passed) => call(index + 1, passed), { signal }));
+      };
+      return call(0, e);
+    },
+    dispatchFailure(event, e, error, next, called) {
+      const chain = routes.get(event);
+      const fail = async (index, current) => {
+        const route = chain?.[index];
+        if (route === undefined)
+          return next(current);
+        const answer = await route.failed?.(current, error, Object.assign((passed) => fail(index + 1, passed), { signal: unaborted, called }));
+        return answer === undefined ? fail(index + 1, current) : answer;
+      };
+      return fail(0, e);
+    }
+  };
+}
+
+// node_modules/@cmodjs/core/runtime/interfaces.js
+var styleInterface = "cmod/Style";
+var interfaceMethods = { providers: "cmod:providers", provider: "cmod:provider", provided: "cmod:provided", listen: "cmod:listenProvided", unlisten: "cmod:unlistenProvided", tell: "cmod:tellProvided", ask: "cmod:askProvided", heard: "cmod:heard" };
+var providerHoldMs = hookMs / 4;
+function checkInterfaceName(name) {
+  if (!interfaceName.test(name))
+    throw new Error(`${name} is no interface name, such as demo/Platform.`);
+}
+function methodName(name, method) {
+  return `${name}.${method}`;
+}
+function providerClient(name, identity, call, listen) {
+  return new Proxy(identity, {
+    get: (known, key) => {
+      if (typeof key !== "string" || key === "then")
+        return;
+      if (key === "mod" || key === "program" || key === "device")
+        return known[key];
+      const event = /^(on|before)([A-Z]\w*)$/.exec(key);
+      if (event === null)
+        return (...args) => call(key, args);
+      return (...args) => {
+        const { matcher, listener, options } = listenerOf(name, key, args);
+        return listen(event[1], event[2] ?? "", matcher, listener, options);
+      };
+    }
+  });
+}
+function createProviders({ name, call, changed, after, report }) {
+  const provided = new Map;
+  const heard = new Map;
+  let nextListener = 0;
+  const run = async ({ interface: named, method, args }) => {
+    const runs = provided.get(named)?.[method];
+    if (runs === undefined)
+      throw new Error(`${name} provides no ${named}.${method}.`);
+    return await runs(...args) ?? null;
+  };
+  const answer = (method, asked, caller, signal) => {
+    if (method === interfaceMethods.heard && caller === cmodPluginName)
+      return (async () => await heard.get(asked.id)?.(asked.payload, signal) ?? null)();
+    return method === interfaceMethods.provided && asked.program === undefined ? run(asked) : undefined;
+  };
+  const client = (named, identity) => providerClient(named, identity, (method, args) => {
+    const asked = { interface: named, method, args, ...identity };
+    return beforeDeadline({ after }, callDeadline, methodName(named, method), () => identity.mod === name && identity.program === undefined ? run(asked) : call(identity.program === undefined ? identity.mod : cmodPluginName, interfaceMethods.provided, asked));
+  }, (kind, event, matcher, listener, options) => {
+    const id = `${named}#${nextListener += 1}`;
+    heard.set(id, listener);
+    call(cmodPluginName, interfaceMethods.listen, { id, interface: named, kind, event, ...identity, ...matcher === undefined ? {} : { matcher: sentMatcher(matcher) }, ...options }).catch((error) => {
+      heard.delete(id);
+      report(error);
+    });
+    return {
+      remove() {
+        if (heard.delete(id))
+          call(cmodPluginName, interfaceMethods.unlisten, { id }).catch(report);
+      }
+    };
+  });
+  return {
+    provided: () => [...provided.keys()],
+    provide(named, methods) {
+      checkInterfaceName(named);
+      provided.set(named, methods);
+      changed();
+      const send = (method, event, payload) => new Promise((resolve) => after(0, () => resolve(call(cmodPluginName, method, { interface: named, event, payload }))));
+      return {
+        remove() {
+          if (provided.get(named) === methods && provided.delete(named))
+            changed();
+        },
+        tell: (event, payload) => void send(interfaceMethods.tell, event, payload).catch(report),
+        ask: (event, payload) => send(interfaceMethods.ask, event, payload)
+      };
+    },
+    async providers(named) {
+      const listed = await call(cmodPluginName, interfaceMethods.providers, { name: named });
+      return [...listed.mods.map((mod) => client(named, { mod, device: listed.device })), ...listed.programs.map((identity) => client(named, identity))];
+    },
+    answer
+  };
+}
+
+// node_modules/@cmodjs/core/runtime/programs.js
+function lastLineOf(text) {
+  const trimmed = text.trim();
+  return trimmed === "" ? undefined : trimmed.slice(trimmed.lastIndexOf(`
+`) + 1).trim();
+}
+function cmodError(stderr, command) {
+  const line = lastLineOf(stderr) ?? "";
+  const prefix = `cmod ${command}: `;
+  return line.startsWith(prefix) ? line.slice(prefix.length) : line;
+}
+async function readLines(stream, onLine) {
+  let pending = "";
+  let lastError = "";
+  let piece = await stream.next();
+  while (piece.done !== true) {
+    if (piece.value.stream === "stderr") {
+      lastError = lastLineOf(piece.value.text) ?? lastError;
+    } else {
+      const lines = `${pending}${piece.value.text}`.split(`
+`);
+      pending = lines.pop() ?? "";
+      for (const text of lines)
+        onLine(text);
+    }
+    piece = await stream.next();
+  }
+  if (pending !== "")
+    onLine(pending);
+  return { code: piece.value.code, lastError };
+}
+function spawnCmod(claude, args, session, env = {}) {
+  return claude.process.spawn({ argv: ["cmod", ...args], env: { ...env, CLAUDE_CODE_SESSION_ID: session } });
+}
+async function isHeld(claude, lock, staleMs) {
+  const now = await claude.clock.now();
+  const holders = await claude.fs.list(lock).catch(ifMissing([]));
+  const touched = await Promise.all(holders.map(async ({ name }) => (await claude.fs.stat(`${lock}/${name}`).catch(ifMissing(undefined)))?.mtimeMs ?? 0));
+  return touched.some((at) => now - at < staleMs);
+}
+async function cmodStore(claude) {
+  return storeFolder({ HOME: await claude.env.home(), XDG_DATA_HOME: await claude.env.dataHome() });
+}
+async function newestCmodVersion(claude) {
+  const store = await cmodStore(claude);
+  return readCmodVersion({
+    list: async (folder) => (await claude.fs.list(folder).catch(ifMissing([]))).map((entry) => entry.name),
+    exists: async (path) => await claude.fs.stat(path).catch(ifMissing(undefined)) !== undefined
+  }, store);
+}
+async function runCmod(claude, args, session) {
+  const lines = [];
+  const { code, lastError } = await readLines(spawnCmod(claude, args, session), (line) => void lines.push(line));
+  if (code !== 0)
+    throw new Error(cmodError(lastError, args[0]) || `cmod ${args.slice(0, 2).join(" ")} ${formatExit(code, "")}.`);
+  return lines.join(`
+`);
+}
+function spawnedAfter(ready, spawn) {
+  let resolve = () => {
+    return;
+  };
+  let reject = () => {
+    return;
+  };
+  const result = new Promise((resolved, rejected) => {
+    resolve = resolved;
+    reject = rejected;
+  });
+  result.catch(() => {
+    return;
+  });
+  const stream = async function* () {
+    try {
+      await ready;
+      const ended = yield* spawn();
+      resolve(ended);
+      return ended;
+    } finally {
+      reject(new Error("cmod: the stream closed before the program ended."));
+    }
+  }();
+  return Object.assign(stream, { result });
+}
+function locatingPrograms(claude) {
+  let folder;
+  let names = new Set;
+  let downloading;
+  const located = (argv) => {
+    const [name, ...rest] = argv;
+    return folder !== undefined && name !== undefined && (name === "cmod" || names.has(name)) ? [`${folder}/${name}`, ...rest] : argv;
+  };
+  const waiting = (argv) => argv[0] === "cmod" ? downloading : undefined;
+  return {
+    claude: {
+      ...claude,
+      process: {
+        run: (argv, init) => {
+          const ready = waiting(argv);
+          return ready === undefined ? claude.process.run(located(argv), init) : ready.then(() => claude.process.run(located(argv), init));
+        },
+        spawn: (request) => {
+          const ready = waiting(request.argv);
+          const spawn = () => claude.process.spawn({ ...request, argv: located(request.argv) });
+          return ready === undefined ? spawn() : spawnedAfter(ready, spawn);
+        }
+      }
+    },
+    waitFor(download) {
+      const current = download.then(() => {
+        if (downloading === current)
+          downloading = undefined;
+      });
+      current.catch(() => {
+        return;
+      });
+      downloading = current;
+    },
+    async refresh() {
+      const programs = `${await cmodStore(claude)}/programs`;
+      names = new Set((await claude.fs.list(programs).catch(ifMissing([]))).map((entry) => entry.name));
+      folder = programs;
+    }
+  };
+}
+
+// node_modules/@cmodjs/core/utils/parse-shell.js
+var markerPattern = /\u0001(\d+)\u0001/g;
+var descriptorPattern = /[0-9]+(?=[<>])/y;
+var assignmentPattern = /^[A-Za-z_][A-Za-z0-9_]*(\[[^\]]*\])?\+?=/;
+var dynamicPattern = /[$`]/;
+var homePrefix2 = /^\$HOME(?=\/|$)/;
+var clusterPattern = /^-[A-Za-z0-9]{2,}$/;
+var separators = ";&|()<>";
+var redirectOperators = new Set([">", ">>", ">|", "&>", "&>>", ">&", "<", "<>", "<&", "<<<"]);
+var writeRedirects = new Set([">", ">>", ">|", "&>", "&>>", "<>"]);
+var sequenceOperators = new Set([";", "&", "&&", "||", "|", "|&"]);
+var casePatternStarts = new Set([";;", ";&", ";;&"]);
+var reservedWords = new Set(["if", "then", "else", "elif", "fi", "do", "done", "while", "until", "esac", "{", "}", "!"]);
+var shells = new Set(["sh", "bash", "zsh"]);
+var findActions = new Set(["-exec", "-execdir", "-ok", "-okdir"]);
+var gitValuedOptions = new Set(["-C", "-c", "--git-dir", "--work-tree", "--namespace", "--config-env", "--super-prefix", "--attr-source"]);
+var nonGetoptPrograms = new Set([
+  "find",
+  "java",
+  "javac",
+  "go",
+  "gcc",
+  "g++",
+  "clang",
+  "clang++",
+  "swift",
+  "swiftc",
+  "xcodebuild",
+  "xcrun",
+  "ffmpeg",
+  "ffprobe",
+  "openssl",
+  "plutil",
+  "defaults",
+  "security",
+  "codesign"
+]);
+var grep = {
+  valued: "efmABCdD",
+  longValued: ["--regexp", "--file", "--max-count", "--after-context", "--before-context", "--context", "--directories", "--devices", "--binary-files", "--label", "--include", "--exclude", "--exclude-dir", "--exclude-from"],
+  scriptOptions: ["-e", "-f", "--regexp", "--file"]
+};
+var awk = {
+  valued: "fFvi",
+  longValued: ["--file", "--field-separator", "--assign", "--include", "--source"],
+  scriptOptions: ["-f", "--file", "--source"],
+  takesAssignments: true,
+  inPlaceOptions: ["-i", "--include"]
+};
+var sed = {
+  valued: "efl",
+  optional: "iI",
+  longValued: ["--expression", "--file", "--line-length"],
+  scriptOptions: ["-e", "-f", "--expression", "--file"],
+  inPlaceOptions: ["-i", "-I", "--in-place"]
+};
+var perl = {
+  valued: "eEIMmF",
+  optional: "ixdDC",
+  scriptOptions: ["-e", "-E"],
+  inPlaceOptions: ["-i"]
+};
+var fileWriters = new Map([
+  ["tee", {}],
+  ["rm", {}],
+  ["touch", { valued: "drt", longValued: ["--date", "--reference", "--time"] }],
+  ["truncate", { valued: "sr", longValued: ["--size", "--reference"] }]
+]);
+var copyTarget = { valued: "tS", longValued: ["--target-directory", "--suffix"], targetOptions: ["-t", "--target-directory"] };
+var copyPrograms = new Map([
+  ["cp", { ...copyTarget, sources: "reads" }],
+  ["mv", { ...copyTarget, sources: "writes" }],
+  ["ln", { ...copyTarget, sources: undefined, linksHere: true }],
+  ["rsync", {
+    valued: "efBTM",
+    longValued: [
+      "--rsh",
+      "--rsync-path",
+      "--filter",
+      "--exclude",
+      "--include",
+      "--exclude-from",
+      "--include-from",
+      "--files-from",
+      "--temp-dir",
+      "--compare-dest",
+      "--copy-dest",
+      "--link-dest",
+      "--backup-dir",
+      "--suffix",
+      "--chmod",
+      "--chown",
+      "--usermap",
+      "--groupmap",
+      "--timeout",
+      "--contimeout",
+      "--bwlimit",
+      "--log-file",
+      "--log-file-format",
+      "--out-format",
+      "--password-file",
+      "--port",
+      "--sockopts",
+      "--max-size",
+      "--min-size",
+      "--max-delete",
+      "--partial-dir",
+      "--block-size",
+      "--modify-window",
+      "--iconv",
+      "--checksum-choice",
+      "--compress-choice",
+      "--compress-level",
+      "--remote-option",
+      "--info",
+      "--debug",
+      "--address",
+      "--write-batch",
+      "--only-write-batch",
+      "--read-batch",
+      "--protocol",
+      "--skip-compress"
+    ],
+    sources: "reads",
+    skipsRemote: true
+  }]
+]);
+var fetchers = new Map([
+  ["curl", {
+    valued: "AbcCdDeEFHKmoPQrTtuUwxXyYz",
+    longValued: [
+      "--url",
+      "--data",
+      "--data-raw",
+      "--data-binary",
+      "--data-urlencode",
+      "--data-ascii",
+      "--json",
+      "--form",
+      "--form-string",
+      "--header",
+      "--proxy-header",
+      "--user",
+      "--user-agent",
+      "--referer",
+      "--output",
+      "--output-dir",
+      "--cookie",
+      "--cookie-jar",
+      "--request",
+      "--proxy",
+      "--proxy-user",
+      "--preproxy",
+      "--noproxy",
+      "--max-time",
+      "--connect-timeout",
+      "--retry",
+      "--retry-delay",
+      "--retry-max-time",
+      "--range",
+      "--continue-at",
+      "--upload-file",
+      "--write-out",
+      "--cert",
+      "--cert-type",
+      "--key",
+      "--key-type",
+      "--cacert",
+      "--capath",
+      "--ciphers",
+      "--config",
+      "--dump-header",
+      "--interface",
+      "--limit-rate",
+      "--max-filesize",
+      "--max-redirs",
+      "--resolve",
+      "--connect-to",
+      "--oauth2-bearer",
+      "--aws-sigv4",
+      "--unix-socket",
+      "--abstract-unix-socket",
+      "--variable",
+      "--url-query",
+      "--trace",
+      "--trace-ascii",
+      "--stderr",
+      "--keepalive-time",
+      "--local-port",
+      "--dns-servers",
+      "--doh-url",
+      "--quote",
+      "--telnet-option",
+      "--time-cond",
+      "--speed-limit",
+      "--speed-time",
+      "--etag-save",
+      "--etag-compare",
+      "--hsts",
+      "--alt-svc",
+      "--mail-from",
+      "--mail-rcpt",
+      "--mail-auth",
+      "--pass",
+      "--proto",
+      "--proto-redir",
+      "--pubkey",
+      "--socks4",
+      "--socks4a",
+      "--socks5",
+      "--socks5-hostname"
+    ]
+  }],
+  ["wget", {
+    valued: "aoeiBtOTwQPlARDIXU",
+    longValued: [
+      "--output-file",
+      "--append-output",
+      "--execute",
+      "--input-file",
+      "--base",
+      "--tries",
+      "--output-document",
+      "--timeout",
+      "--dns-timeout",
+      "--connect-timeout",
+      "--read-timeout",
+      "--wait",
+      "--waitretry",
+      "--quota",
+      "--limit-rate",
+      "--directory-prefix",
+      "--level",
+      "--accept",
+      "--reject",
+      "--domains",
+      "--exclude-domains",
+      "--include-directories",
+      "--exclude-directories",
+      "--user-agent",
+      "--header",
+      "--user",
+      "--password",
+      "--http-user",
+      "--http-password",
+      "--post-data",
+      "--post-file",
+      "--body-data",
+      "--body-file",
+      "--method",
+      "--referer",
+      "--load-cookies",
+      "--save-cookies",
+      "--certificate",
+      "--private-key",
+      "--ca-certificate",
+      "--ca-directory",
+      "--bind-address",
+      "--cut-dirs",
+      "--default-page",
+      "--restrict-file-names",
+      "--local-encoding",
+      "--remote-encoding"
+    ]
+  }]
+]);
+var su = { valued: "cgGsw", longValued: ["--command", "--session-command", "--group", "--supp-group", "--shell", "--whitelist-environment"] };
+var suCodeOptions = ["-c", "--command", "--session-command"];
+var fileReaders = new Map([
+  ["cat", {}],
+  ["head", { valued: "nc", longValued: ["--lines", "--bytes"] }],
+  ["tail", { valued: "ncbs", longValued: ["--lines", "--bytes", "--pid", "--sleep-interval", "--max-unchanged-stats"] }],
+  ["less", { valued: "bhjkoOpPtTxyz" }],
+  ["grep", grep],
+  ["egrep", grep],
+  ["fgrep", grep],
+  ["rg", {
+    valued: "efgtTmABCjMrEd",
+    longValued: ["--regexp", "--file", "--glob", "--iglob", "--type", "--type-not", "--type-add", "--max-count", "--after-context", "--before-context", "--context", "--threads", "--max-columns", "--replace", "--encoding", "--max-depth", "--max-filesize", "--sort", "--sortr", "--pre", "--pre-glob", "--engine", "--ignore-file", "--path-separator", "--context-separator", "--field-match-separator", "--field-context-separator"],
+    scriptOptions: ["-e", "-f", "--regexp", "--file"]
+  }],
+  ["awk", awk],
+  ["gawk", awk],
+  ["sed", sed],
+  ["gsed", sed]
+]);
+var wrappers = new Map([
+  ["sudo", {
+    valued: "CDghpRrTtUu",
+    longValued: ["--close-from", "--chdir", "--group", "--host", "--prompt", "--chroot", "--role", "--type", "--command-timeout", "--other-user", "--user"],
+    stops: ["-e", "--edit", "-l", "--list", "-v", "--validate", "-V", "--version", "-K", "--remove-timestamp"],
+    folderOptions: ["-D", "--chdir"],
+    takesAssignments: true
+  }],
+  ["env", {
+    valued: "aCPSu",
+    longValued: ["--argv0", "--chdir", "--split-string", "--unset"],
+    folderOptions: ["-C", "--chdir"],
+    codeOptions: ["-S", "--split-string"],
+    takesAssignments: true
+  }],
+  ["doas", { valued: "aCu", stops: ["-C", "-L"] }],
+  ["timeout", { valued: "ks", longValued: ["--kill-after", "--signal"], leadingOperands: 1 }],
+  ["flock", { valued: "wEc", longValued: ["--timeout", "--wait", "--conflict-exit-code", "--command"], codeOptions: ["-c", "--command"], leadingOperands: 1 }],
+  ["stdbuf", { valued: "ioe", longValued: ["--input", "--output", "--error"] }],
+  ["watch", { valued: "nq", optional: "d", longValued: ["--interval", "--equexit"], shellUnless: ["-x", "--exec"] }],
+  ["nohup", {}],
+  ["nice", { valued: "n", longValued: ["--adjustment"] }],
+  ["time", { valued: "fo", longValued: ["--format", "--output"] }],
+  ["exec", { valued: "a" }],
+  ["command", { stops: ["-v", "-V"] }],
+  ["xargs", {
+    valued: "aEdILnPs",
+    optional: "eil",
+    longValued: ["--arg-file", "--delimiter", "--max-args", "--max-chars", "--max-procs", "--process-slot-var"]
+  }]
+]);
+var inlineCodeFlags = new Map([
+  ["python", ["-c"]],
+  ["python2", ["-c"]],
+  ["python3", ["-c"]],
+  ["node", ["-e", "--eval", "-p", "--print"]],
+  ["bun", ["-e", "--eval", "-p", "--print"]],
+  ["deno", ["eval"]],
+  ["ruby", ["-e"]],
+  ["perl", ["-e", "-E"]],
+  ["php", ["-r"]],
+  ["lua", ["-e"]],
+  ["osascript", ["-e"]]
+]);
+function parseShell(line) {
+  const result = { commands: [], writes: [], reads: [], fetches: [], isFullyParsed: true };
+  parseLine(line, "", result);
+  return result;
+}
+function parseLine(line, folder, result) {
+  if (line.includes("\x01")) {
+    result.isFullyParsed = false;
+    return;
+  }
+  try {
+    const { text, markers } = scan(line, 0, false);
+    walk(Dt(text, (name) => name === "" ? undefined : `$${name}`), markers, folder, result);
+  } catch (error) {
+    if (!(error instanceof SyntaxError) && !(error instanceof Error && error.message.startsWith("Bad substitution: ")))
+      throw error;
+    result.isFullyParsed = false;
+  }
+}
+function scan(source, start, isNested) {
+  const markers = [];
+  const heredocs = [];
+  const mark = (marker) => `\x01${markers.push(marker) - 1}\x01`;
+  let text = "";
+  let depth = 0;
+  let cases = 0;
+  let index = start;
+  let isWordStart = true;
+  while (index < source.length) {
+    const char = source.charAt(index);
+    const next = source.charAt(index + 1);
+    if (char === `
+`) {
+      text += " ; ";
+      index = readHeredocBodies(source, index + 1, heredocs.splice(0));
+      isWordStart = true;
+      continue;
+    }
+    if (char === " " || char === "\t") {
+      text += char;
+      index += 1;
+      isWordStart = true;
+      continue;
+    }
+    if (char === "#") {
+      if (isWordStart)
+        index = lineEnd(source, index);
+      else {
+        text += "\\#";
+        index += 1;
+      }
+      continue;
+    }
+    if (char === "\\") {
+      if (next === "")
+        throw new SyntaxError("The line ends with a backslash.");
+      if (next !== `
+`) {
+        text += char + next;
+        isWordStart = false;
+      }
+      index += 2;
+      continue;
+    }
+    if (char === "'" || char === "$" && next === "'") {
+      const close = closingQuote(source, index + (char === "$" ? 2 : 1), "'", char === "$");
+      text += source.slice(index, close + 1);
+      index = close + 1;
+      isWordStart = false;
+      continue;
+    }
+    if (char === '"') {
+      const quoted = readDoubleQuoted(source, index, mark);
+      text += quoted.text;
+      index = quoted.end;
+      isWordStart = false;
+      continue;
+    }
+    const expansion = expansionAt(source, index);
+    if (expansion !== undefined) {
+      text += mark(expansion);
+      index = expansion.end;
+      isWordStart = false;
+      continue;
+    }
+    if ((char === "<" || char === ">") && next === "(") {
+      const close = scan(source, index + 2, true).end;
+      text += mark({ raw: source.slice(index, close + 1), code: [source.slice(index + 2, close)] });
+      index = close + 1;
+      isWordStart = false;
+      continue;
+    }
+    if (char === "(" && next === "(" && isWordStart) {
+      const end = arithmeticEnd(source, index + 2);
+      if (end !== undefined) {
+        if (substitutionsIn(source.slice(index + 2, end - 2)).length > 0)
+          throw new SyntaxError("An arithmetic command runs a substitution.");
+        index = end;
+        continue;
+      }
+    }
+    if (source.startsWith("<<<", index)) {
+      text += "<<<";
+      index += 3;
+      isWordStart = true;
+      continue;
+    }
+    if (char === "<" && next === "<") {
+      const heredoc = readHeredocOperator(source, index);
+      heredocs.push(heredoc);
+      text += ` <<< ${mark(heredoc.marker)} `;
+      index = heredoc.end;
+      isWordStart = true;
+      continue;
+    }
+    if (isWordStart) {
+      descriptorPattern.lastIndex = index;
+      const descriptor = descriptorPattern.exec(source);
+      if (descriptor !== null) {
+        index += descriptor[0].length;
+        continue;
+      }
+      if (startsWord(source, index, "case"))
+        cases += 1;
+      if (startsWord(source, index, "esac") && cases > 0)
+        cases -= 1;
+    }
+    if (char === "(")
+      depth += 1;
+    if (char === ")") {
+      if (depth > 0)
+        depth -= 1;
+      else if (cases === 0) {
+        if (!isNested)
+          throw new SyntaxError("The line closes a parenthesis it never opened.");
+        if (heredocs.length > 0)
+          throw new SyntaxError("A heredoc inside a substitution has no body.");
+        return { text, markers, end: index };
+      }
+    }
+    text += char;
+    index += 1;
+    isWordStart = separators.includes(char);
+  }
+  if (isNested)
+    throw new SyntaxError("A substitution is never closed.");
+  if (depth > 0)
+    throw new SyntaxError("A parenthesis is never closed.");
+  if (heredocs.length > 0)
+    throw new SyntaxError("A heredoc has no body.");
+  return { text, markers, end: index };
+}
+function readDoubleQuoted(source, start, mark) {
+  let text = '"';
+  let index = start + 1;
+  while (index < source.length) {
+    const char = source.charAt(index);
+    if (char === '"')
+      return { text: `${text}"`, end: index + 1 };
+    if (char === "\\") {
+      if (source.charAt(index + 1) !== `
+`)
+        text += source.slice(index, index + 2);
+      index += 2;
+      continue;
+    }
+    const expansion = expansionAt(source, index);
+    if (expansion !== undefined) {
+      text += mark(expansion);
+      index = expansion.end;
+      continue;
+    }
+    text += char;
+    index += 1;
+  }
+  throw new SyntaxError("A double quote is never closed.");
+}
+function expansionAt(source, index) {
+  if (source.startsWith("$((", index)) {
+    const end = arithmeticEnd(source, index + 3);
+    if (end !== undefined)
+      return { raw: source.slice(index, end), code: substitutionsIn(source.slice(index + 3, end - 2)), end };
+  }
+  if (source.startsWith("$(", index)) {
+    const close = scan(source, index + 2, true).end;
+    return { raw: source.slice(index, close + 1), code: [source.slice(index + 2, close)], end: close + 1 };
+  }
+  if (source.charAt(index) === "`") {
+    const close = closingQuote(source, index + 1, "`", true);
+    return { raw: source.slice(index, close + 1), code: [source.slice(index + 1, close).replace(/\\([\\`$])/g, "$1")], end: close + 1 };
+  }
+  return;
+}
+function substitutionsIn(text) {
+  const code = [];
+  let index = 0;
+  while (index < text.length) {
+    if (text.charAt(index) === "\\") {
+      index += 2;
+      continue;
+    }
+    const expansion = expansionAt(text, index);
+    if (expansion === undefined)
+      index += 1;
+    else {
+      code.push(...expansion.code);
+      index = expansion.end;
+    }
+  }
+  return code;
+}
+function arithmeticEnd(source, from) {
+  let depth = 0;
+  for (let index = from;index < source.length; index += 1) {
+    const char = source.charAt(index);
+    if (char === "(")
+      depth += 1;
+    if (char !== ")")
+      continue;
+    if (depth > 0)
+      depth -= 1;
+    else
+      return source.charAt(index + 1) === ")" ? index + 2 : undefined;
+  }
+  throw new SyntaxError("An arithmetic expansion is never closed.");
+}
+function closingQuote(source, from, quote, isEscapable) {
+  for (let index = from;index < source.length; index += 1) {
+    const char = source.charAt(index);
+    if (isEscapable && char === "\\")
+      index += 1;
+    else if (char === quote)
+      return index;
+  }
+  throw new SyntaxError(`A ${quote} quote is never closed.`);
+}
+function lineEnd(source, index) {
+  const end = source.indexOf(`
+`, index);
+  return end < 0 ? source.length : end;
+}
+function startsWord(source, index, word) {
+  return source.startsWith(word, index) && /^$|[\s;&|()<>]/.test(source.charAt(index + word.length));
+}
+function readHeredocOperator(source, index) {
+  let end = index + 2;
+  const stripsTabs = source.charAt(end) === "-";
+  if (stripsTabs)
+    end += 1;
+  while (source.charAt(end) === " " || source.charAt(end) === "\t")
+    end += 1;
+  let delimiter = "";
+  let isQuoted = false;
+  while (end < source.length && !/[\s;&|()<>]/.test(source.charAt(end))) {
+    const char = source.charAt(end);
+    if (char === "'" || char === '"') {
+      const close = closingQuote(source, end + 1, char, char === '"');
+      delimiter += source.slice(end + 1, close);
+      isQuoted = true;
+      end = close + 1;
+    } else if (char === "\\") {
+      delimiter += source.charAt(end + 1);
+      isQuoted = true;
+      end += 2;
+    } else {
+      delimiter += char;
+      end += 1;
+    }
+  }
+  if (delimiter === "")
+    throw new SyntaxError("A heredoc has no delimiter.");
+  return { delimiter, stripsTabs, isQuoted, marker: { raw: "", code: [] }, end };
+}
+function readHeredocBodies(source, from, heredocs) {
+  let index = from;
+  for (const heredoc of heredocs) {
+    const lines = [];
+    for (;; ) {
+      if (index >= source.length)
+        throw new SyntaxError(`The heredoc ${heredoc.delimiter} never ends.`);
+      const end = lineEnd(source, index);
+      const line = heredoc.stripsTabs ? source.slice(index, end).replace(/^\t+/, "") : source.slice(index, end);
+      index = end + 1;
+      if (line === heredoc.delimiter)
+        break;
+      lines.push(line);
+    }
+    heredoc.marker.raw = lines.join(`
+`);
+    heredoc.marker.code = heredoc.isQuoted ? [] : substitutionsIn(heredoc.marker.raw);
+  }
+  return index;
+}
+function walk(tokens, markers, start, result) {
+  let folder = start;
+  const subshells = [];
+  let command = newCommand(undefined);
+  let caseState;
+  for (let index = 0;index < tokens.length; index += 1) {
+    const token = tokens[index];
+    if (typeof token !== "string" && "comment" in token)
+      throw new SyntaxError("The line holds a comment the scanner left.");
+    if (isWordToken(token)) {
+      const word = wordOf(token, markers, folder, result);
+      if (caseState === "header") {
+        if (word.text === "in")
+          caseState = "pattern";
+      } else if (caseState === "pattern") {
+        if (word.text === "esac")
+          caseState = undefined;
+      } else if (word.text === "case" && command.words.every((earlier) => reservedWords.has(earlier.text))) {
+        caseState = "header";
+      } else
+        command.words.push(word);
+      continue;
+    }
+    const operator = token.op;
+    if (redirectOperators.has(operator)) {
+      const target = tokens[index + 1];
+      if (target === undefined || !isWordToken(target))
+        throw new SyntaxError(`The redirection ${operator} has no target.`);
+      index += 1;
+      command.redirects.push({ operator, target: wordOf(target, markers, folder, result) });
+      continue;
+    }
+    if (caseState !== undefined) {
+      if (caseState === "pattern" && operator === ")")
+        caseState = undefined;
+      continue;
+    }
+    const following = tokens[index + 1];
+    if (operator === "(" && command.words.length === 1 && following !== undefined && !isWordToken(following) && "op" in following && following.op === ")") {
+      command = newCommand(undefined);
+      index += 1;
+      continue;
+    }
+    const before = result.commands.length;
+    folder = finish(command, operator, folder, result);
+    const writer = result.commands.length > before ? result.commands.length - 1 : undefined;
+    command = newCommand(operator === "|" || operator === "|&" ? { writer } : undefined);
+    if (operator === "(")
+      subshells.push(folder);
+    else if (operator === ")") {
+      const outer = subshells.pop();
+      if (outer === undefined)
+        throw new SyntaxError("The line closes a subshell it never opened.");
+      folder = outer;
+    } else if (casePatternStarts.has(operator))
+      caseState = "pattern";
+    else if (!sequenceOperators.has(operator))
+      throw new SyntaxError(`The parser does not know the operator ${operator}.`);
+  }
+  finish(command, ";", folder, result);
+}
+function newCommand(pipe) {
+  return { words: [], redirects: [], pipe };
+}
+function isWordToken(token) {
+  return typeof token === "string" || "op" in token && token.op === "glob";
+}
+function wordOf(token, markers, folder, result) {
+  const raw = typeof token === "string" ? token : token.pattern;
+  for (const match of raw.matchAll(markerPattern)) {
+    for (const code of markers[Number(match[1])].code)
+      parseLine(code, folder, result);
+  }
+  return {
+    text: raw.replace(markerPattern, (_, index) => markers[Number(index)].raw),
+    isGlob: typeof token !== "string",
+    isDynamic: /[$\u0001]/.test(ft(raw))
+  };
+}
+function finish(command, operator, folder, result) {
+  for (const redirect of command.redirects)
+    addRedirect(redirect, folder, result);
+  const words = withoutPrefixes(command.words);
+  const [first, ...args] = words;
+  if (first === undefined || first.text === "for" || first.text === "select")
+    return folder;
+  const here = command.redirects.findLast((redirect) => redirect.operator === "<<<");
+  const stdin = here !== undefined ? { type: "text", text: here.target.text } : command.pipe !== undefined ? { type: "pipe" } : undefined;
+  const reader = result.commands.length;
+  const changed = addCommand(first, args, folder, stdin, result);
+  const read = result.commands[reader];
+  const writer = command.pipe?.writer;
+  if (read !== undefined && writer !== undefined && here === undefined)
+    result.commands[reader] = { ...read, input: writer };
+  const isPiped = command.pipe !== undefined || operator === "|" || operator === "|&" || operator === "&";
+  return changed === undefined || isPiped ? folder : changed;
+}
+function withoutPrefixes(words) {
+  let start = 0;
+  for (;; ) {
+    const text = words[start]?.text;
+    if (text === undefined)
+      break;
+    if (text === "function")
+      start += 2;
+    else if (reservedWords.has(text) || assignmentPattern.test(text))
+      start += 1;
+    else
+      break;
+  }
+  return words.slice(start);
+}
+function addRedirect({ operator, target }, folder, result) {
+  if (operator === "<" || operator === "<>")
+    addPath(result, "reads", target, folder);
+  if (writeRedirects.has(operator) || operator === ">&" && !/^([0-9]+|-)$/.test(target.text))
+    addPath(result, "writes", target, folder);
+}
+function addCommand(first, args, folder, stdin, result) {
+  if (first.isDynamic || first.isGlob)
+    result.isFullyParsed = false;
+  const program = ft(first.text);
+  if (program === "git")
+    addGit(first, args, folder, result);
+  else if (program === "find")
+    addFind(first, args, folder, result);
+  else if (wrappers.has(program))
+    addWrapper(first, program, args, folder, stdin, result);
+  else {
+    const flags = expandFlags(program, args);
+    const runner = result.commands.push({ argv: [first.text, ...flags], folder }) - 1;
+    addEffects(program, args, flags, folder, stdin, result);
+    runBy(runner, result);
+    if (program === "cd")
+      return changedFolder(args, folder);
+  }
+  return;
+}
+function addGit(first, args, folder, result) {
+  let index = 0;
+  let gitFolder = folder;
+  for (let text = args[0]?.text;text?.startsWith("-") === true; text = args[index]?.text) {
+    if (text === "-C")
+      gitFolder = joinFolder(gitFolder, args[index + 1]?.text ?? "");
+    if (text === "-c" && /^alias\.[^=]*=\s*!/i.test(args[index + 1]?.text ?? ""))
+      result.isFullyParsed = false;
+    index += gitValuedOptions.has(text) ? 2 : 1;
+  }
+  result.commands.push({ argv: [first.text, ...expandFlags("git", args.slice(index))], folder: gitFolder });
+}
+function addFind(first, args, folder, result) {
+  const own = [];
+  const actions = [];
+  for (let index = 0;index < args.length; index += 1) {
+    const text = args[index].text;
+    if (!findActions.has(text)) {
+      own.push(text);
+      continue;
+    }
+    const end = args.findIndex((word, at) => at > index && (word.text === ";" || word.text === "+"));
+    actions.push(args.slice(index + 1, end < 0 ? args.length : end));
+    index = end < 0 ? args.length : end;
+  }
+  const runner = result.commands.push({ argv: [first.text, ...own], folder }) - 1;
+  const starts = findStarts(args);
+  if (own.includes("-delete"))
+    for (const start of starts)
+      addPath(result, "writes", start, folder);
+  for (const action of actions)
+    addFindAction(action, starts, folder, result);
+  runBy(runner, result);
+}
+function addFindAction(action, starts, folder, result) {
+  const [first, ...args] = action;
+  if (first === undefined)
+    return;
+  const reads = result.reads.length;
+  const writes = result.writes.length;
+  addCommand(first, args, folder, undefined, result);
+  if (!action.some((word) => word.text.includes("{}")))
+    return;
+  result.reads.splice(reads);
+  result.writes.splice(writes);
+  for (const start of starts) {
+    const found = { commands: [], reads: result.reads, writes: result.writes, fetches: [], isFullyParsed: true };
+    const [foundFirst, ...foundArgs] = action.map((word) => foundWord(word, start));
+    addCommand(foundFirst, foundArgs, folder, undefined, found);
+    if (!found.isFullyParsed)
+      result.isFullyParsed = false;
+  }
+}
+function foundWord(word, start) {
+  if (!word.text.includes("{}"))
+    return word;
+  return { text: word.text.replaceAll("{}", start.text), isGlob: word.isGlob || start.isGlob, isDynamic: word.isDynamic || start.isDynamic };
+}
+function findStarts(args) {
+  let index = 0;
+  for (let text = args[0]?.text;text === "-D" || /^-([HLP]|O\d*)$/.test(text ?? ""); text = args[index]?.text)
+    index += text === "-D" ? 2 : 1;
+  const end = args.findIndex((word, at) => at >= index && /^[-(!),]/.test(word.text));
+  const starts = args.slice(index, end < 0 ? args.length : end);
+  return starts.length > 0 ? starts : [literal(".")];
+}
+function addWrapper(first, program, args, folder, stdin, result) {
+  const wrapper = wrappers.get(program);
+  if (program === "xargs" && stdin?.type !== "text")
+    result.isFullyParsed = false;
+  const { options, operands } = readArguments(args, wrapper, true);
+  let start = args.length - operands.length;
+  if (options.some((option) => wrapper.stops?.includes(option.name) === true))
+    start = args.length;
+  start += wrapper.leadingOperands ?? 0;
+  while (wrapper.takesAssignments === true && assignmentPattern.test(args[start]?.text ?? ""))
+    start += 1;
+  const hasTrailingCode = wrapper.codeOptions?.includes(args[start]?.text ?? "") === true;
+  const runner = result.commands.push({ argv: [first.text, ...expandFlags(program, args.slice(0, start))], folder }) - 1;
+  const innerFolder = options.findLast((option) => wrapper.folderOptions?.includes(option.name) === true)?.value;
+  const wrappedFolder = innerFolder === undefined ? folder : joinFolder(folder, innerFolder.text);
+  const code = hasTrailingCode ? args[start + 1] : options.findLast((option) => wrapper.codeOptions?.includes(option.name) === true)?.value;
+  const rest = args.slice(hasTrailingCode ? start + 2 : start);
+  const isShell = wrapper.shellUnless !== undefined && !options.some((option) => wrapper.shellUnless?.includes(option.name) === true);
+  const [innerFirst, ...innerArgs] = rest;
+  if (code !== undefined || isShell)
+    parseLine([...code === undefined ? [] : [code], ...rest].map((word) => word.text).join(" "), wrappedFolder, result);
+  else if (innerFirst !== undefined)
+    addCommand(innerFirst, innerArgs, wrappedFolder, stdin, result);
+  runBy(runner, result);
+}
+function runBy(runner, result) {
+  for (const command of result.commands.slice(runner + 1))
+    command.runner ??= runner;
+}
+function addEffects(program, args, flags, folder, stdin, result) {
+  const fileProgram = fileReaders.get(program);
+  const fileWriter = fileWriters.get(program);
+  const copyProgram = copyPrograms.get(program);
+  const fetcher = fetchers.get(program);
+  const inlineFlags = inlineCodeFlags.get(program);
+  if (program === "eval")
+    result.isFullyParsed = false;
+  else if (shells.has(program))
+    addShell(args, folder, stdin, result);
+  else if (program === "ssh")
+    addSsh(args, stdin, result);
+  else if (program === "su")
+    addSu(args, folder, result);
+  else if (program === "source" || program === ".")
+    addPath(result, "reads", readArguments(args, {}, true).operands[0], folder);
+  else if (program === "dd")
+    for (const word of args.filter((arg) => arg.text.startsWith("of=")))
+      addPath(result, "writes", { ...word, text: word.text.slice(3) }, folder);
+  else if (fileWriter !== undefined)
+    for (const operand of readArguments(args, fileWriter, false).operands)
+      addPath(result, "writes", operand, folder);
+  else if (copyProgram !== undefined)
+    addCopy(copyProgram, args, folder, result);
+  else if (fileProgram !== undefined)
+    addFileArguments(fileProgram, args, folder, result);
+  else if (fetcher !== undefined)
+    addFetches(fetcher, args, result);
+  else if (inlineFlags !== undefined) {
+    if (program === "perl" && readArguments(args, perl, false).options.some((option) => option.name === "-i"))
+      addFileArguments(perl, args, folder, result);
+    const script = args.find((word) => !word.text.startsWith("-") || word.text === "-");
+    const readsCodeFromPipe = stdin?.type === "pipe" && (script === undefined || script.text === "-");
+    if (flags.some((flag) => inlineFlags.includes(flag)) || stdin?.type === "text" || readsCodeFromPipe)
+      result.isFullyParsed = false;
+  }
+}
+function addShell(args, folder, stdin, result) {
+  const { options, operands } = readArguments(args, { valued: "oO", longValued: ["--rcfile", "--init-file"] }, true);
+  const script = operands[0];
+  if (options.some((option) => option.name === "-c")) {
+    if (script !== undefined)
+      parseLine(script.text, folder, result);
+  } else if (script === undefined || options.some((option) => option.name === "-s"))
+    addStdinCode(stdin, folder, result);
+}
+function addSsh(args, stdin, result) {
+  const { operands } = readArguments(args, { valued: "BbcDEeFIiJLlmOoPpQRSWw" }, true);
+  const remote = operands.slice(1);
+  if (remote.length > 0)
+    parseLine(remote.map((word) => word.text).join(" "), "~", result);
+  else if (operands.length > 0)
+    addStdinCode(stdin, "~", result);
+}
+function addSu(args, folder, result) {
+  const code = readArguments(args, su, false).options.findLast((option) => suCodeOptions.includes(option.name))?.value;
+  if (code !== undefined)
+    parseLine(code.text, folder, result);
+}
+function addFetches(fetcher, args, result) {
+  const { options, operands } = readArguments(args, fetcher, false);
+  const urls = [...options.filter((option) => option.name === "--url").flatMap((option) => option.value === undefined ? [] : [option.value]), ...operands];
+  for (const url of urls)
+    result.fetches.push(/^[a-z][a-z0-9+.-]*:\/\//i.test(url.text) ? url.text : `http://${url.text}`);
+}
+function addStdinCode(stdin, folder, result) {
+  if (stdin?.type === "text")
+    parseLine(stdin.text, folder, result);
+  if (stdin?.type === "pipe")
+    result.isFullyParsed = false;
+}
+function addCopy(program, args, folder, result) {
+  const { options, operands } = readArguments(args, program, false);
+  const target = options.findLast((option) => program.targetOptions?.includes(option.name) === true)?.value;
+  const only = operands[0];
+  if (program.linksHere === true && target === undefined && operands.length === 1 && only !== undefined) {
+    addPath(result, "writes", { ...only, text: ft(only.text) }, folder);
+    return;
+  }
+  const destination = target ?? operands.at(-1);
+  const sources = target === undefined ? operands.slice(0, -1) : operands;
+  if (destination === undefined || sources.length === 0)
+    return;
+  const isLocal = (word) => program.skipsRemote !== true || !/^[^/]*:/.test(word.text);
+  for (const source of sources.filter(isLocal)) {
+    if (program.sources !== undefined)
+      addPath(result, program.sources, source, folder);
+    if (isLocal(destination) && !source.isGlob && !destination.isGlob)
+      addPathText(result, "writes", `${destination.text.replace(/\/+$/, "")}/${ft(source.text)}`, folder);
+  }
+  if (isLocal(destination))
+    addPath(result, "writes", destination, folder);
+}
+function addFileArguments(program, args, folder, result) {
+  const { options, operands } = readArguments(args, program, false);
+  const inPlace = options.find((option) => program.inPlaceOptions?.includes(option.name) === true && (program !== awk || option.value?.text === "inplace"));
+  let files = operands;
+  if (program === sed && inPlace !== undefined && inPlace.value === undefined) {
+    const suffix = files[0]?.text;
+    const hasScriptOption = options.some((option) => program.scriptOptions?.includes(option.name) === true);
+    if (suffix === "" || !hasScriptOption && suffix !== undefined && /^\.[\w.-]*$/.test(suffix))
+      files = files.slice(1);
+  }
+  if (program.scriptOptions !== undefined && !options.some((option) => program.scriptOptions?.includes(option.name) === true))
+    files = files.slice(1);
+  if (program.takesAssignments === true)
+    files = files.filter((file) => !assignmentPattern.test(file.text));
+  for (const file of files)
+    addPath(result, inPlace === undefined ? "reads" : "writes", file, folder);
+}
+function readArguments(args, spec, stopsAtOperand) {
+  const options = [];
+  const operands = [];
+  for (let index = 0;index < args.length; index += 1) {
+    const word = args[index];
+    const text = word.text;
+    if (text === "--") {
+      operands.push(...args.slice(index + 1));
+      break;
+    }
+    if (word.isGlob || text === "-" || !text.startsWith("-")) {
+      if (stopsAtOperand) {
+        operands.push(...args.slice(index));
+        break;
+      }
+      operands.push(word);
+      continue;
+    }
+    if (text.startsWith("--")) {
+      const equals = text.indexOf("=");
+      if (equals >= 0)
+        options.push({ name: text.slice(0, equals), value: literal(text.slice(equals + 1)) });
+      else if (spec.longValued?.includes(text) === true) {
+        options.push({ name: text, value: args[index + 1] });
+        index += 1;
+      } else
+        options.push({ name: text, value: undefined });
+      continue;
+    }
+    for (let at = 1;at < text.length; at += 1) {
+      const letter = text.charAt(at);
+      const rest = text.slice(at + 1);
+      if (spec.optional?.includes(letter) === true) {
+        options.push({ name: `-${letter}`, value: rest === "" ? undefined : literal(rest) });
+        break;
+      }
+      if (spec.valued?.includes(letter) === true) {
+        if (rest !== "")
+          options.push({ name: `-${letter}`, value: literal(rest) });
+        else {
+          options.push({ name: `-${letter}`, value: args[index + 1] });
+          index += 1;
+        }
+        break;
+      }
+      options.push({ name: `-${letter}`, value: undefined });
+    }
+  }
+  return { options, operands };
+}
+function expandFlags(program, args) {
+  const texts = args.map((word) => word.text);
+  if (nonGetoptPrograms.has(program))
+    return texts;
+  const spec = fileReaders.get(program) ?? wrappers.get(program);
+  const takesValue = `${spec?.valued ?? ""}${spec?.optional ?? ""}`;
+  const end = texts.indexOf("--");
+  return texts.flatMap((text, index) => end >= 0 && index > end || !clusterPattern.test(text) ? [text] : expandCluster(text, takesValue));
+}
+function expandCluster(cluster, takesValue) {
+  const flags = [];
+  for (let index = 1;index < cluster.length; index += 1) {
+    const letter = cluster.charAt(index);
+    if (takesValue.includes(letter) && index < cluster.length - 1)
+      return [...flags, `-${cluster.slice(index)}`];
+    flags.push(`-${letter}`);
+  }
+  return flags;
+}
+function changedFolder(args, folder) {
+  const target = args.find((word) => !word.text.startsWith("-") || word.text === "-");
+  if (target === undefined)
+    return "~";
+  return joinFolder(folder, target.text === "-" ? "$OLDPWD" : target.text);
+}
+function addPath(result, access, word, folder) {
+  if (word !== undefined && !word.isGlob)
+    addPathText(result, access, word.text, folder);
+}
+function addPathText(result, access, path, folder) {
+  if (path === "" || path.startsWith("/dev/"))
+    return;
+  const joined = joinFolder(folder, path);
+  if (dynamicPattern.test(joined.replace(homePrefix2, "")))
+    result.isFullyParsed = false;
+  result[access].push(joined);
+}
+function joinFolder(folder, path) {
+  return folder === "" || /^(\/|~|\$HOME(\/|$))/.test(path) ? path : `${folder}/${path}`;
+}
+function literal(text) {
+  return { text, isGlob: false, isDynamic: false };
+}
+
+// node_modules/@cmodjs/core/utils/call-effects.js
+function callEffects(use, workspace) {
+  const { fs } = workspace;
+  const absolute = (path, folder = workspace.cwd) => ve(folder, expandHome(path, workspace.home, workspace.configRoot));
+  const access = (path) => ({ path: absolute(path), contents: undefined });
+  const effects = { shell: undefined, reads: [], writes: [], urls: [], subagent: undefined };
+  if (use.tool === "Bash") {
+    const line = textField(use, "command");
+    const parsed = parseShell(line);
+    const commands = parsed.commands.map(({ argv, folder }) => ({ argv, folder: absolute(folder) }));
+    effects.shell = { line, commands, isFullyParsed: parsed.isFullyParsed };
+    effects.reads = parsed.reads.map(access);
+    effects.writes = parsed.writes.map(access);
+    effects.urls = parsed.fetches;
+  } else if (use.tool === "PowerShell") {
+    effects.shell = { line: textField(use, "command"), commands: [], isFullyParsed: false };
+  } else if (use.tool === "Edit") {
+    const path = absolute(textField(use, "file_path"));
+    effects.writes = [{ path, contents: once(() => editedContents(use, path, fs)) }];
+  } else if (use.tool === "Write") {
+    const path = absolute(textField(use, "file_path"));
+    const content = textField(use, "content");
+    effects.writes = [{ path, contents: once(async () => contentsOf(content, await previousContentOf(path, fs))) }];
+  } else if (use.tool === "NotebookEdit") {
+    const path = absolute(textField(use, "notebook_path"));
+    effects.writes = [{ path, contents: once(async () => contentsOf(undefined, await previousContentOf(path, fs))) }];
+  } else if (use.tool === "Read") {
+    effects.reads = [access(textField(use, "file_path"))];
+  } else if (use.tool === "Grep") {
+    effects.reads = [access(optionalTextField(use, "path") ?? "")];
+  } else if (use.tool === "Glob") {
+    const folder = absolute(optionalTextField(use, "path") ?? "");
+    effects.reads = [{ path: absolute(textField(use, "pattern"), folder), contents: undefined }];
+  } else if (use.tool === "WebFetch") {
+    effects.urls = [textField(use, "url")];
+  } else if (use.tool === "Agent") {
+    effects.subagent = optionalTextField(use, "subagent_type") ?? "general-purpose";
+  }
+  return effects;
+}
+async function editedContents(use, path, fs) {
+  const previousContent = await previousContentOf(path, fs);
+  const oldString = textField(use, "old_string");
+  const newString = textField(use, "new_string");
+  if (oldString === "")
+    return contentsOf(previousContent === undefined || previousContent === "" ? newString : undefined, previousContent);
+  if (previousContent === undefined || !previousContent.includes(oldString))
+    return contentsOf(undefined, previousContent);
+  const content = fieldOf(use, "replace_all") === true ? previousContent.split(oldString).join(newString) : previousContent.replace(oldString, () => newString);
+  return contentsOf(content, previousContent);
+}
+async function previousContentOf(path, fs) {
+  const stat = await fs.stat(path).catch(ifMissing(undefined));
+  return stat?.kind === "file" ? fs.read(path) : undefined;
+}
+function contentsOf(content, previousContent) {
+  return { ...content === undefined ? {} : { content }, ...previousContent === undefined ? {} : { previousContent } };
+}
+function once(load) {
+  let loaded;
+  return () => loaded ??= load();
+}
+function fieldOf(use, name) {
+  return use.input[name];
+}
+
+class InvalidCall extends Error {
+}
+function textField(use, name) {
+  const value = fieldOf(use, name);
+  if (typeof value !== "string")
+    throw new InvalidCall(`The ${use.tool} call has no text field ${name}.`);
+  return value;
+}
+function optionalTextField(use, name) {
+  return fieldOf(use, name) === undefined ? undefined : textField(use, name);
+}
+
+// node_modules/@cmodjs/core/runtime/hooks.js
+function classicHook(event, hook, report) {
+  const routed = async (e, next) => {
+    const ours = await Promise.resolve().then(() => hook(e, next.signal)).catch((error) => {
+      report({ id: `hook:${event}`, message: `The ${event} listener failed`, error });
+      return;
+    });
+    if (ours === undefined)
+      return next(e);
+    return mergeClassic(await next(e), ours);
+  };
+  return routed;
+}
+function classicFailure(failed) {
+  const routed = async (e, error, next) => {
+    const ours = await failed(e, error);
+    return ours === undefined ? undefined : mergeClassic(await next(e), ours);
+  };
+  return routed;
+}
+var frontmatter = /^---\r?\n[\s\S]*?\r?\n---[ \t]*(?:\r?\n|$)/;
+var baseDirectoryLine = /^Base directory for this skill: [^\n]*\n\n/;
+function userSkillHook(claude) {
+  return async (e, next) => {
+    const { name, root } = claude.plugin;
+    if (!e.skill.startsWith(`${name}:`))
+      return next(e);
+    const skill = e.skill.slice(name.length + 1);
+    const skills = `${root}/skills`;
+    if (!await claude.fs.exists(skills) || !(await claude.fs.list(skills)).some((entry) => entry.name === skill))
+      return next(e);
+    if ((await claude.fs.stat(`${skills}/${skill}`)).kind !== "dir")
+      return next(e);
+    const env = { HOME: await claude.env.home(), CLAUDE_CONFIG_DIR: await claude.env.configHome() };
+    for (const { folder } of configFolders(env, name, await claude.session.root()).toReversed()) {
+      const path = `${folder}/skills/${skill}/SKILL.md`;
+      if (await claude.fs.exists(path))
+        return { text: `${baseDirectoryLine.exec(e.text)?.[0] ?? ""}${(await claude.fs.read(path)).replace(frontmatter, "")}` };
+    }
+    return next(e);
+  };
+}
+async function callFiles(name, claude, folders, use, cwd) {
+  try {
+    const { home, configRoot } = await folders;
+    if (home === undefined)
+      throw new Error("HOME is not set, so ~ in a path has no meaning.");
+    const { shell, reads, writes } = callEffects(use, { cwd, home, ...configRoot === undefined ? {} : { configRoot }, fs: claude.fs });
+    const known = (accesses) => accesses.map(({ path }) => path).filter((path) => shell === undefined || !dynamicPattern.test(path));
+    const unchecked = (path) => (error) => {
+      if (!isMissing(error))
+        claude.ui.warn("call:files", `${name}: the ${use.tool} call reads ${path}, which could not be checked: ${messageOf(error)}`);
+      return;
+    };
+    const read = await Promise.all(known(reads).map(async (path) => (await claude.fs.stat(path).catch(unchecked(path)))?.kind === "file" ? [path] : []));
+    return { read: read.flat(), changed: known(writes) };
+  } catch (error) {
+    if (!(error instanceof InvalidCall))
+      claude.ui.warn("call:files", `${name}: the ${use.tool} call lists no files: ${messageOf(error)}`);
+    return { read: [], changed: [] };
+  }
+}
+function mergeClassic(below, ours) {
+  const merged = { ...below, ...ours };
+  const context = [...below["additionalContext"] ?? [], ...ours["additionalContext"] ?? []];
+  if (context.length > 0)
+    merged["additionalContext"] = context;
+  return merged;
+}
+
+// node_modules/@cmodjs/core/runtime/sessions.js
+var conversationMethods = {
+  sessions: "cmod:sessions",
+  session: "cmod:session",
+  search: "cmod:search",
+  messages: "cmod:messages",
+  turns: "cmod:turns",
+  contexts: "cmod:contexts",
+  tasks: "cmod:tasks",
+  goal: "cmod:goal",
+  updateGoal: "cmod:updateGoal",
+  subscribe: "cmod:subscribe",
+  watchBefore: "cmod:watchBefore",
+  act: "cmod:act",
+  changed: "cmod:changed",
+  before: "cmod:before",
+  sessionColor: "cmod:sessionColor"
+};
+var sessionFields = { id: true, title: true, color: true, project: true, cwd: true, model: true, startedAt: true, lastAt: true, forkedFrom: true, isRunning: true, agentType: true, visitedAt: true, device: true, status: true, waitingFor: true, contextPercent: true, lastTurn: true };
+async function usageOf(claude) {
+  const [model, usage] = await Promise.all([claude.session.model(), claude.session.usage()]);
+  const { tokens, window, percent } = usage.context;
+  const rateLimits = usage.rateLimits.map(({ kind, percentUsed, resetsAt }) => ({ type: kind, percent: percentUsed, ...resetsAt === undefined ? {} : { resetsAt } }));
+  return { model, contextWindow: { ...tokens === undefined ? {} : { tokenCount: tokens }, size: window, ...percent === undefined ? {} : { percent } }, rateLimits, ...usage.cost === undefined ? {} : { cost: { usd: usage.cost.usd } } };
+}
+function payloadOf(change) {
+  if (change.type === Message)
+    return change.message;
+  if ("turn" in change)
+    return change.turn;
+  if ("context" in change)
+    return change.context;
+  if ("task" in change) {
+    const { id, title, agentType, model, openedBy, openedAt, closedAt, isBackground, forkedFrom } = change.task;
+    const owner = { id, title, ...agentType === undefined ? {} : { agentType }, ...model === undefined ? {} : { model }, ...forkedFrom === undefined ? {} : { forkedFrom }, startedAt: openedAt };
+    return { id, title, openedBy, openedAt, ...closedAt === undefined ? {} : { closedAt }, ...isBackground === true ? { isBackground } : {}, owner };
+  }
+  if ("usage" in change)
+    return change.usage;
+  return change.goal;
+}
+function isHeardBy(event, matcher, change) {
+  const named = change.type === Message ? event === Message || event === change.message.type : event === change.type;
+  return named && (matcher === undefined || matches(payloadOf(change), matcher));
+}
+function taskOfChange(change) {
+  if (change.type === Message)
+    return change.message.task;
+  if (change.type === TaskStart || change.type === TaskEnd)
+    return change.task.id === "" ? change.task.parent : change.task.id;
+  if (change.type === TurnStart || change.type === TurnEnd)
+    return change.turn.prompt.task;
+  if (change.type === ContextStart || change.type === ContextEnd)
+    return change.context.task;
+  if (change.type === GoalChange)
+    return change.goal.task;
+  return;
+}
+function ownerOfChange(change) {
+  if (change.type === TaskStart || change.type === TaskEnd)
+    return change.task.parent;
+  return taskOfChange(change);
+}
+function contextOfChange(change) {
+  if (change.type === Message)
+    return change.message.context;
+  if (change.type === TurnStart || change.type === TurnEnd)
+    return change.turn.context;
+  if (change.type === ContextStart || change.type === ContextEnd)
+    return change.context.number;
+  if (change.type === TaskStart || change.type === TaskEnd)
+    return change.task.context;
+  return;
+}
+function isInScope(scope, session, change, isUnder) {
+  if (scope.session !== undefined && scope.session !== session)
+    return false;
+  const task = taskOfChange(change);
+  if (scope.isAgent === true)
+    return (change.type === TaskStart || change.type === TaskEnd ? change.task.parent : task) === scope.task;
+  if (scope.task !== undefined && (task === undefined || !isUnder(task, scope.task)))
+    return false;
+  if (scope.context !== undefined && (contextOfChange(change) !== scope.context || ownerOfChange(change) !== scope.task))
+    return false;
+  if (scope.turn === undefined)
+    return true;
+  if (change.type === Message)
+    return change.message.turn === scope.turn;
+  return (change.type === TurnStart || change.type === TurnEnd) && change.turn.prompt.id === scope.turn;
+}
+function withoutPermissionCheck(name, hearer) {
+  return `${name}: ${hearer} hears Claude Code's permission check, so hooks/register.ts must call registerPermissionCheck(addHook) after registerMod.`;
+}
+function createSessionsClient({ name, claude, report, hookOn, routeOn, permissionRoutes }) {
+  const call = (method, input) => claude.cmod.call({ to: cmodPluginName, method, input });
+  const listening = new Map;
+  const deciding = new Map;
+  const queued = new Set;
+  const parents = new Map;
+  const readingParents = new Map;
+  const known = new Map;
+  let current = { id: "", title: "", project: "", cwd: "", model: "", startedAt: "", lastAt: "", isRunning: true };
+  let told = { session: "" };
+  const ownOnly = (method) => new Error(`${name}: ${method} works only in a mod's own session.`);
+  const colored = ({ color: _color, ...data }) => told.session === data.id && told.color !== undefined ? { ...data, color: told.color } : data;
+  const keyOf = (scope) => scope.session ?? current.id;
+  const subscribe = (key) => {
+    if (queued.has(key))
+      return;
+    queued.add(key);
+    Promise.resolve().then(async () => {
+      queued.delete(key);
+      const heard = (from) => [...from.get(key) ?? []].map(({ event, matcher, options, scope }) => ({ event, matcher: matcher === undefined ? undefined : sentMatcher(matcher), scope, ...options.onFailure === "refuse" ? { onFailure: "refuse" } : {}, ...options.timeoutMs === undefined ? {} : { timeoutMs: options.timeoutMs } }));
+      const tracksTasks = [...listening.get(key) ?? [], ...deciding.get(key) ?? []].some(({ scope }) => scope.task !== undefined || scope.isGoal === true);
+      const subscriptions = [...heard(listening), ...tracksTasks ? [{ event: TaskStart }] : []];
+      await call(conversationMethods.subscribe, { session: key, subscriptions }).catch((error) => report(`sessions:${key}`, `Hears nothing from session ${key}`, error));
+      await call(conversationMethods.watchBefore, { session: key, subscriptions: heard(deciding) }).catch((error) => report(`before:${key}`, `Changes nothing in session ${key}`, error));
+    });
+  };
+  const parentsOf = (session) => {
+    const known = parents.get(session);
+    if (known !== undefined)
+      return known;
+    const reading = readingParents.get(session);
+    if (reading !== undefined)
+      return reading;
+    const read = call(conversationMethods.tasks, { session, all: true }).then((tasks) => {
+      const tree = new Map(tasks.map((task) => [task.id, task.parent]));
+      parents.set(session, tree);
+      return tree;
+    }).finally(() => readingParents.delete(session));
+    readingParents.set(session, read);
+    return read;
+  };
+  const isUnderIn = (tree) => (task, ancestor) => {
+    for (let at = task, steps = 0;at !== undefined && steps < 64; at = tree?.get(at), steps += 1)
+      if (at === ancestor)
+        return true;
+    return false;
+  };
+  const inScope = ({ scope }, session, change) => {
+    if (scope.task === undefined || scope.isAgent === true)
+      return isInScope(scope, session, change, isUnderIn(undefined));
+    const tree = parentsOf(session);
+    if (tree instanceof Map)
+      return isInScope(scope, session, change, isUnderIn(tree));
+    return tree.then((read) => isInScope(scope, session, change, isUnderIn(read)), (error) => {
+      report(`tasks:${session}`, "Could not read the tasks it listens under", error);
+      return false;
+    });
+  };
+  const remember = (session, change) => {
+    if (change.type !== TaskStart)
+      return;
+    parents.get(session)?.set(change.task.id, change.task.parent);
+    readingParents.get(session)?.then((tree) => tree.set(change.task.id, change.task.parent), (error) => claude.ui.warn("tasks:read", `${name}: the tasks of ${session} stay unread until the next change: ${messageOf(error)}`));
+  };
+  const add = (into, scope, event, method, args, onChange) => {
+    const key = keyOf(scope);
+    const entry = { scope, event, method, ...listenerOf(name, method, args) };
+    const set = into.get(key) ?? new Set;
+    set.add(entry);
+    into.set(key, set);
+    onChange(key);
+    return {
+      remove() {
+        for (const [at, held] of into) {
+          if (!held.delete(entry))
+            continue;
+          if (held.size === 0)
+            into.delete(at);
+          onChange(at);
+          return;
+        }
+      }
+    };
+  };
+  const refusalOf = (options, takes, error) => options.onFailure === "refuse" && takes.includes("refuse") ? { refuse: `${name}: ${messageOf(error)}` } : undefined;
+  const invoke = (method, options, cancel, run, takes = []) => withinTime(claude.clock, method, options, cancel, run).catch((error) => {
+    if (cancel.aborted || error instanceof PassedTimeout && !method.startsWith("before"))
+      return;
+    report(`session:${method}`, `The ${method} listener failed`, error);
+    return refusalOf(options, takes, error);
+  });
+  const decidersOf = (session, event) => [...deciding.get(session) ?? []].filter((entry) => entry.event === event);
+  const decides = async (entry, session, change) => (entry.matcher === undefined || matches(payloadOf(change), entry.matcher)) && await inScope(entry, session, change);
+  const combined = async (session, event, change, cancel) => {
+    const askers = decidersOf(session, event).map((entry) => async (latest) => {
+      if (!await decides(entry, session, latest))
+        return;
+      const payload = await payloadFor(session, latest);
+      return invoke(entry.method, entry.options, cancel, async (time) => takenAnswer(entry.method, beforeAnswerKeys[event], await entry.listener(payload, time)), beforeAnswerKeys[event]);
+    });
+    const answer = await foldBefore(event, change, askers, (error) => report(`session:${methodOf("before", event)}`, `The ${methodOf("before", event)} listener failed`, error));
+    return answer?.note === undefined ? answer : { ...answer, note: modNote(name, answer.note) };
+  };
+  const eventMethods = (scopeOf, hasBefore, ended) => {
+    const method = (into, named, event) => (...args) => {
+      if (ended !== undefined)
+        throw new Error(`${name}: ${ended} has ended, so its ${named} never fires. Listen on its Session.`);
+      const scope = scopeOf();
+      if (routeOn === undefined || keyOf(scope) !== current.id)
+        throw ownOnly(named);
+      return add(into, scope, event, named, args, subscribe);
+    };
+    return Object.fromEntries([
+      ...Object.entries(sessionEvents).map(([named, event]) => [`on${named}`, method(listening, `on${named}`, event)]),
+      ...hasBefore ? beforeEvents.map((named) => [`before${named}`, method(deciding, `before${named}`, sessionEvents[named])]) : []
+    ]);
+  };
+  let folders;
+  const withFiles = async (message) => {
+    if (message.type !== ToolCall && message.type !== ToolResult)
+      return message;
+    folders ??= Promise.all([claude.env.home(), claude.env.configHome()]).then(([home, configRoot]) => ({ home, configRoot }));
+    return { ...message, files: await callFiles(name, claude, folders, { tool: message.name, input: message.input }, message.cwd) };
+  };
+  const messagesFrom = async (method, input) => Promise.all((await call(method, input)).map(withFiles));
+  const searched = (request, matcher) => ({
+    async* [Symbol.asyncIterator]() {
+      let before = request["before"];
+      for (;; ) {
+        const page = await messagesFrom(conversationMethods.search, { ...request, ...before === undefined ? {} : { before } });
+        for (const message of page)
+          if (matcher === undefined || matches(message, matcher))
+            yield message;
+        const last = page.at(-1);
+        if (last === undefined || page.length < searchLimit)
+          return;
+        before = { session: last.session, id: last.id };
+      }
+    }
+  });
+  const recordPart = (scope, ended) => ({
+    search: (text, matcher) => searched({ text, ...scope }, matcher),
+    ...eventMethods(() => scope, true, ended)
+  });
+  const turnOf = (scope, data) => {
+    const task = data.prompt.task ?? scope.task;
+    return {
+      ...data,
+      ...recordPart({ ...scope, ...task === undefined ? {} : { task }, turn: data.prompt.id }, data.closedAt === undefined ? undefined : `turn ${data.prompt.id}`),
+      messages: () => messagesFrom(conversationMethods.messages, { session: scope.session, turn: data.prompt.id, ...task === undefined ? {} : { task } }),
+      abort: async () => {
+        if (data.closedAt !== undefined)
+          throw new Error(`${name}: turn ${data.prompt.id} has ended, so there is nothing to abort.`);
+        const session = scope.session ?? current.id;
+        await act(session, "abort", { turn: data.prompt.id }, task === undefined ? undefined : { session, task });
+      }
+    };
+  };
+  const contextOf = (scope, data) => {
+    const owned = { ...scope.session === undefined ? {} : { session: scope.session }, ...data.task === undefined ? {} : { task: data.task } };
+    return {
+      ...data,
+      ...recordPart({ ...owned, context: data.number }, data.closedAt === undefined ? undefined : `context ${data.number}`),
+      turns: async () => (await call(conversationMethods.turns, { ...owned, context: data.number })).map((turn) => turnOf(owned, turn))
+    };
+  };
+  const taskOf = (session, data) => {
+    const record = data.isBackground === true ? { session: data.id } : { session, task: data.id };
+    return {
+      id: data.id,
+      title: data.title,
+      openedBy: data.openedBy,
+      openedAt: data.openedAt,
+      ...data.closedAt === undefined ? {} : { closedAt: data.closedAt },
+      ...data.status === undefined ? {} : { status: data.status },
+      ...data.name === undefined ? {} : { name: data.name },
+      ...data.spawnedBy === undefined ? {} : { spawnedBy: data.spawnedBy },
+      ...data.isBackground === true ? { isBackground: true } : {},
+      owner: ownerOf(session, data),
+      ...recordPart({ session, task: data.id }),
+      search: (text, matcher) => searched({ text, ...record }, matcher),
+      tasks: async () => (await call(conversationMethods.tasks, record)).map((task) => taskOf(record.session, task)),
+      messages: () => messagesFrom(conversationMethods.messages, record)
+    };
+  };
+  const goalOf = (where) => ({
+    search: (text, matcher) => searched({ text, ...where() }, matcher),
+    ...eventMethods(() => ({ ...where(), isGoal: true }), true),
+    text: async () => (await call(conversationMethods.goal, where())).text,
+    tasks: async () => {
+      const { session = current.id, task } = where();
+      return (await call(conversationMethods.tasks, { session, ...task === undefined ? {} : { task } })).map((each) => taskOf(session, each));
+    },
+    update: async ({ text }) => {
+      if (text.trim() === "")
+        throw new Error(`${name}: a goal needs text.`);
+      const { session = current.id, task } = where();
+      await call(conversationMethods.updateGoal, { session, ...task === undefined ? {} : { task }, text });
+    }
+  });
+  const payloadFor = async (session, change) => {
+    const scope = { session };
+    if (change.type === Message)
+      return withFiles(change.message);
+    if ("turn" in change)
+      return turnOf(scope, change.turn);
+    if ("context" in change)
+      return contextOf(scope, change.context);
+    if ("task" in change)
+      return taskOf(session, change.task);
+    if ("usage" in change)
+      return change.usage;
+    const { task } = change.goal;
+    return goalOf(() => ({ session, ...task === undefined ? {} : { task } }));
+  };
+  const act = (session, action, input, owned) => call(conversationMethods.act, { session: owned?.session ?? session, action, input, ...owned === undefined ? {} : { task: owned.task } });
+  const sendHere = async ({ type, text, as }) => {
+    if (type === Note) {
+      if (as !== undefined)
+        throw new Error(`${name}: a Note is always from this mod, so it takes no as.`);
+      const added = await claude.session.append({ message: { type: "user", content: [{ type: "text", text: modNote(name, text) }] } });
+      if (added.deny !== undefined)
+        throw new Error(`${name}: Claude Code refused the note: ${added.deny}`);
+      return;
+    }
+    const submitted = await claude.prompt.submit({ text, ...as === Person ? { asUser: true } : {} });
+    if ("drop" in submitted && typeof submitted.drop === "string")
+      throw new Error(`${name}: Claude Code dropped the prompt: ${submitted.drop}`);
+  };
+  const surfacesHere = async () => [...await claude.session.surfaces()];
+  const sessionOf = (read, owned, isOwner = owned !== undefined, hears = true) => {
+    const id = () => read().id;
+    const isHere = () => owned === undefined && id() === current.id;
+    const scope = () => owned === undefined ? { session: id(), isAgent: true } : { session: owned.session, task: owned.task, isAgent: true };
+    const where = () => owned === undefined ? { session: id() } : { session: owned.session, task: owned.task };
+    const turnsOf = async (options = {}) => (await call(conversationMethods.turns, { ...where(), ...options })).map((turn) => turnOf(where(), turn));
+    const contextsOf = async () => (await call(conversationMethods.contexts, where())).map((context) => contextOf(where(), context));
+    const data = Object.defineProperties({}, Object.fromEntries(Object.keys(sessionFields).map((key) => [key, { get: () => read()[key], enumerable: true, configurable: true }])));
+    const session = Object.assign(data, {
+      search: (text, matcher) => recordPart(scope()).search(text, matcher),
+      ...hears ? eventMethods(scope, true) : {},
+      goal: goalOf(where),
+      context: async () => {
+        const all = await contextsOf();
+        const last = all.at(-1);
+        if (last === undefined)
+          throw new Error(`${name}: session ${id()} has no context yet.`);
+        return last;
+      },
+      contexts: contextsOf,
+      turn: async () => {
+        const [last] = await turnsOf({ last: 1 });
+        return last?.closedAt === undefined ? last : undefined;
+      },
+      turns: turnsOf,
+      messages: (options = {}) => messagesFrom(conversationMethods.messages, { ...where(), ...options }),
+      usage: async () => isHere() ? usageOf(claude) : act(id(), "usage", null, owned),
+      surfaces: async () => isHere() ? surfacesHere() : act(id(), "surfaces", null, owned),
+      async send(message) {
+        if (message.text.trim() === "")
+          throw new Error(`${name}: send needs text.`);
+        if (isHere() && message.as !== Session)
+          return sendHere(message);
+        await act(id(), "send", message, owned);
+      },
+      async end() {
+        await act(id(), "end", null, owned);
+      },
+      async visit(at) {
+        await act(id(), "visit", at ?? new Date().toISOString(), owned);
+      }
+    });
+    if (isOwner)
+      return session;
+    const started = async (starting) => taskOf(id(), await starting.catch((error) => Promise.reject(new Error(`${name}: ${messageOf(error)}`))));
+    return Object.assign(session, {
+      startTask: (task) => started(task.isBackground === true || task.device !== undefined ? act(id(), "startBackgroundTask", task) : isHere() ? spawnTask(claude, task) : act(id(), "startTask", task)),
+      fork: (task) => started(isHere() && task.isBackground !== true && task.at === undefined ? spawnTask(claude, task, current.id) : act(id(), "fork", task)),
+      delete: async () => {
+        await act(id(), "delete", null);
+      },
+      callTool: async (toolCall) => await withFiles(await act(id(), "callTool", toolCall))
+    });
+  };
+  const ownerOf = (session, data) => {
+    const parent = session === current.id ? current : known.get(session);
+    const isBackground = data.isBackground === true;
+    return sessionOf(() => ({
+      id: data.id,
+      title: data.title,
+      project: parent?.project ?? "",
+      ...data.agentType === undefined ? {} : { agentType: data.agentType },
+      model: data.model ?? "",
+      cwd: parent?.cwd ?? "",
+      isRunning: data.closedAt === undefined && (isBackground || (parent?.isRunning ?? true)),
+      startedAt: data.openedAt,
+      lastAt: data.closedAt ?? data.openedAt,
+      ...data.forkedFrom === undefined ? {} : { forkedFrom: data.forkedFrom }
+    }), isBackground ? undefined : { session, task: data.id }, true);
+  };
+  const processListeners = new Map;
+  const processHearers = (method, payload) => [...processListeners.get(method) ?? []].filter(({ matcher, isEveryAgent }) => (payload["task"] === undefined || isEveryAgent) && (matcher === undefined || matches(payload, matcher)));
+  const raise = async (method, payload, cancel) => {
+    const heard = processHearers(method, payload);
+    if (!method.startsWith("before")) {
+      await Promise.all(heard.map(({ listener, options }) => invoke(method, options, cancel, (time) => listener(payload, time))));
+      return;
+    }
+    const takes = takesOf(method);
+    const askers = heard.map(({ listener, options }) => () => invoke(method, options, cancel, async (time) => takenAnswer(method, takes, await listener(payload, time)), takes));
+    return foldAnswers(method, takes, ["refuse"], undefined, askers, (error) => report(`session:${method}`, `The ${method} listener failed`, error));
+  };
+  const takesOf = (method) => answerKeys[method.slice("before".length)] ?? [];
+  const refusalFor = (method, payload, error) => processHearers(method, payload).map((entry) => refusalOf(entry.options, takesOf(method), error)).find((answer) => answer !== undefined);
+  const commandRun = async (e) => {
+    const source = (await claude.command.list()).find((command) => command.name === e.command)?.source;
+    return { session: current.id, cwd: current.cwd, name: e.command, args: e.args, ...defined({ source }), from: senderOf(e.origin, false) };
+  };
+  const commandListeners = { beforeRun: new Set, onRun: new Set };
+  for (const [method, held] of Object.entries(commandListeners))
+    processListeners.set(method, held);
+  routeOn?.("command.run", async (e, next) => {
+    if (commandListeners.beforeRun.size === 0 && commandListeners.onRun.size === 0)
+      return next(e);
+    const run = await commandRun(e);
+    const answer = commandListeners.beforeRun.size === 0 ? undefined : await raise("beforeRun", run, next.signal);
+    if (typeof answer?.["refuse"] === "string")
+      return { text: answer["refuse"] };
+    if (typeof answer?.["result"] === "string")
+      return { text: answer["result"], ...typeof answer["exitCode"] === "number" ? { exitCode: answer["exitCode"] } : {} };
+    const args = typeof answer?.["args"] === "string" ? answer["args"] : e.args;
+    const ran = await next(args === e.args ? e : { ...e, args });
+    raise("onRun", { ...run, args }, next.signal);
+    return typeof answer?.["note"] === "string" ? { ...ran, context: [...ran.context ?? [], modNote(name, answer["note"])] } : ran;
+  }, async (e, error) => {
+    const refusal = commandListeners.beforeRun.size === 0 ? undefined : refusalFor("beforeRun", await commandRun(e), error);
+    return refusal === undefined ? undefined : { text: refusal.refuse };
+  });
+  const listenTo = (method, named) => {
+    if (hookOn === undefined || routeOn === undefined)
+      throw ownOnly(method);
+    const isBefore = method.startsWith("before");
+    if (named === "PermissionCheck" || named === "PermissionRequest") {
+      const routes = permissionRoutes?.();
+      if (routes === undefined)
+        throw new Error(withoutPermissionCheck(name, method));
+      return routes(method, { raise, refusalFor, hookOn, routeOn, current: () => current });
+    }
+    const event = processEvents[named];
+    const hook = (isBefore ? event.before : undefined) ?? event.on;
+    if (method === "beforeSessionStart")
+      routeOn("session.compact", trackCompaction);
+    if (method === "beforeModelChange")
+      hookOn(event.on, () => {
+        const notes = modelNotes.splice(0);
+        return notes.length === 0 ? undefined : { additionalContext: notes };
+      });
+    const failed = (input, error) => {
+      const refusal = refusalFor(method, processPayloadOf(named, input), error);
+      return refusal === undefined ? undefined : hookAnswerOf(name, named, refusal);
+    };
+    return hookOn(hook, async (input, signal) => {
+      const payload = processPayloadOf(named, input);
+      if (named === "SessionStart" && payload["source"] === "compact") {
+        if (!isBefore)
+          return;
+        const task = compacting?.agentId;
+        const model = task === undefined ? await claude.session.model() : undefined;
+        const answer = await raise(method, { ...payload, ...defined({ task, model, title: current.title || undefined }) }, signal);
+        if (answer === undefined)
+          return;
+        return hookAnswerOf(name, named, task === undefined ? answer : defined({ note: answer["note"] }));
+      }
+      if (!isBefore) {
+        raise(method, payload, signal);
+        return;
+      }
+      if (named === "ModelChange")
+        modelNotes.splice(0);
+      const answer = await raise(method, payload, signal);
+      if (answer === undefined)
+        return;
+      if (named === "ModelChange" && typeof answer["note"] === "string" && answer["refuse"] === undefined)
+        modelNotes.push(modNote(name, answer["note"]));
+      return hookAnswerOf(name, named, answer);
+    }, isBefore ? failed : undefined);
+  };
+  const modelNotes = [];
+  let compacting;
+  const trackCompaction = async (e, next) => {
+    compacting = e;
+    try {
+      return await next(e);
+    } finally {
+      if (compacting === e)
+        compacting = undefined;
+    }
+  };
+  const listen = (method, args, isEveryAgent = false) => {
+    const heard = listenerOf(name, method, args);
+    const entry = { ...heard, options: method === "beforePermissionRequest" ? { ...heard.options, onFailure: "refuse" } : heard.options, isEveryAgent };
+    const held = processListeners.get(method) ?? new Set;
+    if (!processListeners.has(method)) {
+      listenTo(method, method.replace(/^(on|before)/, ""));
+      processListeners.set(method, held);
+    }
+    held.add(entry);
+    return { remove: () => void held.delete(entry) };
+  };
+  const processMethods = () => Object.fromEntries(Object.entries(processEvents).flatMap(([named, event]) => [`on${named}`, ..."before" in event ? [`before${named}`] : []]).map((method) => [method, (...args) => listen(method, args)]));
+  const here = sessionOf(() => current);
+  const currentSession = Object.assign(here, processMethods(), {
+    goal: Object.assign(here.goal, { beforeSessionStart: (...args) => listen("beforeSessionStart", args, true) }),
+    async scrollTo(message, options) {
+      const { deny } = await claude.ui.scroll({ to: { requestId: message.id }, ...options?.block === undefined ? {} : { block: options.block } });
+      if (deny !== undefined)
+        throw new Error(`${name}: Claude Code did not scroll to the message: ${deny}`);
+    },
+    caption: (toolCall, text) => claude.ui.notice(toolCall.callId, text)
+  });
+  const failedBefore = (session, event, change, error) => {
+    const asked = decidersOf(session, event).filter((entry) => isInScope(entry.scope, session, change, isUnderIn(parents.get(session))) && (entry.matcher === undefined || matches(payloadOf(change), entry.matcher)));
+    return asked.map((entry) => refusalOf(entry.options, beforeAnswerKeys[event], error)).find((answer) => answer !== undefined);
+  };
+  const listed = (data) => {
+    if (data.id !== current.id) {
+      known.set(data.id, data);
+      return sessionOf(() => known.get(data.id) ?? data, undefined, false, false);
+    }
+    current = { ...current, title: current.title || data.title, device: data.device };
+    return currentSession;
+  };
+  return {
+    sessions: {
+      get current() {
+        return currentSession;
+      },
+      list: async (scope = {}) => (await call(conversationMethods.sessions, scope)).map(listed),
+      get: async (id) => id === current.id ? currentSession : listed(await call(conversationMethods.session, { session: id })),
+      search: (text, matcher, options = {}) => searched({ text, ...searchOptionsOf(options) }, matcher)
+    },
+    changed(session, change, cancel) {
+      remember(session, change);
+      let payload;
+      for (const entry of listening.get(session) ?? []) {
+        const { event, method, matcher, listener, options } = entry;
+        const deliver = () => {
+          payload ??= payloadFor(session, change);
+          payload.then((heard) => invoke(method, options, cancel, (time) => listener(heard, time))).catch((error) => report(`session:${method}`, `The ${method} listener failed`, error));
+        };
+        const isHeard = isHeardBy(event, matcher, change) && inScope(entry, session, change);
+        if (isHeard === true)
+          deliver();
+        else if (isHeard !== false)
+          isHeard.then((isIn) => isIn && deliver());
+      }
+    },
+    answerBefore: combined,
+    failedBefore,
+    raise,
+    listen,
+    turn: (data) => turnOf({ session: current.id }, data),
+    follow(next) {
+      const moved = next.id !== current.id && current.id !== "";
+      const previous = current.id;
+      current = colored({ device: current.device, ...next, title: next.title || (next.id === current.id ? current.title : ""), isRunning: true, lastAt: new Date().toISOString() });
+      if (!moved)
+        return;
+      for (const into of [listening, deciding]) {
+        const kept = into.get(previous);
+        if (kept === undefined)
+          continue;
+        into.delete(previous);
+        for (const entry of kept)
+          if (entry.scope.session === previous)
+            entry.scope = { ...entry.scope, session: current.id };
+        into.set(current.id, new Set([...into.get(current.id) ?? [], ...kept]));
+      }
+      parents.delete(previous);
+      subscribe(previous);
+      subscribe(current.id);
+    },
+    recolor(next) {
+      told = next;
+      current = colored(current);
+    }
+  };
+}
+var recordOf = (value) => typeof value === "object" && value !== null && !Array.isArray(value) ? value : {};
+var defined = (fields) => Object.fromEntries(Object.entries(fields).filter(([, value]) => value !== undefined));
+var placementOf = (input) => defined({ session: input["session_id"], task: input["agent_id"], agentType: input["agent_type"], cwd: input["cwd"], permissionMode: input["permission_mode"] });
+var mcpServerOf = (server) => server === undefined ? undefined : { name: String(recordOf(server)["name"]), source: String(recordOf(server)["source"]) };
+var modelChangeOf = (input) => ({
+  model: input["to_model"],
+  previous: input["from_model"],
+  requested: input["requested_model"] ?? undefined,
+  source: input["source"],
+  contextTokenCount: input["context_tokens"],
+  isCacheWarm: input["prompt_cache_warm"],
+  cacheTtl: input["cache_ttl"],
+  cacheWriteUsd: input["estimated_cache_write_usd"],
+  pricing: input["pricing"]
+});
+var answerKeys = {
+  Run: ["args", "note", "result", "exitCode", "refuse"],
+  ProjectSetup: ["note"],
+  SessionStart: ["note", "title", "reloadSkills", "firstPrompt"],
+  ModelChange: ["ask", "refuse", "note"],
+  WorktreeCreate: ["result"],
+  Elicitation: ["refuse"],
+  ElicitationResponse: ["refuse"],
+  PermissionCheck: ["allow", "ask", "refuse"],
+  PermissionRequest: ["allow", "input", "updates", "refuse", "interrupt"],
+  PermissionDenial: ["retry"],
+  ToolBatch: ["note"],
+  TodoCreate: ["refuse"],
+  TodoComplete: ["refuse"],
+  ReplyDisplay: ["text"]
+};
+var todoOf = (input) => ({ id: input["task_id"], subject: input["task_subject"], description: input["task_description"], teammate: input["teammate_name"] });
+var processFields = {
+  ProjectSetup: (input) => ({ trigger: input["trigger"] }),
+  SessionStart: (input) => ({
+    source: input["source"],
+    model: input["model"],
+    title: input["session_title"] || undefined,
+    idleSeconds: input["seconds_since_last_response"],
+    contextTokenCount: input["context_tokens"],
+    isCacheWarm: input["prompt_cache_likely_expired"] === undefined ? undefined : input["prompt_cache_likely_expired"] !== true,
+    cacheWriteUsd: input["estimated_cache_write_usd"]
+  }),
+  SessionEnd: (input) => ({ reason: input["reason"] === "prompt_input_exit" ? "exit" : input["reason"] }),
+  ModelChange: modelChangeOf,
+  CwdChange: (input) => ({ cwd: input["new_cwd"] ?? input["cwd"], previous: input["old_cwd"] }),
+  DirectoryAdd: (input) => ({ directory: input["directory"], source: input["source"] === "slash_command" ? "command" : "sdk" }),
+  WorktreeCreate: (input) => ({ name: input["name"] }),
+  WorktreeRemove: (input) => ({ path: input["worktree_path"] }),
+  Notification: (input) => ({ text: input["message"], title: input["title"], type: input["notification_type"] }),
+  Elicitation: (input) => ({ id: input["elicitation_id"], server: input["mcp_server_name"], text: input["message"], mode: input["mode"], url: input["url"], schema: input["requested_schema"] }),
+  ElicitationResponse: (input) => ({ id: input["elicitation_id"], server: input["mcp_server_name"], mode: input["mode"], action: input["action"], content: input["content"] }),
+  PermissionRequest: (input) => ({ name: input["tool_name"], input: recordOf(input["tool_input"]), suggestions: input["permission_suggestions"] ?? [], mcpServer: mcpServerOf(input["mcp_server"]) }),
+  PermissionDenial: (input) => ({ name: input["tool_name"], input: recordOf(input["tool_input"]), callId: input["tool_use_id"], reason: input["reason"], mcpServer: mcpServerOf(input["mcp_server"]) }),
+  ToolBatch: (input) => ({
+    calls: (Array.isArray(input["tool_calls"]) ? input["tool_calls"] : []).map((call) => {
+      const fields = recordOf(call);
+      return defined({ callId: fields["tool_use_id"], name: fields["tool_name"], input: recordOf(fields["tool_input"]), output: fields["tool_response"] });
+    })
+  }),
+  TodoCreate: todoOf,
+  TodoComplete: todoOf,
+  ReplyDisplay: (input) => ({ replyId: input["message_id"], index: input["index"], isLast: input["final"], text: input["delta"] })
+};
+async function spawnTask(claude, task, forkedFrom) {
+  if (task.title.trim() === "")
+    throw new Error("a task needs a title.");
+  const { name, agentType, model, cwd } = forkedFrom === undefined ? task : { prompt: task.prompt, title: task.title, agentType: forkAgentType };
+  const started = await claude.agent.spawn({
+    prompt: task.prompt,
+    description: task.title,
+    ...name === undefined ? {} : { name },
+    ...agentType === undefined ? {} : { subagentType: agentType },
+    ...model === undefined ? {} : { model },
+    ...cwd === undefined ? {} : { cwd }
+  });
+  if (started.deny !== undefined)
+    throw new Error(`Claude Code refused the task: ${started.deny}`);
+  if (started.agentId === undefined)
+    throw new Error("Claude Code answered without starting a task.");
+  return { id: started.agentId, title: task.title, ...forkedFrom === undefined ? { agentType: agentType ?? "general-purpose" } : { forkedFrom }, model: started.model, openedBy: "", openedAt: new Date().toISOString() };
+}
+function processPayloadOf(named, input) {
+  const fields = recordOf(input);
+  return { ...placementOf(fields), ...defined(processFields[named](fields)) };
+}
+function hookAnswerOf(name, named, answer) {
+  const refuse = typeof answer["refuse"] === "string" ? answer["refuse"] : undefined;
+  const note = typeof answer["note"] === "string" ? [modNote(name, answer["note"])] : undefined;
+  if (named === "SessionStart")
+    return defined({ additionalContext: note, sessionTitle: answer["title"], reloadSkills: answer["reloadSkills"] === true ? true : undefined, initialUserMessage: answer["firstPrompt"] });
+  if (named === "ModelChange") {
+    if (refuse !== undefined)
+      return { permissionDecision: "deny", permissionDecisionReason: refuse };
+    return typeof answer["ask"] === "string" ? { permissionDecision: "ask", permissionDecisionReason: answer["ask"] } : undefined;
+  }
+  if (named === "ProjectSetup")
+    return defined({ additionalContext: note });
+  if (named === "WorktreeCreate")
+    return defined({ worktreePath: answer["result"] });
+  if (named === "PermissionDenial")
+    return answer["retry"] === true ? { retry: true } : undefined;
+  if (named === "ToolBatch")
+    return defined({ additionalContext: note });
+  if (named === "ReplyDisplay")
+    return defined({ displayContent: answer["text"] });
+  return refuse === undefined ? undefined : { block: refuse };
+}
+function searchOptionsOf({ running, since, everyProject, before }) {
+  return {
+    ...running === undefined ? {} : { running },
+    ...since === undefined ? {} : { since },
+    ...everyProject === undefined ? {} : { everyProject },
+    ...before === undefined ? {} : { before: { session: before.session, id: before.id } }
+  };
+}
+
+// node_modules/@cmodjs/core/runtime/conversations.js
+var relayKinds = new Set(["act", "goal", "taskEnd"]);
+
+// node_modules/@cmodjs/core/runtime/announce.js
+var announcementMs = 1e4;
+async function announcementOf(claude, plugin, added, openSettings) {
+  const manifest = jsonOf(await claude.fs.read(`${plugin.root}/.claude-plugin/plugin.json`).catch(ifMissing(undefined)));
+  const { program, hotkeys } = plugin.steps;
+  const rules = (await claude.fs.list(`${plugin.root}/rules`).catch(ifMissing([]))).filter((entry) => entry.kind === "file" && entry.name.endsWith(".md")).map((entry) => entry.name.slice(0, -".md".length)).toSorted();
+  const lines = [
+    isObject(manifest) && typeof manifest["description"] === "string" ? manifest["description"] : undefined,
+    added.length > 0 ? `Adds ${listed(added)}.` : undefined,
+    rules.length > 0 ? `Adds ${rules.length} ${rules.length === 1 ? "rule" : "rules"}: ${listed(rules)}.` : undefined,
+    program === undefined ? undefined : `Installed the ${program} program.`,
+    ...Object.values(hotkeys ?? {}).flatMap(({ title, default: combo }) => combo === undefined ? [] : [`Binds ${combo} to ${title}.`])
+  ].filter((line) => line !== undefined);
+  return { message: "Installed", ...lines.length === 0 ? {} : { description: lines.join(`
+`) }, action: { label: "Settings", onClick: () => openSettings() } };
+}
+function jsonOf(text) {
+  try {
+    return text === undefined ? undefined : JSON.parse(text);
+  } catch (error) {
+    if (error instanceof SyntaxError)
+      return;
+    throw error;
+  }
+}
+
+// node_modules/@cmodjs/core/runtime/bound.js
+var current;
+function bind(imports) {
+  current = imports;
+}
+function bound() {
+  if (current === undefined)
+    throw new Error("A mod's imports work once its setup runs. Call them from setup or from a hook, never at the top of a module.");
+  return current;
+}
+
+// node_modules/@cmodjs/core/runtime/engine.js
+var engines = new WeakMap;
+function keepEngine(mod, engine) {
+  engines.set(mod, engine);
+}
+function engineOf(mod) {
+  const engine = engines.get(mod);
+  if (engine === undefined)
+    throw new Error("This mod has not started, so it reaches no Claude Code calls yet.");
+  return engine;
+}
+
+// node_modules/@cmodjs/core/utils/metadata.js
+class MetadataError extends Error {
+  line;
+  constructor(line, message) {
+    super(`line ${line}: ${message}`);
+    this.line = line;
+  }
+}
+var markdown = ["md", "markdown", "mdx"];
+var hashComments = ["sh", "bash", "zsh", "fish", "py", "rb", "pl", "r", "yaml", "yml", "toml", "ps1", "nu", "tcl", "mk", "conf", "cfg", "env"];
+var slashComments = ["ts", "tsx", "mts", "cts", "js", "jsx", "mjs", "cjs", "go", "rs", "swift", "kt", "kts", "java", "c", "h", "cc", "cpp", "hpp", "cs", "scala", "dart", "zig", "jsonc", "json5"];
+var dashComments = ["lua", "sql", "hs", "elm"];
+var hashCommentNames = ["Makefile", "Dockerfile", "Brewfile", "Gemfile", "Rakefile", "Justfile", "justfile"];
+var sidecarSuffix = ".meta";
+function formatOf(path, firstLine) {
+  const name = path.slice(path.lastIndexOf("/") + 1);
+  const dot = name.lastIndexOf(".");
+  const extension = dot <= 0 ? "" : name.slice(dot + 1).toLowerCase();
+  if (markdown.includes(extension))
+    return { type: "frontmatter" };
+  if (hashComments.includes(extension) || hashCommentNames.includes(name))
+    return { type: "comment", prefix: "#" };
+  if (slashComments.includes(extension))
+    return { type: "comment", prefix: "//" };
+  if (dashComments.includes(extension))
+    return { type: "comment", prefix: "--" };
+  if (extension === "" && firstLine?.startsWith("#!") === true)
+    return { type: "comment", prefix: "#" };
+  return { type: "sidecar" };
+}
+function readMetadata(text, format) {
+  const lines = text.split(`
+`);
+  if (format.type === "comment") {
+    const region = commentRegion(lines, format.prefix);
+    return { metadata: region === undefined ? {} : asRecord(mapEntries(region.lines, region.start + 2, 0)) };
+  }
+  const region = format.type === "frontmatter" ? frontmatterRegion(lines) : { start: -1, end: lines.length, lines };
+  if (region === undefined)
+    return { metadata: {} };
+  const block = metadataBlock(region);
+  const name = format.type === "frontmatter" ? topLevelScalar(region, "name") : undefined;
+  return { metadata: block === undefined ? {} : asRecord(block.entries), ...name === undefined ? {} : { name } };
+}
+function writeMetadata(text, format, metadata) {
+  const lines = text.split(`
+`);
+  const entries = Object.entries(metadata);
+  if (format.type === "comment") {
+    const { prefix } = format;
+    const block = entries.length === 0 ? [] : [`${prefix} /// metadata`, ...entries.map(([key, value]) => `${prefix} ${scalar(key)}: ${scalar(value)}`), `${prefix} ///`];
+    const region = commentRegion(lines, prefix);
+    if (region !== undefined)
+      return [...lines.slice(0, region.start), ...block, ...lines.slice(region.end + 1)].join(`
+`);
+    if (block.length === 0)
+      return text;
+    const at = lines[0]?.startsWith("#!") === true ? 1 : 0;
+    return [...lines.slice(0, at), ...block, ...lines.slice(at)].join(`
+`);
+  }
+  const map = entries.length === 0 ? [] : ["metadata:", ...entries.map(([key, value]) => `  ${scalar(key)}: ${scalar(value)}`)];
+  if (format.type === "sidecar") {
+    const block = metadataBlock({ start: -1, end: lines.length, lines });
+    const rest = block === undefined ? lines : [...lines.slice(0, block.start), ...lines.slice(block.end)];
+    const kept = rest.join(`
+`).trim();
+    return [...kept === "" ? [] : [kept], ...map].join(`
+`) + (map.length === 0 && kept === "" ? "" : `
+`);
+  }
+  const region = frontmatterRegion(lines);
+  if (region === undefined)
+    return map.length === 0 ? text : ["---", ...map, "---", ...lines].join(`
+`);
+  const block = metadataBlock(region);
+  const inner = block === undefined ? [...region.lines, ...map] : [...lines.slice(region.start + 1, block.start), ...map, ...lines.slice(block.end, region.end)];
+  if (inner.every((line) => line.trim() === ""))
+    return lines.slice(region.end + 1).join(`
+`);
+  return [...lines.slice(0, region.start + 1), ...inner, ...lines.slice(region.end)].join(`
+`);
+}
+function frontmatterRegion(lines) {
+  if (lines[0]?.replace(/^\uFEFF/, "").trimEnd() !== "---")
+    return;
+  const end = lines.findIndex((line, index) => index > 0 && line.trimEnd() === "---");
+  if (end === -1)
+    throw new MetadataError(1, "the frontmatter starts with --- and never ends. Close it with a --- line.");
+  return { start: 0, end, lines: lines.slice(1, end) };
+}
+function commentRegion(lines, prefix) {
+  const start = lines.findIndex((line) => line.trimEnd() === `${prefix} /// metadata`);
+  if (start === -1)
+    return;
+  const content = [];
+  for (let index = start + 1;index < lines.length; index += 1) {
+    const line = (lines[index] ?? "").trimEnd();
+    if (line === `${prefix} ///`)
+      return { start, end: index, lines: content };
+    if (line !== prefix && !line.startsWith(`${prefix} `))
+      break;
+    content.push(line.slice(prefix.length + 1));
+  }
+  throw new MetadataError(start + 1, `the metadata block never ends. Close it with a "${prefix} ///" line.`);
+}
+function metadataBlock(region) {
+  const at = region.lines.findIndex((line) => /^metadata\s*:/.test(line));
+  if (at === -1)
+    return;
+  const lineNumber = region.start + 2 + at;
+  const rest = withoutComment((region.lines[at] ?? "").replace(/^metadata\s*:/, "")).trim();
+  const start = region.start + 1 + at;
+  if (rest.startsWith("{"))
+    return { start, end: start + 1, entries: flowEntries(rest, lineNumber) };
+  if (rest !== "")
+    throw new MetadataError(lineNumber, "metadata holds a single value. Write a map of names to text, such as metadata: { mymod.key: value }.");
+  let index = at + 1;
+  while (index < region.lines.length && (/^\s/.test(region.lines[index] ?? "") || (region.lines[index] ?? "").trim() === ""))
+    index += 1;
+  while (index > at + 1 && (region.lines[index - 1] ?? "").trim() === "")
+    index -= 1;
+  const children = region.lines.slice(at + 1, index);
+  return { start, end: region.start + 1 + index, entries: mapEntries(children, lineNumber + 1, indentOf(children)) };
+}
+function indentOf(lines) {
+  const first = lines.find((line) => line.trim() !== "" && !line.trim().startsWith("#"));
+  return first === undefined ? 0 : /^\s*/.exec(first)?.[0].length ?? 0;
+}
+function mapEntries(lines, firstLine, indent) {
+  const entries = [];
+  lines.forEach((raw, index) => {
+    const lineNumber = firstLine + index;
+    const line = withoutComment(raw);
+    if (line.trim() === "")
+      return;
+    const depth = /^\s*/.exec(line)?.[0].length ?? 0;
+    if (depth !== indent)
+      throw new MetadataError(lineNumber, "a metadata value holds a list or a map. Each value is one line of text, and a list is one space-separated text.");
+    const body = line.trim();
+    if (body.startsWith("- "))
+      throw new MetadataError(lineNumber, "metadata holds a list. Write a map of names to text, and a list as one space-separated text.");
+    entries.push(entryOf(body, lineNumber));
+  });
+  return entries;
+}
+function flowEntries(text, lineNumber) {
+  if (!text.endsWith("}"))
+    throw new MetadataError(lineNumber, "the metadata map starts with { and does not end on the same line. Close it with }, or write one entry per line.");
+  const body = text.slice(1, -1).trim();
+  if (body === "")
+    return [];
+  return splitOutsideQuotes(body, ",", lineNumber).map((part) => part.trim()).filter((part) => part !== "").map((part) => entryOf(part, lineNumber));
+}
+function entryOf(text, lineNumber) {
+  const [keyText, ...rest] = splitOutsideQuotes(text, ":", lineNumber, true);
+  if (keyText === undefined || rest.length === 0)
+    throw new MetadataError(lineNumber, `"${text}" has no ":". Write each entry as name: value.`);
+  const valueText = rest.join(":").trim();
+  if (valueText.startsWith("{") || valueText.startsWith("[") || valueText === "|" || valueText === ">")
+    throw new MetadataError(lineNumber, `${keyText.trim()} holds a list or a map. Each value is one line of text, and a list is one space-separated text.`);
+  return { key: unquoted(keyText.trim(), lineNumber), value: unquoted(valueText, lineNumber) };
+}
+function splitOutsideQuotes(text, separator, lineNumber, needsSpace = false) {
+  const parts = [];
+  let quote;
+  let current = "";
+  for (let index = 0;index < text.length; index += 1) {
+    const char = text[index];
+    if (quote !== undefined) {
+      current += char;
+      if (char === "\\" && quote === '"') {
+        current += text[index + 1] ?? "";
+        index += 1;
+      } else if (char === quote)
+        quote = undefined;
+      continue;
+    }
+    const before = current.trimEnd().at(-1);
+    if ((char === '"' || char === "'") && (before === undefined || before === ":"))
+      quote = char;
+    const next = text[index + 1];
+    if (char === separator && (!needsSpace || next === undefined || next === " " || next === "\t")) {
+      parts.push(current);
+      current = "";
+      if (needsSpace) {
+        parts.push(text.slice(index + 1));
+        return parts;
+      }
+      continue;
+    }
+    current += char;
+  }
+  if (quote !== undefined)
+    throw new MetadataError(lineNumber, `a ${quote === '"' ? "double" : "single"} quote never closes.`);
+  parts.push(current);
+  return parts;
+}
+function withoutComment(line) {
+  let quote;
+  for (let index = 0;index < line.length; index += 1) {
+    const char = line[index];
+    if (quote !== undefined) {
+      if (char === "\\" && quote === '"')
+        index += 1;
+      else if (char === quote)
+        quote = undefined;
+      continue;
+    }
+    if (char === '"' || char === "'")
+      quote = char;
+    if (char === "#" && (index === 0 || /\s/.test(line[index - 1] ?? "")))
+      return line.slice(0, index);
+  }
+  return line;
+}
+function unquoted(text, lineNumber) {
+  if (text.startsWith('"')) {
+    if (!text.endsWith('"') || text.length < 2)
+      throw new MetadataError(lineNumber, `${text} opens a double quote that never closes.`);
+    try {
+      return JSON.parse(text);
+    } catch (error) {
+      if (!(error instanceof SyntaxError))
+        throw error;
+      throw new MetadataError(lineNumber, `${text} is not a double-quoted text. Escape a " inside it as \\".`);
+    }
+  }
+  if (text.startsWith("'")) {
+    if (!text.endsWith("'") || text.length < 2)
+      throw new MetadataError(lineNumber, `${text} opens a single quote that never closes.`);
+    return text.slice(1, -1).replaceAll("''", "'");
+  }
+  return text;
+}
+function topLevelScalar(region, key) {
+  const at = region.lines.findIndex((line) => line.startsWith(`${key}:`));
+  if (at === -1)
+    return;
+  const text = withoutComment((region.lines[at] ?? "").slice(key.length + 1)).trim();
+  if (text === "")
+    return;
+  try {
+    return unquoted(text, region.start + 2 + at);
+  } catch (error) {
+    if (error instanceof MetadataError)
+      return;
+    throw error;
+  }
+}
+function asRecord(entries) {
+  return Object.freeze(Object.fromEntries(entries.map(({ key, value }) => [key, value])));
+}
+var plain = /^[A-Za-z0-9_./+~$%^()=\\][^#]*$/;
+var special = /^(true|false|yes|no|on|off|null|~|[-+]?(\d[\d_]*)?\.?\d+([eE][-+]?\d+)?|0x[0-9a-fA-F]+|\.inf|\.nan)$/i;
+function scalar(text) {
+  const isPlain = plain.test(text) && text === text.trim() && !text.includes(": ") && !text.endsWith(":") && !text.includes(" #") && !special.test(text) && !/["',{}[\]]/.test(text);
+  return isPlain ? text : JSON.stringify(text);
+}
+
+// node_modules/@cmodjs/core/runtime/metadata.js
+var skippedFolders = [".git", "node_modules"];
+var ownKey = /^[A-Za-z0-9_][A-Za-z0-9_.-]*$/;
+function resolvedPath(path, places) {
+  const configured = /^~\/\.claude(?=\/|$)/.exec(path);
+  if (configured !== null && places.configRoot !== undefined)
+    return ve(`${places.configRoot}${path.slice(configured[0].length)}`);
+  const prefix = homePrefix.exec(path)?.[0];
+  if (prefix !== undefined) {
+    if (places.home === undefined)
+      throw new Error(`${path} starts with ${prefix}, and HOME is not set. Start Claude Code with HOME set.`);
+    return ve(expandHome(path, places.home, places.configRoot));
+  }
+  return path.startsWith("/") ? ve(path) : ve(places.projectRoot(), path);
+}
+function createModFiles({ name, claude, places, report }) {
+  const prefix = `${name}.`;
+  const cache = new Map;
+  const logged = new Set;
+  const own = (all) => Object.freeze(Object.fromEntries(Object.entries(all).flatMap(([key, value]) => key.startsWith(prefix) ? [[key.slice(prefix.length), value]] : [])));
+  const locate = async (path) => {
+    const stat = await claude.fs.stat(path, { resolve: true });
+    if (stat.kind !== "file")
+      throw new Error(`${path} is not a file, so it holds no metadata.`);
+    const realPath = stat.realPath ?? path;
+    const extensionless = !realPath.slice(realPath.lastIndexOf("/") + 1).includes(".");
+    const firstLine = extensionless ? (await claude.fs.read(realPath)).split(`
+`, 1)[0] : undefined;
+    const format = formatOf(realPath, firstLine);
+    const holder = format.type === "sidecar" ? `${realPath}${sidecarSuffix}` : realPath;
+    const sidecar = format.type === "sidecar" ? await claude.fs.stat(holder).catch(ifMissing(undefined)) : undefined;
+    return { realPath, format, holder, signature: `${stat.mtimeMs}:${stat.size}:${sidecar?.kind === "file" ? `${sidecar.mtimeMs}:${sidecar.size}` : ""}` };
+  };
+  const textOf = async (holder) => (await claude.fs.stat(holder).catch(ifMissing(undefined)))?.kind === "file" ? claude.fs.read(holder) : "";
+  const skipped = (path, value) => (error) => {
+    if (isMissing(error))
+      return value;
+    const reason = `${name}: fs.find skipped ${path}: ${messageOf(error)}`;
+    if (!logged.has(reason))
+      claude.ui.warn("fs:find", reason);
+    logged.add(reason);
+    return value;
+  };
+  const readEntry = async (path) => {
+    const located = await locate(path);
+    const cached = cache.get(path);
+    if (cached?.signature === located.signature)
+      return cached.read;
+    let read;
+    try {
+      const { metadata, name: declared } = readMetadata(await textOf(located.holder), located.format);
+      read = { metadata, ...declared === undefined ? {} : { name: declared } };
+    } catch (error) {
+      if (!(error instanceof MetadataError))
+        throw error;
+      const failure = `${located.holder} ${error.message}`;
+      read = { metadata: {}, error: failure };
+      if (!logged.has(failure))
+        report({ id: `metadata:${located.holder}`, message: `Skips the metadata of ${located.holder}`, description: failure });
+      logged.add(failure);
+    }
+    cache.set(path, { signature: located.signature, read });
+    return read;
+  };
+  const matchesOf = async (pattern) => {
+    const absolute = resolvedPath(pattern, places);
+    const scanned = $s.scan(absolute);
+    if (!scanned.isGlob)
+      return (await claude.fs.stat(absolute).catch(skipped(absolute, undefined)))?.kind === "file" ? [absolute] : [];
+    const isMatch = $s(absolute, { dot: true });
+    const entersSkipped = skippedFolders.filter((folder) => scanned.glob.split("/").includes(folder));
+    const maxDepth = scanned.glob.includes("**") ? Number.POSITIVE_INFINITY : scanned.glob.split("/").length;
+    const found = [];
+    const visited = new Set;
+    const walk = async (folder, depth) => {
+      const real = (await claude.fs.stat(folder, { resolve: true }).catch(skipped(folder, undefined)))?.realPath ?? folder;
+      if (visited.has(real))
+        return;
+      visited.add(real);
+      const entries = await claude.fs.list(folder).catch(skipped(folder, []));
+      await Promise.all(entries.map(async (entry) => {
+        const path = `${folder}/${entry.name}`;
+        const kind = entry.isLink === true ? (await claude.fs.stat(path).catch(skipped(path, undefined)))?.kind : entry.kind;
+        if (kind === "file" && isMatch(path))
+          found.push(path);
+        if (kind !== "dir" || depth + 1 >= maxDepth)
+          return;
+        if (skippedFolders.includes(entry.name) && !entersSkipped.includes(entry.name))
+          return;
+        await walk(path, depth + 1);
+      }));
+    };
+    const base = scanned.base === "" ? "/" : scanned.base;
+    if ((await claude.fs.stat(base).catch(skipped(base, undefined)))?.kind === "dir")
+      await walk(base, 0);
+    return found;
+  };
+  return {
+    async find(glob) {
+      const patterns = typeof glob === "string" ? [glob] : glob;
+      const paths = [...new Set((await Promise.all(patterns.map(matchesOf))).flat())].sort();
+      const kept = paths.filter((path) => !(path.endsWith(sidecarSuffix) && paths.includes(path.slice(0, -sidecarSuffix.length))));
+      return Promise.all(kept.map(async (path) => {
+        const read = await readEntry(path).catch((error) => ({ metadata: {}, error: `${path} ${messageOf(error)}` }));
+        return { path, ...read.name === undefined ? {} : { name: read.name }, metadata: own(read.metadata), ...read.error === undefined ? {} : { error: read.error } };
+      }));
+    },
+    async read(path) {
+      const read = await readEntry(resolvedPath(path, places));
+      if (read.error !== undefined)
+        throw new Error(`${name}: ${read.error}`);
+      return own(read.metadata);
+    },
+    async update(path, change) {
+      const given = resolvedPath(path, places);
+      const located = await locate(given);
+      const text = await textOf(located.holder);
+      let all;
+      try {
+        all = readMetadata(text, located.format).metadata;
+      } catch (error) {
+        throw new Error(`${name}: ${located.holder} ${messageOf(error)}`, { cause: error });
+      }
+      const edited = { ...own(all) };
+      change(edited);
+      for (const [key, value] of Object.entries(edited)) {
+        if (!ownKey.test(key))
+          throw new Error(`${name}: the metadata key "${key}" is not a name. Use letters, digits, "_", ".", and "-".`);
+        if (typeof value !== "string")
+          throw new Error(`${name}: the metadata key "${key}" holds ${JSON.stringify(value)}. Each value is text, and a list is one space-separated text.`);
+        if (value.includes(`
+`))
+          throw new Error(`${name}: the metadata key "${key}" holds a line break. Each value is one line of text.`);
+      }
+      const next = {};
+      for (const [key, value] of Object.entries(all)) {
+        if (!key.startsWith(prefix))
+          next[key] = value;
+        else if (Object.hasOwn(edited, key.slice(prefix.length)))
+          next[key] = edited[key.slice(prefix.length)];
+      }
+      for (const [key, value] of Object.entries(edited))
+        next[`${prefix}${key}`] = value;
+      if (JSON.stringify(next) === JSON.stringify(all))
+        return;
+      await claude.fs.write(located.holder, writeMetadata(text, located.format, next));
+      cache.delete(given);
+    }
+  };
+}
+
+// node_modules/@cmodjs/core/options.js
+var optionKey = /^[A-Za-z_]\w*$/;
+function checkOptions(name, options) {
+  for (const [key, declared] of Object.entries(options)) {
+    const at = `${name}: options.${key}`;
+    if (!optionKey.test(key))
+      throw new Error(`${at} is not an option name. Use letters, digits, and _, starting with a letter, as Claude Code passes each option on as CLAUDE_PLUGIN_OPTION_${key.toUpperCase()}.`);
+    if (declared.title.trim() === "")
+      throw new Error(`${at} needs a title, the label /config shows.`);
+    if (declared.type === "choice" && (declared.choices ?? []).length === 0)
+      throw new Error(`${at} is a choice with no choices. Give option.choice(['a', 'b'], { ... }).`);
+    if (declared.type === "choice" && declared.default !== undefined && !(declared.choices ?? []).includes(declared.default))
+      throw new Error(`${at} defaults to ${String(declared.default)}, which is not one of its choices: ${(declared.choices ?? []).join(", ")}.`);
+  }
+  return options;
+}
+function projectOptionsOf(name, declared, text) {
+  let file;
+  try {
+    file = JSON.parse(text);
+  } catch (error) {
+    return { values: {}, ignored: [`is not JSON (${messageOf(error)}). Fix the file; ${name} uses its other options until then.`] };
+  }
+  if (!isObject(file))
+    return { values: {}, ignored: ['is not a JSON object. Write one, such as { "branch": "main" }.'] };
+  const values = {};
+  const ignored = [];
+  for (const [key, value] of Object.entries(file)) {
+    const option = declared[key];
+    if (option === undefined)
+      ignored.push(`sets ${key}, which ${name} does not declare. ${Object.keys(declared).length === 0 ? "Remove it." : `Remove it, or use one of: ${Object.keys(declared).join(", ")}.`}`);
+    else if (option.type === "secret")
+      ignored.push(`sets ${key}, a secret, and a project file is committed for everyone to read. Remove it. ${secretFix}`);
+    else {
+      const misfit = fitsOption(option, value);
+      if (misfit === undefined)
+        values[key] = value;
+      else
+        ignored.push(`sets ${key} to ${JSON.stringify(value)}, and ${option.title} ${misfit}.`);
+    }
+  }
+  return { values, ignored };
+}
+function isUnset(value) {
+  return value === undefined || value === "" || Array.isArray(value) && value.length === 0;
+}
+function fitsOption(declared, value) {
+  const type = declared.type;
+  if (type === "toggle")
+    return typeof value === "boolean" ? undefined : "takes true or false";
+  if (type === "number") {
+    if (typeof value !== "number" || !Number.isFinite(value))
+      return "takes a number";
+    if (declared.min !== undefined && value < declared.min)
+      return `takes ${declared.min} or more`;
+    if (declared.max !== undefined && value > declared.max)
+      return `takes ${declared.max} or less`;
+    return;
+  }
+  if (type === "list")
+    return Array.isArray(value) && value.every((item) => typeof item === "string") ? undefined : "takes a list of text";
+  if (typeof value !== "string")
+    return "takes text";
+  if (type === "choice" && !(declared.choices ?? []).includes(value))
+    return `takes one of: ${(declared.choices ?? []).join(", ")}`;
+  return;
+}
+
+// node_modules/@cmodjs/core/ui/elements.js
+var unbuilt = Symbol("an element built outside a render");
+var drawing;
+function drawWith(table, draw, markdown) {
+  const outer = drawing;
+  const current = { table, markdown };
+  drawing = current;
+  try {
+    return built(current, draw());
+  } finally {
+    drawing = outer;
+  }
+}
+function element(name) {
+  const construct = (props) => drawing === undefined ? { [unbuilt]: { name, props } } : build(drawing, name, props);
+  return construct;
+}
+function build(current, name, props) {
+  const ready = "children" in props ? { ...props, children: built(current, props.children) } : props;
+  if (name === "Markdown" && current.markdown !== undefined)
+    return current.markdown(ready);
+  return current.table[name](ready);
+}
+function built(current, value) {
+  if (Array.isArray(value))
+    return value.map((child) => built(current, child));
+  if (typeof value !== "object" || value === null || !(unbuilt in value))
+    return value;
+  const { name, props } = value[unbuilt];
+  return build(current, name, props);
+}
+function drawKeyed(keyPrefix, draw) {
+  const outer = drawing;
+  drawing = undefined;
+  try {
+    return keyed(draw(), keyPrefix);
+  } finally {
+    drawing = outer;
+  }
+}
+function keyed(value, keyPrefix) {
+  if (Array.isArray(value))
+    return value.map((each) => keyed(each, keyPrefix));
+  if (typeof value !== "object" || value === null || !(unbuilt in value))
+    return value;
+  const { name, props } = value[unbuilt];
+  const prefixed = Object.fromEntries(Object.entries(props).map(([field, each]) => [field, field === "key" && typeof each === "string" ? `${keyPrefix}${each}` : keyed(each, keyPrefix)]));
+  return { [unbuilt]: { name, props: prefixed } };
+}
+var elementKey = "$cmodElement";
+var handlerKey = "$cmodHandler";
+function elementData(value, numberOf) {
+  if (typeof value === "function")
+    return { [handlerKey]: numberOf(value) };
+  if (Array.isArray(value))
+    return value.map((each) => elementData(each, numberOf));
+  if (typeof value !== "object" || value === null)
+    return value;
+  if (unbuilt in value) {
+    const { name, props } = value[unbuilt];
+    if (name === "Client")
+      throw new Error("Client draws only in panes and styles.");
+    return { [elementKey]: name, props: elementData(props, numberOf) };
+  }
+  if (Object.getPrototypeOf(value) !== Object.prototype)
+    throw new Error("a widget draws only the elements of ui/elements.js and ui/components.js, text, numbers, and plain objects.");
+  return Object.fromEntries(Object.entries(value).map(([key, each]) => [key, elementData(each, numberOf)]));
+}
+function elementOf(data, keyPrefix, press) {
+  if (Array.isArray(data))
+    return data.map((each) => elementOf(each, keyPrefix, press));
+  if (typeof data !== "object" || data === null)
+    return data;
+  const fields = data;
+  if (typeof fields[handlerKey] === "number") {
+    const handler = fields[handlerKey];
+    return (...args) => press(handler, JSON.parse(JSON.stringify(args)));
+  }
+  const name = fields[elementKey];
+  if (name === undefined)
+    return Object.fromEntries(Object.entries(fields).map(([key, each]) => [key, elementOf(each, keyPrefix, press)]));
+  if (typeof name !== "string" || !Object.hasOwn(constructors, name))
+    throw new Error(`a widget drew ${String(name)}, which is not an element of ui/elements.js.`);
+  const props = elementOf(fields["props"], keyPrefix, press);
+  return constructors[name](typeof props["key"] === "string" ? { ...props, key: `${keyPrefix}${props["key"]}` } : props);
+}
+var focusable = new Set(["Button", "Input", "Select"]);
+function drawsFocusable(data, key) {
+  if (typeof data !== "object" || data === null)
+    return false;
+  if (Array.isArray(data))
+    return data.some((each) => drawsFocusable(each, key));
+  const fields = data;
+  const props = fields["props"];
+  if (focusable.has(fields[elementKey]) && props?.["key"] === key)
+    return true;
+  return Object.values(fields).some((each) => drawsFocusable(each, key));
+}
+function forClaudeCode(table, surface, open) {
+  const { Button: button, Link: link, Image: image, Svg: svg, Raster: raster } = table;
+  const opening = (props) => {
+    const { href, ...rest } = props;
+    if (typeof href !== "string")
+      return button(props);
+    const { label, children } = rest;
+    const hasChildren = children !== undefined && !(Array.isArray(children) && children.length === 0);
+    if (surface !== "terminal" && href.startsWith("https:"))
+      return link({ href, ...typeof label === "string" ? { label } : {}, ...hasChildren ? { children } : {} });
+    return button({ ...rest, onPress: (press) => open(href, press) });
+  };
+  const named = (draw) => ({ label, ...rest }) => draw({ alt: label, ...rest });
+  return { ...table, Button: opening, Image: named(image), Svg: named(svg), Raster: ({ label, ...rest }) => raster(rest) };
+}
+var Box = element("Box");
+var Text = element("Text");
+var Button = element("Button");
+var Link = element("Link");
+var Code = element("Code");
+var Markdown = element("Markdown");
+var Input = element("Input");
+var Select = element("Select");
+var Image = element("Image");
+var Svg = element("Svg");
+var Raster = element("Raster");
+var Client = element("Client");
+var constructors = { Box, Text, Button, Link, Code, Markdown, Input, Select, Image, Svg, Raster };
+
+// node_modules/@cmodjs/core/runtime/buttons.js
+function filledButton({ key, label, hotkey, variant = "secondary", onPress }) {
+  const isPrimary = variant === "primary";
+  return Button({
+    plain: true,
+    key,
+    label,
+    ...hotkey === undefined ? {} : { hotkey },
+    onPress,
+    children: Text({ backgroundColor: isPrimary ? "claude" : "userMessageBackground", color: isPrimary ? "inverseText" : "text", bold: isPrimary, children: ` ${label} ` })
+  });
+}
+
+// node_modules/@cmodjs/core/ui/areas.js
+var Working = "working";
+var TurnEnd2 = "turnEnd";
+
+// node_modules/@cmodjs/core/ui/panes.js
+var partId = /^[A-Za-z0-9_-]{1,64}$/;
+var sizeKeys = ["columns", "rows"];
+function checkPart(name, kind, id, title, takenBy) {
+  if (!partId.test(id))
+    throw new Error(`${name}: "${id}" is not a ${kind} id. Use 1 to 64 letters, digits, "_", or "-".`);
+  if (title.trim() === "")
+    throw new Error(`${name}: the ${kind} "${id}" needs a title, the label its tab shows.`);
+  if (takenBy !== undefined)
+    throw new Error(`${name}: the ${takenBy} "${id}" is already added. Give the ${kind} another id.`);
+}
+function checkPane(name, pane, takenBy) {
+  checkPart(name, "pane", pane.id, pane.title, takenBy);
+  for (const key of sizeKeys) {
+    const size = pane[key];
+    if (typeof size !== "function" && size !== undefined && (!Number.isInteger(size) || size <= 0))
+      throw new Error(`${name}: the pane "${pane.id}" has ${key} ${size}. Use a whole number above 0, or leave it out.`);
+  }
+}
+
+// node_modules/@cmodjs/core/ui/styles.js
+var ToolGroup = "toolGroup";
+var ToolProgress = "toolProgress";
+var CommandOutput = "commandOutput";
+var AskUserQuestion = "askUserQuestion";
+var components = {
+  prompt: "UserMessage",
+  reply: "AssistantMessage",
+  toolCall: "ToolUse",
+  toolResult: "ToolResult",
+  notice: "InfoNotice",
+  [ToolGroup]: "ToolGroup",
+  [ToolProgress]: "ToolProgress",
+  [CommandOutput]: "CommandOutput",
+  [AskUserQuestion]: "AskUserQuestion",
+  [Working]: "Spinner",
+  [TurnEnd2]: "TurnDuration"
+};
+function componentOf(kind) {
+  return typeof kind === "string" && Object.hasOwn(components, kind) ? components[kind] : undefined;
+}
+function nameOf(kind) {
+  return typeof kind === "string" ? `${kind.charAt(0).toUpperCase()}${kind.slice(1)}` : kind.name;
+}
+
+// node_modules/@cmodjs/core/runtime/ui.js
+var partMethods = {
+  list: "cmod:parts",
+  draw: "cmod:draw",
+  press: "cmod:press",
+  shown: "cmod:shown",
+  changed: "cmod:partsChanged",
+  stylers: "cmod:markdownStylers"
+};
+var stalePress = "that button drew before the last redraw. Press the one it shows now.";
+var unmeasuredColumns = 80;
+function viewportColumns(e) {
+  return e.viewport?.columns ?? unmeasuredColumns;
+}
+function styledAt(e, columns = viewportColumns(e)) {
+  return { surface: e.surface, columns: Math.max(columns, 0) };
+}
+async function openLink(claude, href, surface) {
+  if (surface === "terminal") {
+    const [browser, sshConnection, display, waylandDisplay] = await Promise.all([claude.env.browser(), claude.env.sshConnection(), claude.env.display(), claude.env.waylandDisplay()]);
+    const os = browser || sshConnection ? "" : (await claude.process.run(["uname", "-s"])).stdout.trim().toLowerCase();
+    const command = browserCommand({ os, browser, sshConnection, display, waylandDisplay }, href);
+    if (command !== undefined && (await claude.process.run(command)).exitCode === 0)
+      return "opened";
+  }
+  const copied = await claude.ui.copy({ text: href, surface });
+  if (!copied.isCopied)
+    throw new Error(`cmod could not open ${href} or copy it: ${copied.reason}`);
+  return "copied";
+}
+var bullet = "⏺";
+function paneSize(pane, state) {
+  const size = {};
+  for (const key of sizeKeys) {
+    const wanted = pane[key];
+    const value = typeof wanted === "function" ? wanted(state) : wanted;
+    if (value === undefined)
+      continue;
+    if (!Number.isInteger(value) || value <= 0)
+      throw new Error(`the pane "${pane.id}" gets ${key} ${value} from its state. Return a whole number above 0, or undefined for Claude Code's default.`);
+    size[key] = value;
+  }
+  return size;
+}
+function times(count) {
+  return count === 1 ? "1 time" : `${count} times`;
+}
+function pieceProps(props, given, isFirst) {
+  const merged = { ...props, ...given };
+  return isFirst || !("isFirstOfReply" in merged) ? merged : { ...merged, isFirstOfReply: false };
+}
+function laterKeys(key) {
+  let used = 0;
+  return () => key === undefined ? undefined : `${key}:${used += 1}`;
+}
+function inheriting(props, draw, laterKey = laterKeys(props.key)) {
+  const { dimColor, onLinkPress, pressableLinks } = props;
+  const inherited = { ...dimColor === undefined ? {} : { dimColor }, ...onLinkPress === undefined ? {} : { onLinkPress }, ...pressableLinks === undefined ? {} : { pressableLinks } };
+  let isKeyTaken = false;
+  const keyOf = (left) => {
+    if (left.key !== undefined)
+      return left.key;
+    if (isKeyTaken)
+      return laterKey();
+    isKeyTaken = true;
+    return props.key;
+  };
+  return (left) => {
+    const key = keyOf(left);
+    return draw({ ...inherited, ...key === undefined ? {} : { key }, ...left });
+  };
+}
+function threw(error) {
+  return `threw, so Claude Code draws its own: ${messageOf(error)}`;
+}
+async function drawComponent(table, draw, drawDefault) {
+  const calls = [];
+  let first;
+  try {
+    first = drawWith(table, () => draw(({ children, ...props }) => {
+      const drawing = table.Box({});
+      calls.push({ given: props, drawing });
+      return drawing;
+    }));
+  } catch (error) {
+    return { failure: threw(error) };
+  }
+  if (calls.length === 0)
+    return { drawing: first, isClaudesRow: false };
+  const whole = calls.findIndex((call) => call.drawing === first);
+  const pieces = await Promise.all(calls.map(({ given }, index) => drawDefault(given, index === whole)));
+  let used = 0;
+  let second;
+  try {
+    second = drawWith(table, () => draw(() => pieces[used++] ?? Box({})));
+  } catch (error) {
+    return { failure: threw(error) };
+  }
+  if (used !== pieces.length)
+    return { failure: `used Default ${times(pieces.length)}, then ${times(used)}, so Claude Code draws its own. A render must draw the same for the same props.` };
+  return { drawing: second, isClaudesRow: whole >= 0 };
+}
+function drawPieces(pieces, place) {
+  const spaced = pieces.map(({ drawing, isClaudesRow }, index) => (index > 0 || place === "inReply") && !isClaudesRow ? Box({ marginTop: 1, children: drawing }) : drawing);
+  const column = (drawings) => Box({ flexDirection: "column", children: drawings });
+  const [opening, ...rest] = spaced;
+  if (place !== "opensReply" || opening === undefined)
+    return column(spaced);
+  if (pieces[0]?.isClaudesRow !== true)
+    return Box({ children: [Box({ minWidth: 2, children: Text({ color: "text", children: bullet }) }), column(spaced)] });
+  return column([opening, Box({ paddingLeft: 2, children: column(rest) })]);
+}
+function merged(updates) {
+  const parts = updates.findLast((update) => update.parts !== undefined)?.parts;
+  const requests = updates.flatMap((update) => update.requests ?? []);
+  const isRedrawn = updates.some((update) => update.redraw === true);
+  const isStart = updates.some((update) => update.isStart === true);
+  return { ...parts === undefined ? {} : { parts }, ...isRedrawn ? { redraw: true } : {}, ...requests.length === 0 ? {} : { requests }, ...isStart ? { isStart } : {} };
+}
+var keptDrawInputs = 200;
+function createUi({ name, claude, router, report, announce, mod, borrowed, nextDraw, provided }) {
+  const panes = new Map;
+  const paneLogs = new Map;
+  const openPanes = new Set;
+  const paneStates = new Map;
+  const syncPanes = async () => {
+    const listed = new Map((await claude.ui.panes()).map((open) => [open.id, open]));
+    for (const id of panes.keys()) {
+      const open = listed.get(id);
+      if (open?.isPlaced === true)
+        openPanes.add(id);
+      else
+        openPanes.delete(id);
+      if (open === undefined)
+        paneStates.delete(id);
+      else
+        paneStates.set(id, { isShown: open.isShown, isFocused: open.isFocused });
+    }
+  };
+  const readPanes = () => syncPanes().catch((error) => claude.ui.warn("panes:read", `${name} keeps its panes' open, shown, and focused state from before: ${messageOf(error)}`));
+  const requestedSizes = new Map;
+  const styles = new Set;
+  const markdownRenders = new Map;
+  let read;
+  let stylers = [];
+  let stylersSeen = 0;
+  let isRouted = false;
+  let isResizeQueued = false;
+  const widgets = new Map;
+  const widgetAreas = new Map;
+  const parts = new Map;
+  let shownParts = { open: [], shown: null, isFocused: false };
+  const draws = new Map;
+  const latestDraws = new Map;
+  const failedDraws = new Set;
+  let beforeStart = [];
+  let askedDepth = 0;
+  const askedCalls = new Set;
+  let unheldRequests = 0;
+  let collected;
+  let collecting = 0;
+  let queued;
+  const partList = () => {
+    const provides = [...provided(), ...markdownRenders.size > 0 ? [styleInterface] : []];
+    return {
+      widgets: [...widgets.values()].map(({ id, title, areas: listed, place }) => ({ id, title, areas: listed, ...place === undefined ? {} : { place } })),
+      pages: [...parts.values()].map(({ init: { id, title }, place }) => ({ id, title, ...place === undefined ? {} : { place } })),
+      ...provides.length === 0 ? {} : { provides }
+    };
+  };
+  const hear = (listed, isRestyled) => {
+    if (!Array.isArray(listed))
+      return;
+    const heard = listed.filter((styler) => typeof styler === "string" && styler !== name);
+    if (!isRestyled && heard.join("\x00") === stylers.join("\x00"))
+      return;
+    stylers = heard;
+    stylersSeen += 1;
+    if (name === cmodPluginName || panes.size > 0)
+      claude.ui.invalidate("ui.render");
+  };
+  const treeOf = (render, handlers) => {
+    const drawn = render();
+    return drawn === undefined ? null : elementData(drawn, (run) => handlers.push(run) - 1);
+  };
+  const isAnyDrawingChanged = () => {
+    for (const [key, inputs] of latestDraws) {
+      if (key === "markdown")
+        continue;
+      for (const sent of inputs.values()) {
+        const handlers = [];
+        try {
+          if (JSON.stringify(treeOf(sent.render, handlers)) !== sent.tree)
+            return true;
+        } catch (error) {
+          claude.ui.warn(`drawing:${key}`, `${name}: the ${key} drawing threw, so the cmod plugin asks for it again: ${messageOf(error)}`);
+          return true;
+        }
+        const latest = sent.draws.at(-1);
+        if (latest !== undefined && draws.has(latest))
+          draws.set(latest, { id: key, handlers });
+      }
+    }
+    return false;
+  };
+  const withNeededRedraw = ({ redraw, ...update }) => redraw === true && isAnyDrawingChanged() ? { ...update, redraw } : update;
+  const send = (update) => {
+    if (collected !== undefined)
+      return void collected.push(update);
+    if (beforeStart !== undefined)
+      return void beforeStart.push(update);
+    const isAsked = askedDepth > 0;
+    if (queued !== undefined && !isAsked)
+      return void queued.push(update);
+    const batch = [update];
+    if (!isAsked)
+      queued = batch;
+    const tell = async () => {
+      if (queued === batch)
+        queued = undefined;
+      const needed = withNeededRedraw(merged(batch));
+      if (Object.keys(needed).length === 0)
+        return;
+      const input = { ...needed, ...isAsked ? { isAsked: true } : {} };
+      return claude.cmod.call({ to: cmodPluginName, method: partMethods.changed, input }).then((answer) => {
+        if (isAsked && input.requests !== undefined && !(isObject(answer) && answer["isHeld"] === true))
+          unheldRequests += 1;
+        if (isObject(answer) && name !== cmodPluginName)
+          hear(answer["stylers"], false);
+      }, (error) => {
+        claude.ui.warn("parts:tell", `${name}: the cmod plugin did not hear about its widgets, views, and pages: ${messageOf(error)}`);
+      });
+    };
+    if (!isAsked)
+      return Promise.resolve().then(tell);
+    const told = tell().finally(() => askedCalls.delete(told));
+    askedCalls.add(told);
+    return told;
+  };
+  const asked = async (run) => {
+    askedDepth += 1;
+    try {
+      const value = await run();
+      while (askedCalls.size > 0)
+        await Promise.allSettled(askedCalls);
+      return value;
+    } finally {
+      askedDepth -= 1;
+    }
+  };
+  const collect = async (run) => {
+    collecting += 1;
+    collected ??= [];
+    try {
+      await run();
+    } finally {
+      collecting -= 1;
+    }
+    const mine = collected;
+    collected = collecting === 0 ? undefined : [];
+    return withNeededRedraw(merged(mine));
+  };
+  const logOnce = (what) => {
+    let hasLogged = false;
+    return (failure) => {
+      if (!hasLogged)
+        report({ id: `draw:${what}`, message: `The ${what} failed`, description: failure });
+      hasLogged = true;
+    };
+  };
+  const renderOf = (type) => markdownRenders.get(type);
+  const drawnBlock = (piece, at, drawClaudes, keyPrefix, table) => {
+    if ("text" in piece)
+      return drawClaudes({ text: piece.text });
+    const { render, props: block } = piece;
+    const draw = () => drawKeyed(keyPrefix, () => render.Component({ ...block, ...at, Default: ({ source = block.source }) => drawClaudes({ text: source }) }));
+    try {
+      return table === undefined ? draw() : drawWith(table, draw, drawClaudes);
+    } catch (error) {
+      render.log(threw(error));
+      return drawClaudes({ text: block.source });
+    }
+  };
+  const othersFrom = (table, at, from, unkeyedScope) => (props, laterKey = laterKeys(props.key)) => {
+    if (from >= stylers.length)
+      return table.Markdown(props);
+    const scope = props.key ?? unkeyedScope();
+    for (const [index, styler] of stylers.entries()) {
+      if (index < from)
+        continue;
+      const cached = `${stylersSeen}\x00${at.surface}\x00${at.columns}\x00${props.text}`;
+      const next = othersFrom(table, at, index + 1, unkeyedScope);
+      const drawn = drawWith(table, () => borrowed(styler, cached, { markdown: props.text, ...at }, scope), inheriting(props, (part) => next(part, laterKey), laterKey));
+      if (drawn !== undefined)
+        return drawn;
+    }
+    return table.Markdown(props);
+  };
+  const markdownIn = (table, at) => {
+    const reader = read;
+    let unkeyed = 0;
+    const unkeyedScope = () => String(unkeyed++);
+    const others = othersFrom(table, at, 0, unkeyedScope);
+    if (reader === undefined)
+      return stylers.length === 0 ? undefined : others;
+    return (props) => {
+      const pieces = reader(props.text, renderOf);
+      if (pieces.every((piece) => ("text" in piece)))
+        return others(props);
+      const scope = props.key ?? unkeyedScope();
+      const laterKey = laterKeys(props.key);
+      const drawClaudes = inheriting(props, (part) => others(part, laterKey), laterKey);
+      const drawings = pieces.map((piece, index) => drawnBlock(piece, at, drawClaudes, `${scope}:${index}:`, table));
+      return drawPieces(drawings.map((drawing) => ({ drawing, isClaudesRow: false })), "pane");
+    };
+  };
+  const markdownDrawing = (text, at) => {
+    const pieces = read === undefined ? [] : read(text, renderOf);
+    if (pieces.every((piece) => ("text" in piece)))
+      return Markdown({ text });
+    return drawPieces(pieces.map((piece, index) => ({ drawing: drawnBlock(piece, at, Markdown, `${index}:`), isClaudesRow: false })), "pane");
+  };
+  const routeMarkdown = (createReader) => {
+    if (read !== undefined)
+      return;
+    const reader = createReader();
+    read = reader;
+    router.add("ui.render", async (e, next) => {
+      if (e.component !== "AssistantMessage")
+        return next(e);
+      const pieces = reader(e.props.text, renderOf, e.requestId);
+      if (pieces.every((piece) => ("text" in piece)))
+        return next(e);
+      const table = claude.ui.resolve(e);
+      const drawClaudes = (text, isFirst) => next({ ...e, props: pieceProps(e.props, { text }, isFirst) });
+      const drawn = await Promise.all(pieces.map(async (piece, index) => {
+        if ("text" in piece)
+          return { drawing: await drawClaudes(piece.text, index === 0), isClaudesRow: true };
+        const { render, props: block } = piece;
+        const component = await drawComponent(table, (Default) => drawKeyed(`${index}:`, () => render.Component({ ...block, ...styledAt(e), id: e.requestId, Default })), ({ source = block.source }, isClaudesRow) => drawClaudes(source, index === 0 && isClaudesRow));
+        if (!("failure" in component))
+          return component;
+        render.log(component.failure);
+        return { drawing: await drawClaudes(block.source, index === 0), isClaudesRow: true };
+      }));
+      return drawWith(table, () => drawPieces(drawn, e.props.isFirstOfReply ? "opensReply" : "inReply"));
+    });
+  };
+  const openAt = (pane, size, focus) => {
+    requestedSizes.set(pane.id, size);
+    const { id, title, closeOnEscape, holdToasts } = pane;
+    return claude.ui.open({ id, title, ...size, ...closeOnEscape === true ? { closeOnEscape } : {}, ...holdToasts === true ? { holdToasts } : {}, ...focus === true ? { focus } : {} });
+  };
+  const resize = async (pane) => {
+    try {
+      const size = paneSize(pane, mod().state);
+      const requested = requestedSizes.get(pane.id);
+      if (requested?.columns === size.columns && requested?.rows === size.rows)
+        return;
+      await openAt(pane, size);
+    } catch (error) {
+      claude.ui.warn(`pane:resize:${pane.id}`, `${name}: the ${pane.title} pane kept its size: ${messageOf(error)}`);
+    }
+  };
+  const handle = async (pane, handler, run) => {
+    try {
+      await run();
+    } catch (error) {
+      report({ id: `pane:${pane.id}:${handler}`, message: `The ${pane.title} pane's ${handler} threw`, error });
+    }
+  };
+  const routePanes = () => {
+    if (isRouted)
+      return;
+    isRouted = true;
+    router.add("ui.render", (e, next) => {
+      const added = panes.get(e.requestId);
+      if (added === undefined || e.component !== "Pane")
+        return next(e);
+      const { init } = added;
+      openPanes.add(init.id);
+      paneStates.set(init.id, { isShown: true, isFocused: e.props.isFocused });
+      readPanes();
+      const table = claude.ui.resolve(e);
+      try {
+        return drawWith(table, () => init.render(mod(), { ...e.props, surface: e.surface, params: added.params }), markdownIn(table, styledAt(e, e.props.bodyColumns)));
+      } catch (error) {
+        paneLogs.get(init.id)?.(`threw: ${messageOf(error)}`);
+        return drawWith(table, () => Text({ color: "error", children: `The ${init.title} pane could not draw: ${messageOf(error)}` }));
+      }
+    });
+    router.add("ui.scroll", async (e, next) => {
+      const init = panes.get(e.requestId)?.init;
+      const moved = await next(e);
+      if (init?.onScroll === undefined || e.component !== "Pane" || moved.deny !== undefined)
+        return moved;
+      await handle(init, "onScroll", () => init.onScroll?.(mod(), e));
+      return moved;
+    });
+    router.add("ui.close", async (e, next) => {
+      openPanes.delete(e.id);
+      paneStates.delete(e.id);
+      const closed = await next(e);
+      await readPanes();
+      const init = panes.get(e.id)?.init;
+      if (init?.onClose !== undefined)
+        await handle(init, "onClose", () => init.onClose?.(mod(), e));
+      return closed;
+    });
+  };
+  const scrollIn = (id, target, options) => claude.ui.scroll({ to: target, in: id, ...options?.block === undefined ? {} : { block: options.block } }).then(({ deny }) => {
+    if (deny !== undefined)
+      throw new Error(`${name}: Claude Code did not scroll ${id}: ${deny}`);
+  });
+  const addPane = (init) => {
+    checkPane(name, init, panes.has(init.id) ? "pane" : undefined);
+    const added = { init, params: undefined };
+    panes.set(init.id, added);
+    paneLogs.set(init.id, logOnce(`${init.title} pane`));
+    announce(`the ${init.title} pane`);
+    routePanes();
+    const sized = init;
+    const pane = {
+      id: init.id,
+      get isOpen() {
+        return openPanes.has(init.id);
+      },
+      get isShown() {
+        return paneStates.get(init.id)?.isShown ?? false;
+      },
+      get isFocused() {
+        return paneStates.get(init.id)?.isFocused ?? false;
+      },
+      get params() {
+        return added.params;
+      },
+      async open(...[options]) {
+        if (options !== undefined && "params" in options)
+          added.params = options.params;
+        const { isPlaced } = await openAt(sized, paneSize(sized, mod().state), options?.focus);
+        if (isPlaced)
+          openPanes.add(init.id);
+        await syncPanes();
+        claude.ui.invalidate("ui.render");
+      },
+      async close() {
+        await claude.ui.close({ id: init.id });
+        openPanes.delete(init.id);
+        paneStates.delete(init.id);
+        await syncPanes();
+      },
+      toggle: (options) => openPanes.has(init.id) ? pane.close() : pane.open(options),
+      scrollTo: (target, options) => scrollIn(init.id, target, options),
+      async focus(key) {
+        const { deny } = await claude.ui.focus({ requestId: init.id, key });
+        if (deny !== undefined)
+          throw new Error(`${name}: Claude Code did not focus "${key}" in the ${init.title} pane: ${deny}`);
+      },
+      remove() {
+        if (panes.get(init.id) !== added)
+          return;
+        panes.delete(init.id);
+        paneLogs.delete(init.id);
+        if (openPanes.has(init.id))
+          claude.ui.close({ id: init.id }).catch((error) => claude.ui.warn(`pane:close:${init.id}`, `${name}: the ${init.title} pane stayed open: ${messageOf(error)}`));
+        openPanes.delete(init.id);
+        paneStates.delete(init.id);
+      }
+    };
+    return pane;
+  };
+  const openEntry = (id) => shownParts.open.find((each) => each.id === id);
+  const takenBy = (id) => widgets.has(id) ? "widget" : parts.get(id)?.kind;
+  const addPart = (kind, init, place) => {
+    checkPart(name, kind, init.id, init.title, takenBy(init.id));
+    const added = { init, kind, place, params: undefined };
+    const key = `${kind}:${init.id}`;
+    let requested;
+    parts.set(init.id, added);
+    announce(place === "settings" ? `the ${init.title} view in Settings` : `the ${init.title} ${kind}`);
+    send({ parts: partList() });
+    const part = {
+      id: init.id,
+      get isOpen() {
+        if (requested?.[0] === shownParts)
+          return requested[1];
+        return place === "settings" ? shownParts.shown === init.id : openEntry(init.id) !== undefined;
+      },
+      get isShown() {
+        return [shownParts.shown, ...shownParts.inApps ?? []].includes(init.id);
+      },
+      get isFocused() {
+        return shownParts.shown === init.id && shownParts.isFocused;
+      },
+      get params() {
+        return openEntry(init.id)?.params ?? added.params;
+      },
+      async open(...[options]) {
+        if (options !== undefined && "params" in options)
+          added.params = options.params;
+        requested = [shownParts, true];
+        await send({ requests: [{ open: init.id, ...added.params === undefined ? {} : { params: added.params }, ...options?.focus === true ? { focus: true } : {} }] });
+      },
+      toggle: (options) => part.isOpen ? part.close() : part.open(options),
+      close: async () => {
+        requested = [shownParts, false];
+        await send({ requests: [{ close: init.id }] });
+      },
+      scrollTo: async (target, options) => {
+        await send({ requests: [{ scroll: init.id, to: target, ...options?.block === undefined ? {} : { block: options.block } }] });
+      },
+      focus: async (focused) => {
+        const latest = [...latestDraws.get(key)?.values() ?? []].at(-1);
+        if (latest === undefined || !drawsFocusable(treeOf(latest.render, []), focused))
+          throw new Error(`${name}: the ${init.title} ${kind} draws no Button, Input, or Select with the key "${focused}".`);
+        await send({ requests: [{ focus: init.id, key: focused }] });
+      },
+      remove() {
+        if (parts.get(init.id) !== added)
+          return;
+        parts.delete(init.id);
+        forgetDraws(key);
+        send({ parts: partList(), requests: [{ close: init.id }] });
+      }
+    };
+    return part;
+  };
+  const addWidget = (init) => {
+    checkPart(name, "widget", init.id, init.title, takenBy(init.id));
+    widgets.set(init.id, init);
+    announce(`the ${init.title} widget`);
+    send({ parts: partList() });
+    return {
+      id: init.id,
+      get area() {
+        return widgetAreas.get(init.id);
+      },
+      remove() {
+        if (widgets.get(init.id) !== init)
+          return;
+        widgets.delete(init.id);
+        widgetAreas.delete(init.id);
+        forgetDraws(`widget:${init.id}`);
+        send({ parts: partList() });
+      }
+    };
+  };
+  const addStyle = ({ kind, render }) => {
+    const markdown = typeof kind === "string" ? undefined : kind;
+    const component = componentOf(kind);
+    if (markdown === undefined && component === undefined)
+      throw new Error(`${name}: ${String(kind)} is not a kind styles.add draws, such as ToolCall or CodeBlock.`);
+    const feature = `the style of ${nameOf(kind)}`;
+    if (styles.has(feature))
+      throw new Error(`${name}: ${feature} is already added. Add one style per kind.`);
+    styles.add(feature);
+    announce(feature);
+    const Component = (props) => render(mod(), props);
+    const stop = (subscription) => () => {
+      subscription?.remove();
+      if (markdown !== undefined && markdownRenders.delete(markdown.markdown))
+        send({ parts: partList() });
+      styles.delete(feature);
+      claude.ui.invalidate("ui.render");
+    };
+    if (markdown !== undefined) {
+      markdownRenders.set(markdown.markdown, { Component, log: logOnce(`${nameOf(kind)} style`) });
+      routeMarkdown(markdown.createReader);
+      send({ parts: partList() });
+      return { kind, remove: stop() };
+    }
+    const log = logOnce(`${nameOf(kind)} style`);
+    const drawing = router.add("ui.render", async (e, next) => {
+      if (e.component !== component)
+        return next(e);
+      const table = claude.ui.resolve(e);
+      const drawn = await drawComponent(table, (Default) => Component({ ...e.props, ...styledAt(e), id: e.requestId, Default }), (given, isClaudesRow) => next({ ...e, props: pieceProps(e.props, given, isClaudesRow) }));
+      if ("failure" in drawn) {
+        log(drawn.failure);
+        return next(e);
+      }
+      if (e.component !== "AssistantMessage")
+        return drawn.drawing;
+      return drawWith(table, () => drawPieces([drawn], e.props.isFirstOfReply ? "opensReply" : "inReply"));
+    });
+    return { kind, remove: stop(drawing) };
+  };
+  const forgetDraws = (key) => {
+    for (const kept of latestDraws.get(key)?.values() ?? [])
+      for (const draw of kept.draws)
+        draws.delete(draw);
+    latestDraws.delete(key);
+  };
+  const drawPart = (key, title, input, render, drawFailure = () => {
+    return;
+  }) => {
+    let handlers = [];
+    let tree;
+    try {
+      tree = treeOf(render, handlers);
+      failedDraws.delete(key);
+    } catch (error) {
+      if (!failedDraws.has(key))
+        report({ id: key, message: `The ${title} could not draw`, error });
+      failedDraws.add(key);
+      handlers = [];
+      tree = treeOf(() => drawFailure(error), handlers);
+    }
+    const number = nextDraw();
+    const inputs = latestDraws.get(key) ?? new Map;
+    latestDraws.set(key, inputs);
+    const drawnFor = JSON.stringify("turn" in input ? { ...input, turn: input.turn.prompt.id } : input);
+    const earlier = inputs.get(drawnFor)?.draws ?? [];
+    const kept = [...earlier, number].slice(-2);
+    for (const draw of earlier)
+      if (!kept.includes(draw))
+        draws.delete(draw);
+    inputs.delete(drawnFor);
+    inputs.set(drawnFor, { draws: kept, tree: JSON.stringify(tree), render });
+    const [oldest] = inputs;
+    if (inputs.size > keptDrawInputs && oldest !== undefined) {
+      for (const draw of oldest[1].draws)
+        draws.delete(draw);
+      inputs.delete(oldest[0]);
+    }
+    draws.set(number, { id: key, handlers });
+    return { draw: number, tree };
+  };
+  const draw = (input) => {
+    if ("markdown" in input)
+      return drawPart("markdown", "markdown style", input, () => markdownDrawing(input.markdown, { surface: input.surface, columns: input.columns }));
+    if ("page" in input) {
+      const { page, ...props } = input;
+      const added = parts.get(page);
+      if (added === undefined)
+        throw new Error(`${name} has no view or page ${page}.`);
+      const title = `${added.init.title} ${added.kind}`;
+      return drawPart(`${added.kind}:${page}`, title, input, () => added.init.render(mod(), props), (error) => Text({ color: "error", children: `The ${title} could not draw: ${messageOf(error)}` }));
+    }
+    const { widget: id, turn, ...given } = input;
+    const widget = widgets.get(id);
+    if (widget === undefined || !widget.areas.includes(given.area))
+      return null;
+    widgetAreas.set(id, given.area);
+    const context = given.area === TurnEnd2 && turn !== undefined ? { ...given, turn } : given;
+    return drawPart(`widget:${id}`, `${widget.title} widget`, input, () => widget.render(mod(), context));
+  };
+  const press = async ({ draw: drawn, handler, args }, caller) => {
+    const known = draws.get(drawn);
+    const run = known?.handlers[handler];
+    if (known === undefined || run === undefined)
+      throw new Error(`${name}: ${stalePress}`);
+    if (caller !== cmodPluginName && known.id !== "markdown")
+      throw new Error(`${name}: ${caller} pressed a button only the cmod plugin draws.`);
+    const pressed = async () => {
+      try {
+        await run(...args);
+      } catch (error) {
+        report({ id: known.id, message: "Its button failed", error, isCritical: true });
+      }
+    };
+    if (caller === cmodPluginName)
+      return collect(pressed);
+    await pressed();
+    return null;
+  };
+  return {
+    panes: { add: addPane },
+    views: { add: (init) => addPart("view", init, "sidebar") },
+    pages: { add: (init) => addPart("page", init) },
+    settings: {
+      add: (init) => addPart("view", init, "settings"),
+      open: async () => {
+        await send({ requests: [{ settings: true }] });
+      }
+    },
+    widgets: { add: addWidget },
+    styles: { add: addStyle },
+    asked,
+    async answerInput(run, passOn) {
+      const before = unheldRequests;
+      const answer = await asked(run);
+      if (unheldRequests > before)
+        await passOn();
+      return answer;
+    },
+    answer(method, input, caller) {
+      const isMarkdown = method === partMethods.draw && isObject(input) && typeof input["markdown"] === "string";
+      if (caller !== cmodPluginName && !isMarkdown && method !== partMethods.press)
+        return;
+      if (method === partMethods.list)
+        return Promise.resolve({ value: partList() });
+      if (method === partMethods.draw)
+        return Promise.resolve().then(() => ({ value: draw(input) }));
+      if (method === partMethods.press)
+        return press(input, caller).then((value) => ({ value }));
+      if (method === partMethods.shown) {
+        shownParts = input;
+        return Promise.resolve({ value: null });
+      }
+      if (method === partMethods.stylers) {
+        hear(input, true);
+        return Promise.resolve({ value: null });
+      }
+      return;
+    },
+    markdownIn,
+    restyled: (stylers) => hear(stylers, true),
+    relisted() {
+      send({ parts: partList() });
+    },
+    started() {
+      const held = merged(beforeStart ?? []);
+      beforeStart = undefined;
+      send({ ...held, parts: partList(), isStart: true });
+    },
+    changed() {
+      if (widgets.size > 0 || parts.size > 0)
+        send({ redraw: true });
+      if (panes.size === 0 && styles.size === 0)
+        return;
+      claude.ui.invalidate("ui.render");
+      if (isResizeQueued)
+        return;
+      isResizeQueued = true;
+      Promise.resolve().then(() => {
+        isResizeQueued = false;
+        for (const { init } of panes.values()) {
+          if (openPanes.has(init.id))
+            resize(init);
+        }
+      });
+    },
+    async restorePanes() {
+      if (panes.size > 0)
+        await syncPanes();
+    }
+  };
+}
+
+// node_modules/@cmodjs/core/runtime/installer.js
+var installView = "cmod:install";
+var keptDraws = 8;
+function createInstaller(name, claude, waiting, nextDraw) {
+  let question;
+  let isOpen = false;
+  let isSeen = false;
+  let waitingForShow = [];
+  let collected;
+  const draws = new Map;
+  const send = async (update) => {
+    if (collected !== undefined)
+      return void collected.push(update);
+    await withBareRefusals(claude()).cmod.call({ to: cmodPluginName, method: partMethods.changed, input: update });
+  };
+  const log = (what) => (error) => claude().ui.warn("installer:page", `${name}: ${what}: ${messageOf(error)}`);
+  const open = (isAsked) => send({ requests: [{ open: installView, focus: true }], ...isAsked ? { isAsked: true } : {} });
+  const show = async (next, build, cancelled) => {
+    question?.cancel();
+    const answer = new Promise((resolve) => {
+      let isAnswered = false;
+      const done = (value) => {
+        if (isAnswered)
+          return;
+        isAnswered = true;
+        waiting.hide();
+        claude().clock.after(0, () => resolve(value));
+      };
+      question = { ...build(done), cancel: () => done(cancelled) };
+    });
+    waiting.show(() => open(true), next);
+    if (isOpen) {
+      await send({ redraw: true }).catch(log("the installer did not redraw"));
+    } else {
+      isOpen = true;
+      await open(false).catch((error) => {
+        isOpen = false;
+        waiting.hide();
+        throw error;
+      });
+    }
+    for (const resolve of waitingForShow)
+      resolve();
+    waitingForShow = [];
+    return answer;
+  };
+  const redraw = () => void send({ redraw: true }).catch(log("the installer did not redraw"));
+  const actions = (...buttons) => Box({ gap: 2, flexShrink: 0, children: buttons });
+  const dialog = (title, ...children) => Box({ flexDirection: "column", gap: 1, children: [title, ...children] });
+  const draw = (props) => {
+    if (question === undefined && !isOpen)
+      claude().clock.after(0, () => void send({ requests: [{ close: installView }] }).catch(log("a leftover install view stayed open")));
+    const handlers = [];
+    const tree = elementData(question?.draw(props) ?? Text({ dimColor: true, children: `${name} needs nothing from you now.` }), (run) => handlers.push(run) - 1);
+    const drawn = nextDraw();
+    draws.set(drawn, handlers);
+    for (const kept of draws.keys())
+      if (draws.size > keptDraws)
+        draws.delete(kept);
+    return { draw: drawn, tree };
+  };
+  const collect = async (run) => {
+    const outer = collected;
+    const mine = [];
+    collected = mine;
+    try {
+      await run();
+    } finally {
+      collected = outer;
+    }
+    return merged(mine);
+  };
+  const press = async ({ draw: drawn, handler, args }) => {
+    const run = draws.get(drawn)?.[handler];
+    if (run === undefined)
+      throw new Error(`${name}: ${stalePress}`);
+    return collect(() => run(...args));
+  };
+  return {
+    answer(method, input) {
+      const { page, ...props } = isObject(input) ? input : {};
+      if (method === partMethods.draw && page === installView)
+        return Promise.resolve({ value: draw({ ...props, params: undefined }) });
+      if (method === partMethods.press && isObject(input) && typeof input["draw"] === "number" && draws.has(input["draw"]))
+        return press(input).then((value) => ({ value }));
+      return;
+    },
+    hear(shown) {
+      if (shown.open.some((each) => each.id === installView)) {
+        isSeen = isOpen;
+        return;
+      }
+      if (!isSeen)
+        return;
+      isOpen = false;
+      isSeen = false;
+      question?.cancel();
+    },
+    options(missing, save) {
+      const saved = new Map;
+      const failures = new Map;
+      return show(`Enter ${missing.length === 1 ? "one setting" : `${missing.length} settings`}`, (answer) => ({
+        draw: () => dialog(Text({ bold: true, children: `Set up ${name}` }), Text({ children: `${name} needs ${missing.length === 1 ? "one setting" : `${missing.length} settings`}:` }), ...missing.map(([key, option]) => {
+          const label = Box({ flexDirection: "column", children: [Text({ bold: true, children: option.title }), ...option.description === "" ? [] : [Text({ dimColor: true, wrap: "wrap", children: option.description })]] });
+          if (option.type === "secret") {
+            return Box({ flexDirection: "column", children: [label, Text({ dimColor: true, wrap: "wrap", children: `${secretFix} Then press Next.` }), filledButton({ key: `secret:${key}`, label: "Open /config", onPress: () => void claude().command.run({ command: "config" }) })] });
+          }
+          const failure = failures.get(key);
+          const field = Input({
+            key: `option:${key}`,
+            label: "Value",
+            placeholder: option.type === "choice" ? (option.choices ?? []).join(", ") : option.type === "toggle" ? "true or false" : option.type === "list" ? "comma-separated" : "",
+            value: saved.get(key) ?? "",
+            submitLabel: "save",
+            onSubmit: (value) => void save(key, value).then((refused) => {
+              if (refused === undefined) {
+                saved.set(key, value);
+                failures.delete(key);
+              } else
+                failures.set(key, refused);
+            }).catch((error) => failures.set(key, messageOf(error))).finally(redraw)
+          });
+          const status = failure !== undefined ? [Text({ color: "error", wrap: "wrap", children: failure })] : saved.has(key) ? [Text({ color: "success", children: "✓ saved" })] : [];
+          return Box({ flexDirection: "column", children: [label, field, ...status] });
+        }), actions(filledButton({ key: "next", hotkey: "x", variant: "primary", label: "Next", onPress: () => answer(true) }), filledButton({ key: "not-now", hotkey: "n", label: "Not now", onPress: () => answer(false) })))
+      }), false);
+    },
+    step(mod, step, index, total) {
+      let notice;
+      return show(`Step ${index} of ${total}: ${step.title}`, (answer) => ({
+        draw: (props) => {
+          let body;
+          try {
+            body = step.render(mod, props);
+          } catch (error) {
+            body = Text({ color: "error", wrap: "wrap", children: `The ${step.title} step could not draw: ${messageOf(error)}` });
+          }
+          const next = async () => {
+            try {
+              if (await step.isDone(mod))
+                return answer(true);
+              notice = { color: "warning", text: `Finish ${step.title} first.` };
+            } catch (error) {
+              notice = { color: "error", text: `The ${step.title} step's isDone failed: ${messageOf(error)}` };
+            }
+            await send({ redraw: true });
+          };
+          return dialog(Text({ children: [Text({ bold: true, children: step.title }), Text({ dimColor: true, children: `  (${index} of ${total})` })] }), body, ...notice === undefined ? [] : [Text({ color: notice.color, wrap: "wrap", children: notice.text })], actions(filledButton({ key: "next", hotkey: "x", variant: "primary", label: index === total ? "Finish" : "Next", onPress: () => void next() }), filledButton({ key: "not-now", hotkey: "n", label: "Not now", onPress: () => answer(false) })));
+        }
+      }), false);
+    },
+    async close() {
+      question?.cancel();
+      question = undefined;
+      if (!isOpen)
+        return;
+      isOpen = false;
+      isSeen = false;
+      await send({ requests: [{ close: installView }] }).catch(log("the install view stayed open"));
+    },
+    changed() {
+      if (question !== undefined && isOpen)
+        redraw();
+    },
+    shown: () => new Promise((resolve) => void waitingForShow.push(resolve)),
+    collect
+  };
+}
+
+// node_modules/@cmodjs/core/runtime/options.js
+class MissingOptions extends Error {
+  keys;
+  titles;
+  constructor(keys, titles) {
+    super(`it needs ${listed(titles)}`);
+    this.keys = keys;
+    this.titles = titles;
+  }
+}
+function createOptions({ name, declared, fromClaude, claude, report, changed }) {
+  let values = merged2(declared, fromClaude, {}, new Set);
+  let locked;
+  let loadedRoot;
+  const readLocked = async () => {
+    if (Object.keys(declared).length === 0)
+      return new Set;
+    const rows = await claude.config.list().catch((error) => {
+      claude.ui.warn("options:config", `${name} could not read /config, so a project's options.json may override a value your organization set: ${messageOf(error)}`);
+      return [];
+    });
+    return new Set(rows.filter((row) => row.isLocked && row.key.startsWith(`${name}.`)).map((row) => row.key.slice(name.length + 1)));
+  };
+  const readProject = async (root) => {
+    const path = `${projectConfigFolder(root, name)}/options.json`;
+    if (!await claude.fs.exists(path))
+      return {};
+    const { values: kept, ignored } = projectOptionsOf(name, declared, await claude.fs.read(path));
+    for (const reason of ignored)
+      report({ id: `options:${path} ${reason}`, message: `Ignores part of ${path}`, description: `${path} ${reason}` });
+    return kept;
+  };
+  return {
+    get values() {
+      return values;
+    },
+    get missing() {
+      return Object.entries(declared).filter(([key, option]) => option.default === undefined && isUnset(values[key])).map(([key]) => key);
+    },
+    async load(root) {
+      if (Object.keys(declared).length === 0)
+        return;
+      locked ??= await readLocked();
+      const project = await readProject(root);
+      const isFirst = loadedRoot === undefined;
+      loadedRoot = root;
+      const next = merged2(declared, fromClaude, project, locked);
+      if (!isFirst && JSON.stringify(next) === JSON.stringify(values))
+        return;
+      values = next;
+      if (!isFirst)
+        changed();
+    }
+  };
+}
+function merged2(declared, fromClaude, project, locked) {
+  return Object.freeze(Object.fromEntries(Object.entries(declared).map(([key, option]) => [key, valueOf(key, option, fromClaude[key], project, locked)])));
+}
+function valueOf(key, option, own, project, locked) {
+  if (locked.has(key))
+    return own;
+  if (Object.hasOwn(project, key))
+    return project[key];
+  if (!isUnset(own) && fitsOption(option, own) === undefined)
+    return Array.isArray(own) ? Object.freeze([...own]) : own;
+  return option.default ?? (option.type === "list" ? Object.freeze([]) : option.type === "number" ? undefined : "");
+}
+
+// node_modules/@cmodjs/core/runtime/state.js
+var lifetimes = ["memory", "session", "project", "global"];
+var keptProjects = 20;
+var listeners = new WeakMap;
+function sessionKeyOf(name, key, session) {
+  return `${name}.${key}.sessions.${session}`;
+}
+function createState({ name, initial, session, root, claude, report, changed: redraw, forkParent }) {
+  const changed = () => {
+    redraw();
+    for (const listener of listeners.get(state) ?? [])
+      listener();
+  };
+  const declared = declaredGroups(name, initial);
+  const current = copied(declared);
+  let projectRoot = root;
+  let sessionId = session;
+  let turn = Promise.resolve();
+  const inTurn = (task) => {
+    const run = turn.then(task);
+    turn = Promise.allSettled([run]);
+    return run;
+  };
+  const ownersKey = (lifetime, key) => lifetime === "project" ? `${name}.${key}.projects.` : sessionKeyOf(name, key, "");
+  const storeKey = (lifetime, key, owner) => lifetime === "global" ? `${name}.${key}` : `${ownersKey(lifetime, key)}${owner}`;
+  const read = (lifetime, key, owner) => claude.store.get(storeKey(lifetime, key, owner));
+  const write = async (lifetime, key, value, owner) => {
+    if (lifetime !== "project")
+      return claude.store.set(storeKey(lifetime, key, owner), value);
+    await claude.store.delete(storeKey(lifetime, key, owner));
+    await claude.store.set(storeKey(lifetime, key, owner), value);
+    const owners = (await claude.store.keys()).filter((stored) => stored.startsWith(ownersKey(lifetime, key)));
+    for (const oldest of owners.slice(0, -keptProjects))
+      await claude.store.delete(oldest);
+  };
+  const transcriptsKey = `${name}.$transcripts.`;
+  const forgetEndedSessions = async (current) => {
+    const stored = await claude.store.keys();
+    const ended = async (recorded) => {
+      const transcript = await claude.store.get(recorded);
+      return typeof transcript !== "string" || !await claude.fs.exists(transcript);
+    };
+    const owners = stored.filter((key) => key.startsWith(transcriptsKey) && key !== `${transcriptsKey}${current}`);
+    await Promise.all(owners.map(async (recorded) => {
+      if (!await ended(recorded))
+        return;
+      const owner = recorded.slice(transcriptsKey.length);
+      await Promise.all(stored.filter((key) => key.startsWith(`${name}.`) && key.endsWith(`.sessions.${owner}`)).map((value) => claude.store.delete(value)));
+      await claude.store.delete(recorded);
+    }));
+  };
+  const loadGroups = async (only, next) => {
+    const loaded = [];
+    for (const lifetime of only) {
+      for (const key of Object.keys(declared[lifetime]))
+        loaded.push([lifetime, key, lifetime === "memory" ? undefined : await read(lifetime, key, lifetime === "project" ? next.root : next.session)]);
+    }
+    projectRoot = next.root;
+    sessionId = next.session;
+    for (const [lifetime, key, saved] of loaded)
+      current[lifetime][key] = saved === undefined ? declared[lifetime][key] : frozen(name, `${lifetime}.${key}`, saved);
+    changed();
+  };
+  const copySession = async (from, to) => {
+    for (const key of Object.keys(declared.session)) {
+      const saved = await read("session", key, from);
+      if (saved !== undefined)
+        await write("session", key, saved, to);
+    }
+  };
+  const hasSaved = async (owner) => (await claude.store.keys()).some((key) => key.startsWith(`${name}.`) && key.endsWith(`.sessions.${owner}`));
+  const group = (lifetime) => new Proxy(current[lifetime], {
+    set(target, key, value) {
+      if (typeof key !== "string")
+        throw new Error(`${name}: mod.state.${lifetime} keys are text, not ${String(key)}.`);
+      if (!Object.hasOwn(declared[lifetime], key))
+        throw new Error(`${name}: mod.state.${lifetime}.${key} is not declared. Add it to state.${lifetime} in defineMod with its starting value.`);
+      if (Object.is(target[key], value))
+        return true;
+      target[key] = frozen(name, `${lifetime}.${key}`, value);
+      if (lifetime !== "memory") {
+        const owner = lifetime === "project" ? projectRoot : sessionId;
+        inTurn(() => write(lifetime, key, value, owner)).catch((error) => {
+          report({ id: `state:${lifetime}.${key}`, message: `Could not keep state.${lifetime}.${key}`, error });
+        });
+      }
+      changed();
+      return true;
+    }
+  });
+  const state = Object.freeze(Object.fromEntries(Object.keys(initial).map((lifetime) => [lifetime, group(lifetime)])));
+  return {
+    state,
+    get root() {
+      return projectRoot;
+    },
+    changed,
+    load: () => inTurn(async () => {
+      if (Object.keys(declared.session).length > 0 && !await hasSaved(sessionId)) {
+        const parent = await forkParent();
+        if (parent !== undefined)
+          await copySession(parent, sessionId);
+      }
+      return loadGroups(lifetimes, { root: projectRoot, session: sessionId });
+    }),
+    moveTo: (nextRoot) => inTurn(async () => nextRoot === projectRoot ? undefined : loadGroups(["project"], { root: nextRoot, session: sessionId })),
+    switchSession: (nextSession, source, transcript) => inTurn(async () => {
+      if (Object.keys(declared.session).length > 0) {
+        await claude.store.set(`${transcriptsKey}${nextSession}`, transcript);
+        forgetEndedSessions(nextSession).catch((error) => report({ id: "state:sessions", message: "Could not forget the session values of ended sessions", error }));
+      }
+      if (nextSession === sessionId)
+        return;
+      if (source === "fork")
+        await copySession(sessionId, nextSession);
+      return loadGroups(["memory", "session"], { root: projectRoot, session: nextSession });
+    })
+  };
+}
+function declaredGroups(name, initial) {
+  const groups = { memory: {}, session: {}, project: {}, global: {} };
+  for (const [lifetime, values] of Object.entries(initial)) {
+    if (!isLifetime(lifetime))
+      throw new Error(`${name}: state.${lifetime} is not a lifetime. Put each value in state.memory, state.session, state.project, or state.global.`);
+    if (!isPlainObject(values))
+      throw new Error(`${name}: state.${lifetime} is not an object of values. Write state: { ${lifetime}: { key: value } }.`);
+    for (const [key, value] of Object.entries(values))
+      groups[lifetime][key] = frozen(name, `${lifetime}.${key}`, value);
+  }
+  return groups;
+}
+function copied(groups) {
+  return { memory: { ...groups.memory }, session: { ...groups.session }, project: { ...groups.project }, global: { ...groups.global } };
+}
+function isLifetime(group) {
+  return lifetimes.includes(group);
+}
+function frozen(name, path, value) {
+  const isArray = Array.isArray(value);
+  if (!isArray && !isPlainObject(value))
+    return value;
+  const copy = isArray ? value.map((item) => frozen(name, path, item)) : Object.fromEntries(Object.entries(value).map(([field, item]) => [field, frozen(name, path, item)]));
+  const example = isArray ? `mod.state.${path} = [...mod.state.${path}, item]` : `mod.state.${path} = { ...mod.state.${path}, field: value }`;
+  const refuse = () => {
+    throw new Error(`${name}: mod.state.${path} cannot change in place. Assign it a new value, such as ${example}, so the mod redraws and keeps it.`);
+  };
+  return new Proxy(Object.freeze(copy), { set: refuse, defineProperty: refuse, deleteProperty: refuse });
+}
+function isPlainObject(value) {
+  if (typeof value !== "object" || value === null)
+    return false;
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
+}
+
+// node_modules/@cmodjs/core/runtime/toaster.js
+var failedMethod = "cmod:failed";
+var githubRepository = /^https:\/\/github\.com\/([^/]+\/[^/#?]+?)(?:\.git)?(?:\/issues)?\/?$/;
+var linkLimit = 2048;
+var hiddenKey = "cmod:hidden-failures";
+var failedCallMs = 30000;
+var logAgainMs = [1e4, 60000, 300000];
+var defaultDuration = 4000;
+var visibleToasts = 3;
+var columnGap = 2;
+var nameColumn = 16;
+var spinner = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+var spinnerMs = 100;
+var spinFrames = 1e4 / spinnerMs;
+var still = "…";
+var icons = {
+  default: { glyph: " " },
+  success: { glyph: "✓", color: "success" },
+  info: { glyph: "ℹ", color: "suggestion" },
+  warning: { glyph: "⚠", color: "warning" },
+  error: { glyph: "✗", color: "error" }
+};
+function createToaster(claude, name, version) {
+  const entries = new Map;
+  const hidden = new Map;
+  const sent = new Map;
+  claude.store.get(hiddenKey).then((saved) => {
+    if (typeof saved !== "object" || saved === null)
+      return;
+    for (const [id, hides] of Object.entries(saved))
+      if (typeof hides === "string" && !hidden.has(id))
+        hidden.set(id, hides);
+  }, (error) => warn("hidden:read", `${name}: could not read the failures you hid: ${messageOf(error)}`));
+  let lastId = 0;
+  let frame = 0;
+  let spinning;
+  let isHeld = false;
+  let showsAll = false;
+  let bandId;
+  const isLoading = (entry) => entry.type === "loading" || entry.trying !== undefined;
+  const isSpinning = (entry) => entry.spinsFrom !== undefined && frame - entry.spinsFrom < spinFrames;
+  const changed = () => {
+    for (const entry of entries.values())
+      entry.spinsFrom = isLoading(entry) ? entry.spinsFrom ?? frame : undefined;
+    const spins = [...entries.values()].some(isSpinning);
+    if (spins && spinning === undefined) {
+      spinning = claude.clock.every(spinnerMs, () => {
+        frame += 1;
+        changed();
+      });
+    }
+    if (!spins && spinning !== undefined) {
+      spinning.cancel();
+      spinning = undefined;
+    }
+    if (entries.size <= visibleToasts)
+      showsAll = false;
+    claude.ui.invalidate("ui.render");
+  };
+  const disarm = (entry) => {
+    entry.timer?.cancel();
+    entry.timer = undefined;
+  };
+  const arm = (entry) => {
+    const duration = entry.options.duration ?? defaultDuration;
+    if (entry.timer !== undefined || entry.type === "loading" || entry.isOpen || !Number.isFinite(duration))
+      return;
+    entry.timer = claude.clock.after(duration, () => {
+      entry.timer = undefined;
+      if (isHeld)
+        arm(entry);
+      else
+        dismiss(entry.id);
+    });
+  };
+  const dismiss = (id) => {
+    if (id === undefined)
+      sent.clear();
+    else
+      sent.delete(String(id));
+    for (const entry of entries.values()) {
+      if (id !== undefined && entry.id !== id && !entry.merged.has(String(id)))
+        continue;
+      for (const merged of entry.merged.keys())
+        sent.delete(merged);
+      disarm(entry);
+      entries.delete(entry.id);
+    }
+    changed();
+  };
+  const put = (type, message, options, actions, hides) => {
+    const id = options.id ?? (lastId += 1);
+    const previous = entries.get(id);
+    if (previous?.trying !== undefined && type === "loading") {
+      previous.trying = options.description ?? message;
+      changed();
+      return id;
+    }
+    if (previous !== undefined)
+      disarm(previous);
+    const reporting = hides !== undefined && previous?.hides === hides ? previous.reporting : undefined;
+    const entry = { id, type, message, options, actions, ...hides === undefined ? {} : { hides }, merged: new Map, count: 1, at: new Date, isOpen: previous?.isOpen ?? false, reporting, timer: undefined };
+    if (type === "error" && previous?.message !== message)
+      claude.ui.log(`${name}: ${message}${typeof options.description === "string" ? `: ${options.description}` : ""}`, { to: "debug" });
+    entries.set(id, entry);
+    changed();
+    return id;
+  };
+  const show = (type) => (message, options = {}) => put(type, message, options, options.action === undefined ? [] : [options.action]);
+  const hide = (entry) => {
+    dismiss(entry.id);
+    if (entry.hides === undefined)
+      return;
+    for (const [id, hides] of [[String(entry.id), entry.hides], ...entry.merged])
+      hidden.set(id, hides);
+    claude.store.set(hiddenKey, Object.fromEntries(hidden)).catch((error) => warn("hidden:write", `${name}: could not remember the failure you hid: ${messageOf(error)}`));
+  };
+  const toast = Object.assign(show("default"), {
+    success: show("success"),
+    info: show("info"),
+    warning: show("warning"),
+    error: show("error"),
+    loading: show("loading"),
+    dismiss,
+    promise(task, messages) {
+      const id = show("loading")(messages.loading);
+      const settled = Promise.resolve().then(() => typeof task === "function" ? task() : task).then((value) => {
+        show("success")(typeof messages.success === "function" ? messages.success(value) : messages.success, { id });
+        return value;
+      }, (error) => {
+        show("error")(typeof messages.error === "function" ? messages.error(error) : messages.error, { id });
+        throw error;
+      });
+      settled.catch(() => {
+        return;
+      });
+      return { unwrap: () => settled };
+    }
+  });
+  const copy = async (text) => {
+    const copied = await claude.ui.copy({ text });
+    if (!copied.isCopied)
+      throw new Error(copied.reason);
+  };
+  const press = (entry, run) => () => void Promise.resolve().then(run).catch((error) => fail({ id: `press:${entry.id}`, message: `${entry.message}: the press failed`, error, isCritical: true }));
+  const logFailure = (failure) => claude.cmod.call({ to: cmodPluginName, method: failedMethod, input: failure });
+  const modVersion = () => claude.fs.read(`${claude.plugin.root}/.claude-plugin/plugin.json`).then((text) => String(JSON.parse(text).version)).catch((failure) => `unknown (${messageOf(failure)})`);
+  const detailsOf = (version, at, text) => `${name} ${version}, @cmodjs/core ${coreVersion}, at ${at.toISOString()}
+${text}`;
+  const warned = new Map;
+  const warn = (id, text) => {
+    claude.ui.log(text, { to: "debug" });
+    const at = new Date;
+    const repeat = `${text}
+${at.toISOString().slice(0, 16)}`;
+    if (warned.get(id) === repeat)
+      return;
+    warned.set(id, repeat);
+    claude.clock.after(0, () => {
+      (async () => {
+        const version = await modVersion();
+        await logFailure({ mod: name, id, message: text, details: detailsOf(version, at, text), at: at.toISOString(), isCritical: false, root: claude.plugin.root, level: "warning", version, core: coreVersion });
+      })().catch(() => {
+        return;
+      });
+    });
+  };
+  const showsToast = async (failure, isShown) => {
+    const call = { isSettled: false };
+    try {
+      const logged = logFailure(failure).finally(() => void (call.isSettled = true));
+      const answer = await (isShown ? logged : beforeDeadline(claude.clock, { ms: failedCallMs }, failedMethod, () => logged));
+      if (isObject(answer) && typeof answer["showsToast"] === "boolean")
+        return answer["showsToast"];
+      throw new Error(`cmod answered ${answer === undefined ? "nothing" : JSON.stringify(answer)}, not { showsToast: true or false }`);
+    } catch (error) {
+      if (!call.isSettled || isUnanswered(error))
+        return "unanswered";
+      claude.ui.log(`${name}: cmod kept no Log of ${failure.id}, so it shows the toast: ${messageOf(error)}`, { to: "debug" });
+      return;
+    }
+  };
+  const fail = ({ id, message, error, description = error === undefined || describe(error) === message ? undefined : describe(error), retry, isCritical = false, root = claude.plugin.root }) => {
+    if (!isCritical && isUnanswered(error)) {
+      warn(id, `${name}: ${message}: ${describe(error)}`);
+      return id;
+    }
+    const hides = `${version() ?? ""}
+${message}
+${error === undefined ? "" : describe(error)}`;
+    const at = new Date;
+    const repeat = `${hides}
+${description ?? ""}
+${at.toISOString().slice(0, 16)}`;
+    if (sent.get(id) === repeat)
+      return id;
+    sent.set(id, repeat);
+    const stack = error instanceof Error && error.stack !== undefined ? `
+
+${error.stack}` : "";
+    const details = async (failedAt) => detailsOf(await modVersion(), failedAt, `${message}${description === undefined ? "" : `
+${description}`}${stack}`);
+    const logged = async (tries = 0) => {
+      const contact = await contactOf(claude);
+      const version = await modVersion();
+      const failure = { mod: name, id, message, details: detailsOf(version, at, `${message}${description === undefined ? "" : `
+${description}`}${stack}`), at: at.toISOString(), isCritical, root, ...contact === undefined ? {} : { contact }, level: "error", version, core: coreVersion };
+      const shows = await showsToast(failure, isCritical);
+      const wait = logAgainMs[tries];
+      if (shows === "unanswered" && wait !== undefined)
+        return void claude.clock.after(wait, () => void logged(tries + 1));
+      if (shows === "unanswered")
+        claude.ui.log(`${name}: cmod did not answer ${logAgainMs.length + 1} times, so ${id} reached no Log and shows its toast`, { to: "debug" });
+      if (isCritical)
+        return;
+      if (shows !== false)
+        return show();
+      claude.ui.log(`${name}: ${message}${description === undefined ? "" : `: ${description}`}`, { to: "debug" });
+    };
+    const show = () => {
+      if (hidden.get(id) === hides)
+        return;
+      hidden.delete(id);
+      const own = entries.get(id);
+      const text = description ?? message;
+      const shown = own === undefined ? [...entries.values()].find((entry) => entry.hides !== undefined && entry.trying === undefined && (entry.options.description ?? entry.message) === text) : own.hides === hides && own.trying === undefined && own.options.description === description ? own : undefined;
+      if (shown !== undefined) {
+        if (shown !== own)
+          shown.merged.set(id, hides);
+        shown.count += 1;
+        shown.at = new Date;
+        changed();
+        return;
+      }
+      const actions = [{ label: "Report", onClick: startReporting }, ...retry === undefined ? [] : [{ label: "Retry", onClick: tryAgain }], ...fixes];
+      put("error", message, { id, ...description === undefined ? {} : { description }, duration: Infinity }, actions, hides);
+    };
+    const startReporting = async () => {
+      const shown = entries.get(id);
+      if (shown === undefined)
+        return;
+      shown.reporting = { contact: await contactOf(claude), details: await details(shown.at) };
+      disarm(shown);
+      changed();
+      if (bandId === undefined)
+        return;
+      const focused = await claude.ui.focus({ requestId: bandId, key: `toast:${id}:ask-claude` });
+      if ("deny" in focused)
+        warn("report:focus", `${name}: the Report choices did not take the keys: ${String(focused.deny)}`);
+    };
+    const tryAgain = async () => {
+      const shown = entries.get(id);
+      if (shown === undefined || retry === undefined || shown.trying !== undefined)
+        return;
+      shown.trying = "Starting";
+      changed();
+      try {
+        await retry();
+      } finally {
+        if (entries.get(id) === shown) {
+          shown.trying = undefined;
+          changed();
+        }
+      }
+    };
+    const fixes = [
+      { sentence: installFix, label: "Plugins", onClick: () => claude.command.run({ command: "plugin" }) },
+      { sentence: secretFix, label: "Open /config", onClick: () => claude.command.run({ command: "config" }) }
+    ].filter(({ sentence }) => `${message}
+${description ?? ""}`.includes(sentence));
+    if (isCritical)
+      show();
+    claude.clock.after(0, () => void logged());
+    return id;
+  };
+  const toggle = (entry) => () => {
+    entry.isOpen = !entry.isOpen;
+    disarm(entry);
+    changed();
+  };
+  const row = (entry, columns) => {
+    const { description } = entry.options;
+    const isText = typeof description === "string";
+    const icon = entry.type === "loading" || entry.trying !== undefined ? { glyph: isSpinning(entry) ? spinner[frame % spinner.length] : still, color: "claude" } : icons[entry.type];
+    const message = isText ? Button({ plain: true, key: `toast:${entry.id}:open`, label: entry.message, onPress: toggle(entry) }) : Text({ children: entry.message });
+    const details = !isText ? description : Text({ dimColor: true, wrap: entry.isOpen ? "wrap" : "truncate-end", children: entry.isOpen ? description : firstLine(description) });
+    const fixed = (child) => Box({ flexShrink: 0, children: child });
+    const close = Button({ plain: true, dimColor: true, key: `toast:${entry.id}:close`, label: "✕", onPress: () => hide(entry) });
+    const actions = entry.actions.map((action, index) => Button({ plain: true, key: `toast:${entry.id}:${index === 0 ? "action" : `action-${index}`}`, label: action.label, onPress: press(entry, action.onClick) }));
+    const time = Text({ dimColor: true, children: entry.count > 1 ? `${clockTime(entry.at)} · ${entry.count} times` : clockTime(entry.at) });
+    const buttons = actions.length === 0 ? [] : [Box({ gap: columnGap, flexWrap: "wrap", children: [...actions, time].map(fixed) })];
+    const trying = entry.trying === undefined ? undefined : Box({ gap: 1, children: [Text({ dimColor: true, children: "Trying again:" }), typeof entry.trying === "string" ? Text({ dimColor: true, wrap: "truncate-end", children: entry.trying }) : entry.trying] });
+    const text = details === undefined ? [] : [trying ?? details];
+    const under = trying !== undefined && details === undefined ? [trying] : entry.reporting === undefined ? buttons : reportChoices(entry, entry.reporting);
+    return Box({
+      width: columns,
+      gap: columnGap,
+      justifyContent: "space-between",
+      children: [
+        Box({
+          gap: columnGap,
+          flexShrink: 1,
+          children: [
+            fixed(Text({ ...icon.color === undefined ? {} : { color: icon.color }, children: icon.glyph })),
+            fixed(Text({ dimColor: true, children: name.padEnd(nameColumn) })),
+            Box({ flexDirection: "column", flexShrink: 1, children: [message, ...text, ...under] })
+          ]
+        }),
+        fixed(close)
+      ]
+    });
+  };
+  const reportChoices = (entry, { contact, details, status }) => {
+    const say = (said) => {
+      entry.reporting = { contact, details, status: said };
+      changed();
+    };
+    const back = () => {
+      entry.reporting = undefined;
+      changed();
+    };
+    const askClaude = async () => {
+      await claude.prompt.submit({ text: reportPrompt(name, contact, details), asUser: true });
+      back();
+    };
+    const copyError = async () => {
+      const copied = await claude.ui.copy({ text: details });
+      say(copied.isCopied ? "Copied the error." : `Could not copy it: ${copied.reason}`);
+    };
+    const report = contact === undefined ? [] : [reportLink(`toast:${entry.id}:report`, contact, name, entry.message, details)];
+    return [
+      Text({ dimColor: true, children: "Claude writes up the problem and files it with your tools. You approve each step before anything is posted." }),
+      Box({
+        gap: 2,
+        flexWrap: "wrap",
+        children: [
+          Button({ plain: true, key: `toast:${entry.id}:ask-claude`, label: "Ask Claude to report it", onPress: press(entry, askClaude) }),
+          ...report,
+          Button({ plain: true, key: `toast:${entry.id}:copy`, label: "Copy the error", onPress: press(entry, copyError) }),
+          Button({ plain: true, dimColor: true, key: `toast:${entry.id}:back`, label: "Back", onPress: back })
+        ]
+      }),
+      ...status === undefined ? [] : [Text({ dimColor: true, children: status })]
+    ];
+  };
+  return {
+    toast,
+    copy,
+    fail,
+    warn,
+    get shown() {
+      return [...entries.values()].map(({ type, message, options }) => ({ type, message, ...typeof options.description === "string" ? { description: options.description } : {} }));
+    },
+    draw(drawn, table, band, drawnIn) {
+      bandId = drawnIn;
+      isHeld = band.hasSurvey === true;
+      if (isHeld || entries.size === 0)
+        return drawn;
+      const all = [...entries.values()];
+      const hidden = showsAll ? 0 : Math.max(all.length - visibleToasts, 0);
+      for (const entry of all.slice(hidden))
+        arm(entry);
+      const more = Button({
+        plain: true,
+        dimColor: true,
+        key: "toasts:more",
+        label: `+${hidden} more`,
+        onPress: () => {
+          showsAll = true;
+          changed();
+        }
+      });
+      return drawWith(table, () => Box({ flexDirection: "column", children: [drawn, ...hidden > 0 ? [more] : [], ...all.slice(hidden).map((entry) => row(entry, band.bodyColumns))] }));
+    }
+  };
+}
+function describe(error) {
+  const messages = [];
+  for (let cause = error;cause !== undefined; cause = cause instanceof Error ? cause.cause : undefined) {
+    const text = messageOf(cause);
+    if (!messages.some((earlier) => earlier.includes(text) || text.includes(earlier)))
+      messages.push(text);
+  }
+  return messages.join(`
+`);
+}
+async function contactOf(claude) {
+  const manifest = await claude.fs.read(`${claude.plugin.root}/.claude-plugin/plugin.json`).then((text) => JSON.parse(text)).catch((error) => {
+    claude.ui.log(`${claude.plugin.name}: could not read whom to report to: ${messageOf(error)}`, { to: "debug" });
+    return {};
+  });
+  const repositoryUrl = isObject(manifest["repository"]) ? manifest["repository"]["url"] : manifest["repository"];
+  const repository = [manifest["supportUrl"], repositoryUrl].map((url) => typeof url === "string" ? githubRepository.exec(url)?.[1] : undefined).find((found) => found !== undefined);
+  if (repository !== undefined)
+    return { kind: "github", repository };
+  const author = manifest["author"];
+  const address = isObject(author) ? author["email"] : undefined;
+  return typeof address === "string" && address !== "" ? { kind: "email", address } : undefined;
+}
+function reportLink(key, contact, name, message, details) {
+  const title = `${name}: ${message}`.slice(0, 120);
+  const linkOf = (body) => contact.kind === "github" ? `https://github.com/${contact.repository}/issues/new?title=${encodeURIComponent(title)}&body=${encodeURIComponent(body)}` : `mailto:${contact.address}?subject=${encodeURIComponent(title)}&body=${encodeURIComponent(body)}`;
+  let body = details;
+  while (linkOf(body).length > linkLimit && body.length > 0)
+    body = `${body.slice(0, Math.floor(body.length * 0.8))}…`;
+  return Button({ plain: true, key, href: linkOf(body), label: contact.kind === "github" ? "Report it on GitHub (opens your browser)" : "Email the author (opens your mail app)" });
+}
+function reportPrompt(name, contact, details) {
+  const where = contact === undefined ? `${name} names no place to report it, so find its author from its plugin.json or its marketplace.` : contact.kind === "github" ? `Report it as an issue on https://github.com/${contact.repository}.` : `Email it to ${contact.address}.`;
+  return `The ${name} mod failed. Report it to its author. ${where} First check whether it is reported already, and add to that report instead of filing a new one. Show me the report before you post it.
+
+${details}`;
+}
+function clockTime(at) {
+  return `${String(at.getHours()).padStart(2, "0")}:${String(at.getMinutes()).padStart(2, "0")}`;
+}
+
+// node_modules/@cmodjs/core/runtime/hotkeys.js
+async function readCombos(claude, configRoot) {
+  if (configRoot === undefined)
+    return new Map;
+  const text = await claude.fs.read(`${configRoot}/keybindings.json`).catch(ifMissing("{}"));
+  try {
+    return boundCombos(JSON.parse(text));
+  } catch (error) {
+    claude.ui.warn("hotkeys:read", `${configRoot}/keybindings.json is not JSON, so cmod reads no combos from it: ${messageOf(error)}`);
+    return new Map;
+  }
+}
+async function createHotkeys({ name, declared, configRoot, claude, router, answerInput, report }) {
+  if (name === cmodPluginName) {
+    router.add("command.describe", async (e, next) => {
+      const described = await next(e);
+      return e.command.startsWith(hotkeyCommand(e.provider.plugin.replace(/@[^@]*$/, ""), "")) ? { ...described, isHidden: true } : described;
+    });
+  }
+  const entries = Object.entries(declared);
+  if (entries.length === 0)
+    return {};
+  const combos = await readCombos(claude, configRoot);
+  const listeners = new Map;
+  const commands = new Map;
+  for (const [hotkey, { title }] of entries) {
+    listeners.set(hotkey, new Set);
+    claude.command.register({ name: hotkeyCommand(name, hotkey), description: title, immediate: true }).then(({ command }) => void commands.set(command, hotkey), (error) => report({ id: `hotkey:${hotkey}`, message: `The ${title} hotkey is not added`, error }));
+  }
+  router.add("command.run", async (e, next) => {
+    const hotkey = commands.get(e.command);
+    if (hotkey === undefined)
+      return next(e);
+    return answerInput(async () => {
+      for (const listener of listeners.get(hotkey) ?? []) {
+        try {
+          await listener();
+        } catch (error) {
+          report({ id: `hotkey:${hotkey}`, message: `The ${declared[hotkey]?.title ?? hotkey} hotkey failed`, error, isCritical: true });
+        }
+      }
+      return {};
+    }, () => next(e));
+  });
+  return Object.fromEntries(entries.map(([hotkey, { title }]) => [
+    hotkey,
+    {
+      title,
+      combo: combos.get(hotkeyCommand(name, hotkey)),
+      onPress(listener) {
+        listeners.get(hotkey)?.add(listener);
+        return { remove: () => void listeners.get(hotkey)?.delete(listener) };
+      }
+    }
+  ]));
+}
+
+// node_modules/@cmodjs/core/runtime/parts.js
+var keptDrawings = 200;
+function drawnParts({ claude, report, press }) {
+  const drawn = new Map;
+  const drawing = new Map;
+  const generations = new Map;
+  const keyOf = (mod, cached) => `${mod}\x00${cached}`;
+  const generationOf = (mod) => generations.get(mod) ?? 0;
+  return {
+    fill(mod, cached, input, name) {
+      const key = keyOf(mod, cached);
+      const generation = generationOf(mod);
+      if (drawn.get(key)?.generation === generation)
+        return;
+      const keep = (data, failure) => {
+        drawn.delete(key);
+        drawn.set(key, { data, ...failure === undefined ? {} : { failure }, generation });
+        const [oldest] = drawn.keys();
+        if (drawn.size > keptDrawings && oldest !== undefined)
+          drawn.delete(oldest);
+        if (generationOf(mod) !== generation)
+          claude.ui.invalidate("ui.render");
+      };
+      const pending = drawing.get(key) ?? claude.cmod.call({ to: mod, method: partMethods.draw, input }).then((data) => keep(data ?? null), (error) => {
+        if (isStillInstalling(mod, error))
+          return keep(drawn.get(key)?.data ?? null);
+        report(`draw:${mod}`, `${name} drew nothing`, error);
+        keep(drawn.get(key)?.data ?? null, messageOf(error));
+      }).finally(() => drawing.delete(key));
+      drawing.set(key, pending);
+      return pending;
+    },
+    element(mod, cached, keyPrefix, name, reportId) {
+      const key = keyOf(mod, cached);
+      const entry = drawn.get(key);
+      if (entry === undefined)
+        return;
+      drawn.delete(key);
+      drawn.set(key, entry);
+      const { data } = entry;
+      if (data === null || data.tree === null)
+        return;
+      try {
+        return elementOf(data.tree, keyPrefix, (handler, args) => press(mod, { draw: data.draw, handler, args }));
+      } catch (error) {
+        report(reportId, `${name} could not draw`, error);
+        return;
+      }
+    },
+    failure(mod, cached) {
+      return drawn.get(keyOf(mod, cached))?.failure;
+    },
+    forget(mod) {
+      generations.set(mod, generationOf(mod) + 1);
+    }
+  };
+}
+
+// node_modules/@cmodjs/core/runtime/watches.js
+var watchMs = 500;
+var missingEvery = 4;
+var watchedFiles = 2000;
+function createWatches(claude, report) {
+  const watches = new Set;
+  let polling;
+  let isPolling = false;
+  let ticks = 0;
+  const stampsOf = async (watch) => {
+    const { paths } = watch;
+    const stamps = new Map;
+    const missing = new Set;
+    const skipped = ticks % missingEvery === 0 ? new Set : watch.missing;
+    const visit = async (path) => {
+      const stat = await claude.fs.stat(path).catch(ifMissing(undefined));
+      if (stat === undefined)
+        return;
+      if (stat.kind !== "dir") {
+        if (stamps.size === watchedFiles)
+          throw new Error(`fs.onChange watches at most ${watchedFiles} files, and ${paths.join(", ")} holds more, so it stopped. Watch a smaller folder.`);
+        return void stamps.set(path, stat.mtimeMs);
+      }
+      for (const entry of await claude.fs.list(path).catch(ifMissing([])))
+        await visit(`${path}/${entry.name}`);
+    };
+    for (const path of paths) {
+      if (skipped.has(path)) {
+        missing.add(path);
+        continue;
+      }
+      await visit(path);
+      if (![...stamps.keys()].some((seen) => seen === path || seen.startsWith(`${path}/`)))
+        missing.add(path);
+    }
+    watch.missing = missing;
+    return stamps;
+  };
+  const stop = (watch) => {
+    watches.delete(watch);
+    if (watches.size > 0)
+      return;
+    polling?.cancel();
+    polling = undefined;
+  };
+  const stampsOrStop = (watch) => stampsOf(watch).catch((error) => {
+    stop(watch);
+    report({ id: "fs:onChange", message: "Could not read the files fs.onChange watches", error });
+    return;
+  });
+  const poll = async () => {
+    if (isPolling)
+      return;
+    isPolling = true;
+    ticks += 1;
+    try {
+      for (const watch of watches) {
+        const now = await stampsOrStop(watch);
+        if (now === undefined)
+          continue;
+        const before = watch.seen;
+        watch.seen = now;
+        if (before === undefined)
+          continue;
+        const changes = [
+          ...[...now].filter(([path, at]) => before.has(path) && before.get(path) !== at).map(([path]) => ({ path, type: "change" })),
+          ...[...now.keys()].filter((path) => !before.has(path)).map((path) => ({ path, type: "add" })),
+          ...[...before.keys()].filter((path) => !now.has(path)).map((path) => ({ path, type: "unlink" }))
+        ];
+        for (const change of changes)
+          await Promise.resolve().then(() => watch.listener(change)).catch((error) => report({ id: "fs:onChange", message: "The fs.onChange listener failed", error }));
+      }
+    } finally {
+      isPolling = false;
+    }
+  };
+  return {
+    add(paths, listener) {
+      const watch = { paths, listener, seen: undefined, missing: new Set };
+      watches.add(watch);
+      stampsOrStop(watch).then((stamps) => void (watch.seen ??= stamps));
+      polling ??= claude.clock.every(watchMs, () => void poll());
+      return { remove: () => stop(watch) };
+    }
+  };
+}
+
+// node_modules/@cmodjs/core/ui/components.js
+function Progress({ value, width = 24 }) {
+  const filled = Math.round(Math.min(Math.max(value, 0), 100) / 100 * width);
+  return Text({ children: [Text({ color: "claude", children: "█".repeat(filled) }), Text({ color: "subtle", children: "░".repeat(width - filled) })] });
+}
+
+// node_modules/@cmodjs/core/runtime/lifecycle.js
+var listenMethods = [conversationMethods.subscribe, conversationMethods.watchBefore];
+var answeredAtOnce = [...listenMethods, partMethods.draw];
+var announcedKey = "cmod:announced";
+var cmodUpdatedKey = "cmod:cmod-updated-for";
+var installId = "cmod:install";
+var askingId = "cmod:asking";
+var recordId = "cmod:record";
+var downloadId = "cmod:download";
+var installRetrySeconds = [2, 4, 8, 16, 32, 64, 128];
+var cmodCheckMs = 1000;
+var recordCheckMs = 1000;
+var drawsPerMs = 1000;
+var cmodWaitMs = 60000;
+var cmodSlowCheckMs = 1e4;
+var startHoldMs = hookMs / 2;
+var stallTicks = 3;
+var stallMs = 60000;
+var settingsLoadMs = 500;
+var shellTools = ["Bash", "PowerShell"];
+async function readPlugin(claude) {
+  const { name, root } = claude.plugin;
+  const read = async (path) => {
+    const stat = await claude.fs.stat(path).catch(ifMissing(undefined));
+    return stat?.kind === "file" ? claude.fs.read(path) : undefined;
+  };
+  const manifest = await readJson(read, `${root}/.claude-plugin/plugin.json`);
+  const version = typeof manifest?.version === "string" ? manifest.version : undefined;
+  const store = await cmodStore(claude);
+  const steps = readSteps(await readJson(read, `${root}/package.json`)) ?? {};
+  if (name === cmodPluginName) {
+    const installed = await newestCmodVersion(claude);
+    return { name, root, version, store, steps, isInstalled: version !== undefined && installed !== undefined && isAtLeast(installed, version), shouldRecord: false };
+  }
+  const plugin = { name, root, version, store, steps };
+  const record = await readRecord(read, store, name);
+  if (Object.keys(steps).length === 0)
+    return { ...plugin, isInstalled: true, shouldRecord: record?.version !== version };
+  const scripts = await scriptsSha256(steps, {
+    read: (path) => read(`${root}/${path}`),
+    list: (folder) => filesBelow(claude, `${root}/${folder}`)
+  });
+  if (version === undefined || record?.scriptsSha256 !== scripts)
+    return { ...plugin, isInstalled: false, shouldRecord: false };
+  const isInstalled = record.version === version || record.root === root;
+  const modifiedMs = await programModifiedMs(async (path) => (await claude.fs.stat(path).catch(ifMissing(undefined)))?.mtimeMs, store, record);
+  return { ...plugin, isInstalled, shouldRecord: isInstalled && (record.version !== version || isProgramNewer(record, modifiedMs)) };
+}
+async function filesBelow(claude, folder) {
+  const entries = await claude.fs.list(folder);
+  const paths = await Promise.all(entries.map(async ({ name, kind, isLink }) => {
+    if (kind === "file" || isLink)
+      return [name];
+    if (kind === "dir")
+      return (await filesBelow(claude, `${folder}/${name}`)).map((path) => `${name}/${path}`);
+    return [];
+  }));
+  return paths.flat();
+}
+async function readJson(read, path) {
+  const text = await read(path);
+  if (text === undefined)
+    return;
+  try {
+    return JSON.parse(text);
+  } catch (error) {
+    throw new Error(`${path} is not JSON (${messageOf(error)}). Fix it, then press Retry.`);
+  }
+}
+function createLifecycle(definition, permissionRoutes = () => {
+  return;
+}, options = {}, asksPerson = true, serveCmodPlugin) {
+  let router = createRouter();
+  let startingRouter;
+  let phase = "starting";
+  let runtime;
+  let programs;
+  let plugin;
+  let activation;
+  let mod;
+  const openSettings = async () => {
+    await claude().cmod.call({ to: cmodPluginName, method: partMethods.changed, input: { requests: [{ settings: true }], isAsked: true } });
+  };
+  let imports;
+  let raise;
+  let settingsLoaded;
+  let failure;
+  let pluginOptions = options;
+  let drawCount = 0;
+  const nextDraw = () => drawCount += 1;
+  const installer = createInstaller(definition.name, () => claude(), {
+    show: (open, next) => {
+      if (phase !== "active")
+        runtime?.toaster.toast.dismiss(installId);
+      runtime?.toaster.toast.info("Finish setting up", { id: askingId, description: next, duration: Infinity, action: { label: "Continue", onClick: open } });
+    },
+    hide: () => runtime?.toaster.toast.dismiss(askingId)
+  }, nextDraw);
+  let shouldRecord = false;
+  let recording;
+  let missedSessionStart;
+  let hasHeardSessionStart = false;
+  const heldListens = new Map;
+  let settleStart = () => {
+    return;
+  };
+  const startSettled = new Promise((resolve) => settleStart = resolve);
+  let installSettled;
+  let settleInstall = () => {
+    return;
+  };
+  const whenInstalled = () => phase === "installing" || phase === "waiting" ? installSettled ??= new Promise((resolve) => {
+    settleInstall = () => {
+      installSettled = undefined;
+      resolve();
+    };
+  }) : undefined;
+  const claude = () => {
+    if (runtime === undefined)
+      throw new Error(`${definition.name}: the lifecycle has not started. registerMod(addHook, mod, options) starts it at session.start.`);
+    return runtime.claude;
+  };
+  const installing = (description) => runtime?.toaster.toast.loading("Installing", { id: installId, ...description === undefined ? {} : { description } });
+  const toastFailure = (shown) => runtime?.toaster.fail(shown);
+  const fail = (reason, fix, retry, error) => {
+    phase = "failed";
+    settleInstall();
+    failure ??= new Error(`${definition.name}: ${reason}${/[.!?]$/.test(reason) ? "" : "."}${fix === undefined ? "" : ` ${fix}`}`, { cause: error });
+    const again = retry === undefined ? {} : { retry: () => (failure = undefined, stopRetrying(), retry().catch(report)) };
+    toastFailure({ id: installId, message: reason, ...fix === undefined ? {} : { description: fix }, ...error === undefined ? {} : { error }, ...again, isCritical: true });
+    watchRecord();
+  };
+  const notSetUp = () => {
+    const why = failure === undefined ? "" : messageOf(failure);
+    const own = `${definition.name}: `;
+    return why === "" ? `${definition.name} is not set up.` : `${definition.name} is not set up: ${why.startsWith(own) ? why.slice(own.length) : why}`;
+  };
+  const installAgain = () => install();
+  const updateAgain = () => claude().store.delete(cmodUpdatedKey).then(installAgain);
+  let retrying;
+  const retryLater = (next) => {
+    const seconds = installRetrySeconds[Math.min(next.tries, installRetrySeconds.length - 1)];
+    retrying?.timer.cancel();
+    retrying = { ...next, tries: next.tries + 1, timer: claude().clock.after(seconds * 1000, () => void retryInBackground().catch(report)) };
+    fail(next.reason, `Trying again in ${seconds} s.`, installAgain);
+  };
+  const stopRetrying = () => {
+    retrying?.timer.cancel();
+    retrying = undefined;
+  };
+  const failInstall = (reason, when) => {
+    if (when === undefined) {
+      stopRetrying();
+      return fail(reason, undefined, installAgain);
+    }
+    retryLater({ when, tries: retrying?.when === when ? retrying.tries : 0, reason });
+  };
+  const retryInBackground = async () => {
+    if (phase !== "failed" || retrying === undefined)
+      return;
+    if (await recover()) {
+      stopRetrying();
+      return whenActive();
+    }
+    await install(true);
+    await whenActive();
+  };
+  const finish = async () => {
+    await programs?.refresh();
+    phase = "ready";
+    activation ??= new Promise((resolve) => claude().clock.after(0, () => resolve(activate().catch(report))));
+    settleInstall();
+    claude().ui.invalidate("ui.render");
+  };
+  const recordThroughCmod = async () => {
+    if (plugin === undefined || await newestCmodVersion(claude()) === undefined)
+      return;
+    let failed;
+    const { code, lastError } = await readLines(claude().process.spawn({ argv: ["cmod", "setup", plugin.root, "--events"], env: { CLAUDE_CODE_SESSION_ID: await claude().session.id() } }), (text) => {
+      const event = parseEvent(text);
+      if (event.type === "done")
+        shouldRecord = false;
+      if (event.type === "failed")
+        failed = event.message;
+    });
+    if (!shouldRecord) {
+      runtime?.toaster.toast.dismiss(recordId);
+      return programs?.refresh();
+    }
+    if (failed !== undefined)
+      return void toastFailure({ id: recordId, message: failed, retry: record, isCritical: true });
+    throw new Error(`cmod setup ${formatExit(code, lastError)}`);
+  };
+  const isInstalledCopy = async () => {
+    await recording;
+    if (plugin === undefined)
+      return true;
+    const recorded = await readRecord((path) => claude().fs.read(path).catch(ifMissing(undefined)), plugin.store, plugin.name);
+    return recorded === undefined || recorded.root === plugin.root;
+  };
+  const record = () => {
+    recording ??= recordThroughCmod().catch((error) => claude().ui.warn("record", `${definition.name} has no cmod record yet: ${messageOf(error)}`)).finally(() => {
+      recording = undefined;
+    });
+  };
+  const saveOption = async (key, text) => {
+    const option = definition.options?.[key];
+    if (option === undefined || plugin === undefined)
+      return `${definition.name} has no option ${key}.`;
+    const value = option.type === "number" ? Number(text) : option.type === "toggle" ? text.trim() === "true" : option.type === "list" ? text.split(",").map((item) => item.trim()).filter((item) => item !== "") : text;
+    const misfit = option.type === "toggle" && !["true", "false"].includes(text.trim()) ? "takes true or false" : fitsOption(option, value);
+    if (misfit !== undefined)
+      return `${option.title} ${misfit}.`;
+    const saved = await claude().process.run(["cmod", "options", "set", plugin.name, key, Array.isArray(value) ? value.join(",") : String(value)]);
+    return saved.exitCode === 0 ? undefined : cmodError(saved.stderr, "options") || `cmod options set ${formatExit(saved.exitCode, "")}.`;
+  };
+  const askOptions = async (missing) => {
+    if (!asksPerson || plugin === undefined || (await claude().session.surfaces()).length === 0)
+      return false;
+    const declared = definition.options ?? {};
+    const asked = missing.keys.flatMap((key) => {
+      const option = declared[key];
+      return option === undefined ? [] : [[key, option]];
+    });
+    if (!await installer.options(asked, saveOption))
+      return false;
+    const prefix = `${plugin.name}.`;
+    const rows = await claude().config.list();
+    pluginOptions = { ...pluginOptions, ...Object.fromEntries(rows.filter((row) => row.key.startsWith(prefix)).map((row) => [row.key.slice(prefix.length), row.value])) };
+    return true;
+  };
+  const isStepDone = async (active, step) => {
+    try {
+      return await step.isDone(active);
+    } catch (error) {
+      toastFailure({ id: `step:${step.title}`, message: `The ${step.title} step's isDone failed`, error });
+      return;
+    }
+  };
+  const pendingSteps = async (active) => {
+    const pending = [];
+    for (const step of definition.installer ?? [])
+      if (await isStepDone(active, step) !== true)
+        pending.push(step.title);
+    return pending;
+  };
+  const runSteps = async (active) => {
+    const steps = asksPerson ? definition.installer ?? [] : [];
+    try {
+      for (const [index, step] of steps.entries()) {
+        const isDone = await isStepDone(active, step);
+        if (isDone === undefined)
+          break;
+        if (isDone)
+          continue;
+        const isAnswered = (await claude().session.surfaces()).length > 0 && await installer.step(active, step, index + 1, steps.length);
+        if (!isAnswered) {
+          runtime?.toaster.toast.warning(steps.length - index === 1 ? "Needs one more step" : `Needs ${steps.length - index} more steps`, {
+            id: "cmod:steps",
+            description: `Starting with ${step.title}.`,
+            duration: Infinity,
+            action: { label: "Finish", onClick: () => runSteps(active) }
+          });
+          break;
+        }
+      }
+    } finally {
+      await installer.close();
+    }
+  };
+  const activate = async () => {
+    if (runtime === undefined || plugin === undefined)
+      return;
+    const activeRouter = createRouter();
+    startingRouter = activeRouter;
+    const active = await createMod(definition, { ...runtime, router: activeRouter, dataFolder: dataFolder(plugin.store, plugin.name), store: plugin.store, permissionRoutes, options: pluginOptions, nextDraw, installer, serveCmodPlugin, isInstalledCopy }).catch(async (error) => {
+      if (error instanceof MissingOptions && await askOptions(error))
+        return;
+      await installer.close();
+      fail(messageOf(error), error instanceof MissingOptions ? `Retry asks for ${error.keys.length === 1 ? "it" : "them"}.` : undefined, begin, error);
+      throw error;
+    }).finally(() => {
+      startingRouter = undefined;
+    });
+    if (active === undefined)
+      return activate();
+    const { added } = active;
+    mod = active.mod;
+    imports = active.imports;
+    raise = active.raise;
+    settingsLoaded = active.settingsLoaded;
+    router = activeRouter;
+    phase = "active";
+    stopWatchingRecord();
+    const held = [...heldListens.values()];
+    heldListens.clear();
+    for (const call of held) {
+      const failed = (error) => void toastFailure({ id: `listens:${String(call.caller)}`, message: `${String(call.caller)} hears nothing from this session`, error });
+      activeRouter.dispatch("cmod.call", call, async () => ({ deny: `${definition.name} has no method ${call.method}.` })).then((answer) => ("deny" in answer) ? failed(new Error(answer.deny)) : undefined, failed);
+    }
+    runtime.claude.ui.invalidate("ui.render");
+    if (definition.name === cmodPluginName)
+      runtime.claude.ui.invalidate("command.describe");
+    runSteps(active.mod).catch((error) => toastFailure({ id: "cmod:steps", message: "Its installer stopped", error, isCritical: true }));
+    const missed = missedSessionStart;
+    missedSessionStart = undefined;
+    if (missed !== undefined)
+      await replaySessionStart(missed);
+    if (await runtime.claude.store.get(announcedKey) !== undefined) {
+      runtime.toaster.toast.dismiss(installId);
+      return;
+    }
+    await runtime.claude.store.set(announcedKey, { version: plugin.version ?? "" });
+    const { toaster } = runtime;
+    announcementOf(runtime.claude, plugin, added, openSettings).then(({ message, ...options }) => toaster.toast.success(message, { id: installId, duration: announcementMs, ...options })).catch((error) => toastFailure({ id: installId, message: "Could not say what it installed", error }));
+  };
+  const replaySessionStart = async (e) => {
+    hasHeardSessionStart = true;
+    const answer = await router.dispatch("classic.SessionStart", e, async () => ({})).catch((error) => {
+      toastFailure({ id: "classic.SessionStart", message: "The SessionStart hook failed", error });
+      return {};
+    });
+    const { additionalContext, ...unread } = answer;
+    for (const text of additionalContext ?? []) {
+      const added = await claude().session.append({ message: { type: "user", content: [{ type: "text", text }] } });
+      if (added.deny !== undefined)
+        claude().ui.warn("session-start:note", `${definition.name}: Claude Code refused its SessionStart note: ${added.deny}`);
+    }
+    if (Object.keys(unread).length > 0) {
+      claude().ui.warn("session-start:late", `${definition.name} started after Claude Code's SessionStart, so Claude Code did not read ${Object.keys(unread).join(", ")} from its SessionStart hooks.`);
+    }
+  };
+  const install = async (isQuiet = false) => {
+    if (plugin === undefined)
+      return;
+    phase = "installing";
+    if (plugin.name === cmodPluginName) {
+      download(plugin.root);
+      return finish();
+    }
+    const found = await newestCmodVersion(claude());
+    if (!fits(found))
+      return waitForcmod(found);
+    if (!isQuiet)
+      installing();
+    let outcome;
+    let retries;
+    const { code, lastError } = await readLines(claude().process.spawn({ argv: ["cmod", "setup", plugin.root, "--events"], env: { CLAUDE_CODE_SESSION_ID: await claude().session.id() } }), (text) => {
+      const event = parseEvent(text);
+      if (event.type === "progress" && !isQuiet)
+        installing(progressOf(event));
+      if (event.type === "retries")
+        retries = event.when;
+      if (event.type === "done" || event.type === "failed")
+        outcome = event;
+    });
+    if (outcome?.type === "done") {
+      stopRetrying();
+      return finish();
+    }
+    return failInstall(outcome?.type === "failed" ? outcome.message : `cmod setup ${formatExit(code, lastError)}`, retries);
+  };
+  const fits = (found) => found !== undefined && isAtLeast(found, oldestCmodVersion);
+  const waitForcmod = (found) => {
+    phase = "waiting";
+    installing("Waiting for cmod");
+    let latest = found;
+    let check;
+    const stop = () => {
+      timer.cancel();
+      longWait.cancel();
+    };
+    const poll = (ms) => claude().clock.every(ms, () => {
+      check ??= newestCmodVersion(claude()).then((version) => {
+        check = undefined;
+        latest = version;
+        if (!fits(version))
+          return;
+        stop();
+        return install();
+      }).catch((error) => {
+        stop();
+        report(error);
+      });
+    });
+    let timer = poll(cmodCheckMs);
+    const longWait = claude().clock.after(cmodWaitMs, () => {
+      timer.cancel();
+      timer = poll(cmodSlowCheckMs);
+      if (latest === undefined)
+        return installing("Still waiting for cmod to download cmod. See cmod's own line.");
+      const found = latest;
+      const tried = `${found} to ${oldestCmodVersion}`;
+      return claude().store.get(cmodUpdatedKey).then(async (updated) => {
+        if (updated === tried) {
+          stop();
+          return fail(`${definition.name} needs cmod ${oldestCmodVersion} or later, and the newest cmod is ${found}.`, undefined, updateAgain);
+        }
+        await claude().store.set(cmodUpdatedKey, tried);
+        installing(`${definition.name} needs cmod ${oldestCmodVersion} or later, and this computer has cmod ${found}, so cmod is updating itself.`);
+        const { code, lastError } = await readLines(claude().process.spawn({ argv: ["cmod", "update", "cmod"] }), () => {
+          return;
+        });
+        if (code === 0)
+          return;
+        stop();
+        fail(`${definition.name} needs cmod ${oldestCmodVersion} or later, and updating cmod ${found} ${formatExit(code, lastError)}`, undefined, updateAgain);
+      }).catch(report);
+    });
+  };
+  const download = (root) => {
+    const downloading = (description) => runtime?.toaster.toast.loading("Downloading the cmod program", { id: downloadId, ...description === undefined ? {} : { description } });
+    downloading();
+    const downloaded = readLines(claude().process.spawn({ argv: ["sh", "-c", "./setup/bootstrap.sh"], cwd: root }), (text) => {
+      const event = parseEvent(text);
+      if (event.type === "progress")
+        downloading(progressOf(event));
+    }).then(({ code, lastError }) => {
+      if (code !== 0)
+        throw new Error(`bootstrap ${formatExit(code, lastError)}`);
+    });
+    programs?.waitFor(downloaded);
+    downloaded.then(() => runtime?.toaster.toast.dismiss(downloadId), (error) => toastFailure({ id: downloadId, message: messageOf(error), retry: async () => download(root), isCritical: true }));
+  };
+  const begin = async () => {
+    if (readStarted === undefined)
+      return;
+    const started = await readStarted(claude());
+    plugin = started;
+    recordMs = await stampOf(recordPath(started.store, started.name));
+    if (started.isInstalled) {
+      shouldRecord = started.shouldRecord;
+      if (shouldRecord)
+        record();
+      activation = undefined;
+      return activate();
+    }
+    if (started.version === undefined)
+      return fail("no version to install", 'Its author adds "version" to .claude-plugin/plugin.json.');
+    install().catch(report);
+  };
+  const report = (error) => {
+    failure = error;
+    if (phase !== "failed")
+      fail(messageOf(error), undefined, begin, error);
+  };
+  const stampOf = async (path) => {
+    const stat = await claude().fs.stat(path).catch(ifMissing(undefined));
+    return stat?.kind === "file" ? stat.mtimeMs : 0;
+  };
+  let recordMs = 0;
+  let readStarted;
+  const isNewlyInstalled = async () => {
+    if (plugin === undefined || readStarted === undefined)
+      return false;
+    const modifiedMs = await stampOf(recordPath(plugin.store, plugin.name));
+    if (modifiedMs === recordMs)
+      return false;
+    recordMs = modifiedMs;
+    const current = await readStarted(claude());
+    if (!current.isInstalled)
+      return false;
+    plugin = current;
+    return true;
+  };
+  const recover = async () => {
+    if (phase !== "failed" || !await isNewlyInstalled())
+      return false;
+    failure = undefined;
+    activation = undefined;
+    await finish();
+    return true;
+  };
+  let recordCheck;
+  let checking;
+  let startingSession;
+  const watchRecord = () => {
+    recordCheck ??= claude().clock.every(recordCheckMs, () => {
+      checking ??= recover().then(() => {
+        return;
+      }).catch((error) => claude().ui.warn("record:watch", `${definition.name} could not read whether another cmod installed it: ${messageOf(error)}`)).finally(() => {
+        checking = undefined;
+      });
+    });
+  };
+  const stopWatchingRecord = () => {
+    recordCheck?.cancel();
+    recordCheck = undefined;
+  };
+  const whenActive = async () => {
+    if (phase === "ready")
+      activation ??= activate().catch(report);
+    if (activation !== undefined && phase !== "active")
+      await activation;
+  };
+  const held = (work, signal) => runtime === undefined ? work.then(() => false) : new Promise((resolve) => {
+    const limit = claude().clock.after(startHoldMs, () => resolve(true));
+    if (signal?.aborted === true)
+      resolve(false);
+    signal?.addEventListener("abort", () => resolve(false), { once: true });
+    work.then(() => {
+      limit.cancel();
+      resolve(false);
+    });
+  });
+  const holdUntilStarted = (signal) => held(startSettled.then(whenActive), signal);
+  const holdUntilInstalled = (signal) => held(startSettled.then(whenInstalled).then(whenActive), signal);
+  const holdUntilActive = (signal) => {
+    const activating = whenActive();
+    return activation !== undefined && phase !== "active" ? held(activating, signal) : activating.then(() => false);
+  };
+  const routed = async (event, e, next, signal) => {
+    if (imports !== undefined)
+      bind(imports);
+    const asked = e;
+    if (event === "cmod.call" && asked.to === definition.name && asked.caller === cmodPluginName) {
+      if (asked.method === partMethods.shown)
+        installer.hear(asked.input);
+      const answered = installer.answer(asked.method, asked.input);
+      if (answered !== undefined)
+        return await answered.catch((error) => ({ deny: `${definition.name}: ${messageOf(error)}` }));
+      if (asked.method === partMethods.shown && phase !== "active")
+        return { value: null };
+    }
+    if (event === "classic.SessionStart") {
+      missedSessionStart = undefined;
+      hasHeardSessionStart = true;
+    }
+    if (event === "classic.SessionStart" && runtime === undefined) {
+      missedSessionStart = e;
+      return next(e);
+    }
+    if (shouldRecord && event === "classic.UserPromptSubmit")
+      record();
+    if (event === "classic.UserPromptSubmit" || event === "classic.SessionStart")
+      await recover().catch((error) => claude().ui.warn("recover", `${definition.name} stays stopped: ${messageOf(error)}`));
+    const tool = e.tool;
+    const isCallToThisMod = event === "cmod.call" && e.to === definition.name || event === "tool.call" && typeof tool === "string" && tool.startsWith(`mcp__${definition.name}__`);
+    if (event === "cmod.call" && !isCallToThisMod)
+      return next(e);
+    const isListen = isCallToThisMod && event === "cmod.call" && listenMethods.includes(asked.method);
+    if (isListen && phase !== "active") {
+      heldListens.set(`${asked.caller}
+${asked.method}
+${String(asked.input.session)}`, asked);
+      startSettled.then(whenInstalled).then(whenActive);
+      return { value: null };
+    }
+    const waitsForInstall = isCallToThisMod && !(event === "cmod.call" && answeredAtOnce.includes(asked.method));
+    const isLate = await (waitsForInstall ? holdUntilInstalled(signal) : event === "classic.SessionStart" || event === "session.append" || isCallToThisMod ? holdUntilStarted(signal) : holdUntilActive(signal));
+    if (event === "classic.SessionStart" && phase !== "active") {
+      missedSessionStart = e;
+      return next(e);
+    }
+    if (isCallToThisMod && phase !== "active")
+      return { deny: phase === "failed" ? notSetUp() : stillInstalling(definition.name) };
+    if (isLate && phase !== "active")
+      return (startingRouter ?? router).dispatchFailure(event, e, new Error(`it was still starting after ${startHoldMs / 1000} s`), next, false);
+    const call = e;
+    if (event === "cmod.call" && call.to === definition.name && mod !== undefined) {
+      if (call.method === pendingStepsMethod)
+        return { value: await pendingSteps(mod) };
+      if (call.method === finishStepsMethod) {
+        const active = mod;
+        const opened = await installer.collect(() => Promise.race([runSteps(active).catch((error) => void toastFailure({ id: "cmod:steps", message: "Could not finish the setup", error, isCritical: true })), installer.shown()]));
+        return { value: opened };
+      }
+    }
+    if (event === "classic.UserPromptSubmit" && phase === "active" && !hasHeardSessionStart) {
+      const { session_id, transcript_path, cwd } = e;
+      await replaySessionStart({ session_id, transcript_path, cwd, hook_event_name: "SessionStart", source: "resume" });
+    }
+    const answer = router.dispatch(event, e, next, signal);
+    const render = e;
+    if (event !== "ui.render" || render.component !== "AbovePrompt" || runtime === undefined)
+      return answer;
+    return runtime.toaster.draw(await answer, runtime.claude.ui.resolve(render), render.props, render.requestId);
+  };
+  return {
+    get phase() {
+      return phase;
+    },
+    get mod() {
+      return mod;
+    },
+    get failure() {
+      return failure;
+    },
+    get toasts() {
+      return runtime?.toaster.shown ?? [];
+    },
+    async raise(method, payload) {
+      if (raise === undefined || imports === undefined)
+        throw new Error(`${definition.name} has not started, so ${method} has no listener yet.`);
+      bind(imports);
+      return raise(method, payload, unaborted);
+    },
+    async settingsLoaded() {
+      await settingsLoaded?.();
+    },
+    async start(claudeCalls, read) {
+      if (runtime !== undefined)
+        return;
+      const open = (href, press) => void openLink(claudeCalls, href, press.surface).then((done) => done === "copied" && runtime?.toaster.toast.success("Copied the link", { description: "Paste it in your browser." }), (error) => toastFailure({ id: "open-link", message: "Could not open the link", error, isCritical: true }));
+      const naming = {
+        ...claudeCalls,
+        ui: {
+          ...claudeCalls.ui,
+          warn: (id, text) => runtime === undefined ? claudeCalls.ui.warn(id, text) : runtime.toaster.warn(id, text),
+          resolve: (e) => forClaudeCode(claudeCalls.ui.resolve(e), e.surface, open)
+        },
+        session: { ...claudeCalls.session, id: async () => startingSession ?? claudeCalls.session.id() }
+      };
+      programs = locatingPrograms(naming);
+      const callingCmod = {
+        ...naming,
+        cmod: {
+          async call(input) {
+            if (input.to === definition.name)
+              await holdUntilStarted();
+            return answeringOwnCalls(claudeCalls, router).cmod.call(input);
+          }
+        }
+      };
+      runtime = { claude: programs.claude, toaster: createToaster(callingCmod, definition.name, () => plugin?.version) };
+      readStarted = read;
+      try {
+        drawCount = await claudeCalls.clock.now() * drawsPerMs;
+        await programs.refresh();
+        await begin().catch(report);
+      } finally {
+        settleStart();
+      }
+    },
+    async route(event, e, next, signal) {
+      if (event !== "classic.SessionStart")
+        return settledAfterAbort(routed(event, e, next, signal), signal);
+      const started = e.session_id;
+      startingSession = started;
+      try {
+        return await settledAfterAbort(routed(event, e, next, signal), signal);
+      } finally {
+        if (startingSession === started)
+          startingSession = undefined;
+      }
+    },
+    async caught(event, e, next, { error: { kind, message }, called }) {
+      const call = e;
+      const isAsk = event === "cmod.call" && call.to === definition.name && beforeAskOf(call) !== undefined;
+      const reasons = { timeout: overranHook, throw: message ?? "it threw" };
+      const reason = reasons[kind];
+      if (reason === undefined)
+        return isAsk ? { value: null } : next(e);
+      const error = new Error(reason);
+      const failedBeneath = called && kind === "throw" ? await next(e).then(() => {
+        return;
+      }, messageOf) : undefined;
+      if (failedBeneath === undefined || failedBeneath !== message)
+        toastFailure({ id: `stopped:${event}`, message: `Claude Code stopped its ${event.replace(/^classic\./, "")} hook`, error });
+      return (startingRouter ?? router).dispatchFailure(event, e, error, next, called);
+    }
+  };
+}
+async function createMod(definition, runtime) {
+  const { router, toaster } = runtime;
+  const report = (failure) => void toaster.fail(failure);
+  const claude = answeringOwnCalls(withBareRefusals(runtime.claude), router);
+  const added = [];
+  const announce = (feature) => {
+    added.push(feature);
+  };
+  const [session, root, startCwd, home, configHome, cacheHome] = await Promise.all([claude.session.id(), claude.session.root(), claude.session.cwd(), claude.env.home(), claude.env.configHome(), claude.env.cacheHome()]);
+  const configRoot = configHome ?? (home === undefined ? undefined : `${home}/.claude`);
+  const places = { home, configRoot, projectRoot: () => modState.root };
+  const files = createModFiles({ name: definition.name, claude, places, report });
+  let cwd = startCwd;
+  let loadedCwd = startCwd;
+  let staleCwd;
+  let forkedFrom;
+  let parentAsked;
+  let hasEarlierPrompts = true;
+  let agentType;
+  let parts;
+  const borrowed = (styler, cached, input, scope) => {
+    const name = `The markdown style of ${styler}`;
+    parts?.fill(styler, cached, input, name)?.then(() => claude.ui.invalidate("ui.render"));
+    return parts?.element(styler, cached, `${styler}/markdown:${scope}:`, name, `markdown:${styler}`);
+  };
+  const provided = createProviders({
+    name: definition.name,
+    call: (to, method, input) => claude.cmod.call({ to, method, input }),
+    changed: () => area.relisted(),
+    after: (ms, run) => claude.clock.after(ms, run),
+    report: (error) => report({ id: "interfaces", message: "A provider listener failed", error })
+  });
+  const area = createUi({ name: definition.name, claude, router, report, announce, mod: () => mod, borrowed, nextDraw: runtime.nextDraw, provided: () => provided.provided() });
+  const askParent = async () => {
+    if (definition.name === cmodPluginName)
+      return;
+    try {
+      const parent = await claude.cmod.call({ to: cmodPluginName, method: "forkParent", input: null });
+      return typeof parent === "string" ? parent : undefined;
+    } catch (error) {
+      claude.ui.warn("fork:values", `${definition.name} starts without the session values of the conversation it was forked from: ${messageOf(error)}`);
+      return;
+    }
+  };
+  const forkParent = () => parentAsked ??= askParent().then((parent) => {
+    forkedFrom = parent;
+    return parent;
+  });
+  const stateChanged = () => {
+    area.changed();
+    runtime.installer.changed();
+  };
+  const modState = createState({ name: definition.name, initial: definition.state ?? {}, session, root, claude, report, changed: stateChanged, forkParent });
+  const modOptions = createOptions({ name: definition.name, declared: definition.options ?? {}, fromClaude: runtime.options, claude, report, changed: modState.changed });
+  const hookOn = (hook, listener, failed) => router.add(`classic.${hook}`, classicHook(hook, listener, report), failed === undefined ? undefined : classicFailure(failed));
+  const expand = (path) => homePrefix.test(path) ? resolvedPath(path, places) : path;
+  const settingsFile = (source) => ({
+    read: () => claude.settings.read({ source }),
+    async update(values) {
+      await claude.cmod.call({ to: cmodPluginName, method: "updateSettings", input: { mod: definition.name, source, project: modState.root, values } });
+    }
+  });
+  const client = createSessionsClient({
+    name: definition.name,
+    claude,
+    report: (id, message, error) => report({ id, message, error }),
+    hookOn: (hook, listener, failed) => hookOn(hook, listener, failed),
+    routeOn: (event, hook, failed) => router.add(event, hook, failed),
+    permissionRoutes: runtime.permissionRoutes
+  });
+  let followed;
+  const watches = createWatches(claude, report);
+  const followFolders = (project, folder) => {
+    if (followed === undefined)
+      return;
+    followed = { ...followed, project, cwd: folder };
+    client.follow(followed);
+  };
+  let device;
+  const settingsChangeOf = ({ source, file_path }) => ({ source: source.replace("_settings", ""), ...file_path === undefined ? {} : { path: file_path } });
+  const matchedListener = (matcherOrListener, maybeListener) => (change) => (maybeListener === undefined || matches(change, matcherOrListener)) && (maybeListener ?? matcherOrListener)(change);
+  const settingsListeners = new Set;
+  const loadingSettings = [];
+  const settingsLoaded = async () => {
+    bind(imports);
+    await Promise.all(loadingSettings.splice(0).flatMap((change) => [...settingsListeners].map(async (listener) => {
+      try {
+        await listener(change);
+      } catch (error) {
+        report({ id: "settings:onChange", message: "The settings.onChange listener failed", error });
+      }
+    })));
+  };
+  router.add("classic.ConfigChange", async (e, next) => {
+    const below = await next(e);
+    if (below.block === undefined && settingsListeners.size > 0) {
+      loadingSettings.push(settingsChangeOf(e));
+      claude.clock.after(settingsLoadMs, () => void settingsLoaded());
+    }
+    return below;
+  });
+  const imports = {
+    sessions: client.sessions,
+    commands: {
+      list: async () => (await claude.command.list()).map(({ name, description, source, plugin }) => ({ name, description, source, ...plugin === undefined ? {} : { plugin } })),
+      run: async (command, args) => {
+        const { text, context } = await claude.command.run({ command, ...args === undefined ? {} : { args } });
+        return { ...text === undefined ? {} : { text }, ...context === undefined || context.length === 0 ? {} : { note: context.join(`
+`) } };
+      },
+      beforeRun: (...args) => client.listen("beforeRun", args),
+      onRun: (...args) => client.listen("onRun", args)
+    },
+    config: {
+      list: async () => (await claude.config.list()).map(({ key, label, description, kind, value, options, provider, isLocked }) => ({
+        key,
+        label,
+        kind,
+        value,
+        isLocked,
+        ...description === undefined ? {} : { description },
+        ...options === undefined ? {} : { options },
+        ...provider.plugin === "engine" ? {} : { plugin: provider.plugin }
+      }))
+    },
+    settings: {
+      user: settingsFile("user"),
+      project: settingsFile("project"),
+      local: settingsFile("local"),
+      beforeChange: (matcherOrListener, maybeListener) => {
+        const listener = matchedListener(matcherOrListener, maybeListener);
+        return hookOn("ConfigChange", async (input) => {
+          const refuse = (await listener(settingsChangeOf(input)))?.refuse;
+          return typeof refuse === "string" ? { block: refuse } : undefined;
+        });
+      },
+      onChange: (matcherOrListener, maybeListener) => {
+        const listener = matchedListener(matcherOrListener, maybeListener);
+        settingsListeners.add(listener);
+        return { remove: () => void settingsListeners.delete(listener) };
+      }
+    },
+    model: { complete: (completion, options) => claude.model.complete(completion, options) },
+    fs: {
+      read: (path) => claude.fs.read(expand(path)),
+      write: (path, text) => claude.fs.write(expand(path), text),
+      exists: (path) => claude.fs.exists(expand(path)),
+      find: (glob) => files.find(glob),
+      list: async (path) => (await claude.fs.list(path === undefined ? undefined : expand(path))).map(({ name, kind, size, mtimeMs, isLink }) => ({ name, isFile: kind === "file", isFolder: kind === "dir", isLink, size, modifiedAt: mtimeMs })),
+      async stat(path, options) {
+        const { kind, size, mtimeMs, isLink, realPath } = await claude.fs.stat(expand(path), options);
+        return { isFile: kind === "file", isFolder: kind === "dir", isLink, size, modifiedAt: mtimeMs, ...realPath === undefined ? {} : { realPath } };
+      },
+      onChange: ({ path }, listener) => watches.add([path].flat().map((each) => resolvedPath(each, places)), (change) => {
+        bind(imports);
+        return listener(change);
+      })
+    },
+    metadata: {
+      read: (path) => files.read(path),
+      update: (path, change) => files.update(path, change)
+    },
+    process: {
+      run: (argv, init) => claude.process.run(argv, init),
+      spawn: (argv, init) => claude.process.spawn({ ...init, argv })
+    },
+    http: { fetch: (url, init) => claude.http.fetch(url, init) },
+    device: {
+      read: () => device ??= claude.device.read().catch((error) => {
+        device = undefined;
+        throw error;
+      })
+    },
+    clipboard: {
+      async write(text) {
+        await toaster.copy(text);
+      }
+    },
+    mods: {
+      isLoaded: async (name) => await claude.cmod.call({ to: cmodPluginName, method: loadedMethod, input: { name } }) === true
+    },
+    provide: (name, methods) => provided.provide(name, methods),
+    providers: (name) => provided.providers(name)
+  };
+  const timer = (ms, subject, repeats, listener) => {
+    let isFiring = false;
+    let isRunning = true;
+    let firedAt = 0;
+    let isStallTold = false;
+    const tellStall = async () => {
+      const ranMs = await claude.clock.now() - firedAt;
+      if (isStallTold || ranMs < Math.max(checked * stallTicks, stallMs))
+        return;
+      isStallTold = true;
+      claude.ui.warn(`${subject}:${ms}:stalled`, `${definition.name}: one run of its ${subject} ${ms} ms timer has gone on for ${Math.round(ranMs / 1000)} s, so the timer skipped every tick since. Give what the listener awaits a deadline.`);
+    };
+    const fire = () => {
+      if (!repeats)
+        isRunning = false;
+      if (isFiring) {
+        tellStall();
+        return;
+      }
+      isFiring = true;
+      isStallTold = false;
+      Promise.resolve().then(async () => {
+        firedAt = await claude.clock.now();
+        bind(imports);
+        return listener();
+      }).catch((error) => report({ id: `${subject}:${ms}`, message: `The ${subject} ${ms} ms timer failed`, error })).finally(() => {
+        isFiring = false;
+      });
+    };
+    const checked = checkedMs(definition.name, `mod.${subject}`, ms);
+    const started = repeats ? claude.clock.every(checked, fire) : claude.clock.after(checked, fire);
+    return {
+      get isRunning() {
+        return isRunning;
+      },
+      stop() {
+        isRunning = false;
+        started.cancel();
+      }
+    };
+  };
+  const hotkeys = await createHotkeys({ name: definition.name, declared: definition.hotkeys ?? {}, configRoot, claude, router, answerInput: area.answerInput, report });
+  const secret = async (action, key, value) => {
+    const { exitCode, stdout, stderr } = await claude.process.run(["cmod", "secrets", action, definition.name, key], value === undefined ? undefined : { stdin: value });
+    if (exitCode !== 0)
+      throw new Error(`${definition.name}: mod.secrets.${action}: ${cmodError(stderr, "secrets") || `cmod secrets ${formatExit(exitCode, "")}.`}`);
+    return stdout;
+  };
+  const mod = {
+    name: definition.name,
+    folder: claude.plugin.root,
+    dataFolder: runtime.dataFolder,
+    cacheFolder: cacheFolder({ HOME: home, XDG_CACHE_HOME: cacheHome }, claude.plugin.name),
+    secrets: {
+      get: async (key) => await secret("get", key) || undefined,
+      store: async (key, value) => void await secret("store", key, value),
+      delete: async (key) => void await secret("delete", key)
+    },
+    state: modState.state,
+    get options() {
+      return modOptions.values;
+    },
+    hotkeys,
+    every: (ms, listener) => timer(ms, "every", true, listener),
+    after: (ms, listener) => timer(ms, "after", false, listener),
+    use: (job) => job({ mod, announce, reserveName }),
+    log: (text, options) => {
+      if (options?.level === "error")
+        report({ id: `log:${text}`, message: text });
+      else if (options?.level === "warning")
+        claude.ui.warn(`log:${text}`, `${definition.name}: ${text}`);
+      else
+        claude.ui.log(`${definition.name}: ${text}`, { to: options?.to ?? "debug" });
+    },
+    panes: area.panes,
+    views: area.views,
+    pages: area.pages,
+    settings: area.settings,
+    widgets: area.widgets,
+    styles: area.styles,
+    toast: toaster.toast,
+    ask: (question, options) => claude.ui.ask(question, options),
+    dependencies: dependencyCalls(claude, (call, task) => beforeDeadline(claude.clock, callDeadline, call, () => task))
+  };
+  bind(imports);
+  const followSession = async (isAfterCd = false) => {
+    try {
+      const [nextRoot, reportedCwd] = await Promise.all([claude.session.root(), claude.session.cwd()]);
+      const oldCwd = cwd;
+      const hasMovedRoot = nextRoot !== modState.root;
+      if (isAfterCd && hasMovedRoot && relativePath(nextRoot, reportedCwd) === undefined)
+        staleCwd = reportedCwd;
+      if (reportedCwd !== staleCwd)
+        staleCwd = undefined;
+      const nextCwd = staleCwd === undefined ? reportedCwd : nextRoot;
+      if (!hasMovedRoot && nextCwd === oldCwd)
+        return;
+      cwd = nextCwd;
+      followFolders(nextRoot, nextCwd);
+      await modState.moveTo(nextRoot).catch((error) => {
+        if (cwd === nextCwd)
+          cwd = loadedCwd;
+        followFolders(modState.root, cwd);
+        throw error;
+      });
+      if (hasMovedRoot)
+        await modOptions.load(nextRoot);
+      loadedCwd = nextCwd;
+      if (!hasMovedRoot)
+        area.changed();
+      if (nextCwd === oldCwd)
+        return;
+      const moved = { session_id: await claude.session.id(), cwd: nextCwd, hook_event_name: "CwdChanged", old_cwd: oldCwd, new_cwd: nextCwd };
+      await router.dispatch("classic.CwdChanged", moved, async () => ({}));
+    } catch (error) {
+      report({ id: "cmod:follow", message: `Keeps the state of ${modState.root} until the next prompt or folder move`, error });
+    }
+  };
+  const followCurrent = async (id, title) => {
+    const [model, usage] = await Promise.all([claude.session.model(), claude.session.usage()]);
+    followed = { id, title: title ?? "", project: modState.root, cwd, model, startedAt: new Date(usage.startedAt).toISOString(), ...forkedFrom === undefined ? {} : { forkedFrom }, ...agentType === undefined ? {} : { agentType } };
+    client.follow(followed);
+  };
+  router.add("classic.SessionStart", async (e, next) => {
+    agentType = e.agent_id === undefined ? e.agent_type : agentType;
+    const previous = followed?.id;
+    if (e.source === "fork" && previous !== undefined && previous !== e.session_id)
+      forkedFrom = previous;
+    else if (e.session_id !== previous) {
+      forkedFrom = undefined;
+      parentAsked = undefined;
+    }
+    hasEarlierPrompts = e.source !== "startup" && e.source !== "clear";
+    await followCurrent(e.session_id, e.session_title).catch((error) => report({ id: "cmod:current", message: "Kept the details of the session from before", error }));
+    await modState.switchSession(e.session_id, e.source, e.transcript_path).catch((error) => {
+      report({ id: "cmod:session", message: `Kept its session values from before the ${e.source}`, error });
+    });
+    return next(e);
+  });
+  router.add("classic.UserPromptSubmit", async (e, next) => {
+    staleCwd = undefined;
+    await followSession();
+    const isPerson = e.source === undefined || e.source === "user" || e.source === "sdk";
+    await followCurrent(e.session_id, e.session_title || (isPerson && !hasEarlierPrompts && client.sessions.current.title === "" ? firstLine(e.prompt) : undefined)).catch((error) => report({ id: "cmod:current", message: "Kept the details of the session from before", error }));
+    return next(e);
+  });
+  for (const event of ["classic.PostToolUse", "classic.PostToolUseFailure"]) {
+    router.add(event, async (e, next) => {
+      if (shellTools.includes(e.tool_name))
+        await followSession();
+      return next(e);
+    });
+  }
+  router.add("command.run", async (e, next) => {
+    const answer = await next(e);
+    if (e.command === "cd") {
+      await followSession(true);
+      conversations?.moved();
+    }
+    return answer;
+  });
+  router.add("skill.prompt", userSkillHook(claude));
+  router.add("ui.press", (e, next) => area.asked(() => next(e)));
+  let api = {};
+  let servedParts;
+  const reportPart = (id, message, error) => report({ id, message, error });
+  const tellRefusedPress = (to, error) => {
+    if (messageOf(error).includes(stalePress))
+      toaster.toast.warning(`The ${to} button was from an older drawing, so nothing ran`, { id: `press:${to}`, description: "Press the button it shows now." });
+    else
+      report({ id: `press:${to}`, message: `${to} did not take the press`, error, isCritical: true });
+  };
+  const pressElsewhere = (to, input) => void claude.cmod.call({ to, method: partMethods.press, input }).catch((error) => {
+    parts?.forget(to);
+    claude.ui.invalidate("ui.render");
+    tellRefusedPress(to, error);
+  });
+  parts = drawnParts({ claude, report: reportPart, press: (to, input) => servedParts === undefined ? pressElsewhere(to, input) : servedParts.press(to, input) });
+  const served = runtime.serveCmodPlugin?.({ claude, router, store: runtime.store, project: () => modState.root, report: reportPart, clear: (id) => toaster.toast.dismiss(id), tellRefusedPress, parts, markdownIn: area.markdownIn, tellStylers: area.restyled });
+  const conversations = served?.conversations;
+  const widgets = served?.widgets;
+  servedParts = served?.parts;
+  const tellColor = (to, told) => {
+    if (told.session === "" || to === cmodPluginName)
+      return;
+    claude.clock.after(0, () => void claude.cmod.call({ to, method: conversationMethods.sessionColor, input: told }).catch((error) => {
+      if (!isStillInstalling(to, error))
+        claude.ui.warn("color:tell", `cmod: ${to} did not hear the session's color: ${messageOf(error)}`);
+    }));
+  };
+  conversations?.onColor((told) => {
+    client.recolor(told);
+    for (const { mod: to } of servedParts?.declared() ?? [])
+      tellColor(to, told);
+  });
+  router.add("cmod.call", async (e, next) => {
+    if (e.to !== definition.name)
+      return next(e);
+    const call = e;
+    if (e.method === conversationMethods.changed && call.caller === cmodPluginName) {
+      const { session: changedSession, change } = e.input;
+      client.changed(changedSession, change, next.signal);
+      return { value: null };
+    }
+    if (e.method === conversationMethods.sessionColor && call.caller === cmodPluginName) {
+      client.recolor(e.input);
+      return { value: null };
+    }
+    const forProvider = call.caller === undefined ? undefined : provided.answer(e.method, e.input ?? {}, call.caller, next.signal);
+    if (forProvider !== undefined)
+      return { value: await forProvider };
+    const ask = beforeAskOf(call);
+    if (ask !== undefined)
+      return { value: await client.answerBefore(ask.session, ask.event, ask.change, next.signal) ?? null };
+    if (e.method === partMethods.changed && call.caller !== undefined && servedParts !== undefined) {
+      const update = e.input;
+      if (update.parts !== undefined && conversations !== undefined)
+        tellColor(call.caller, conversations.color());
+      return { value: { isHeld: servedParts.update(call.caller, update), stylers: servedParts.stylers() } };
+    }
+    if (call.caller !== undefined) {
+      const turn = e.method === partMethods.draw ? e.input.turn : undefined;
+      const answered = area.answer(e.method, turn === undefined ? e.input : { ...e.input, turn: client.turn(turn) }, call.caller);
+      if (answered !== undefined)
+        return answered.catch((error) => ({ deny: `${definition.name}: ${messageOf(error)}` }));
+    }
+    const served = await conversations?.answer(call);
+    return served ?? answerCall(definition.name, api, e);
+  }, (e, error) => {
+    if (e.to !== definition.name)
+      return;
+    const ask = beforeAskOf(e);
+    return ask === undefined ? { deny: `${definition.name}: ${error.message}` } : { value: client.failedBefore(ask.session, ask.event, ask.change, error) ?? null };
+  });
+  const agents = toolCalls(claude, router);
+  keepEngine(mod, {
+    claude,
+    router,
+    toolCalls: agents,
+    report,
+    hasPermissionCheck: () => runtime.permissionRoutes() !== undefined,
+    answerInput: area.answerInput,
+    spawnCmod: (args, env) => spawnCmod(claude, args, session, env),
+    isInstalledCopy: runtime.isInstalledCopy,
+    watches,
+    interfaces: provided,
+    ...widgets === undefined ? {} : { widgets },
+    onServeUnreached: (listener) => conversations?.onUnreached(listener),
+    ...servedParts === undefined ? {} : { parts: servedParts }
+  });
+  const names = new Set;
+  const reserveName = (type, name, taken) => {
+    const key = `${type}:${name}`;
+    if (names.has(key))
+      throw new Error(taken);
+    names.add(key);
+    return { remove: () => void names.delete(key) };
+  };
+  const removeUndeclaredServices = async () => {
+    if (!await runtime.isInstalledCopy())
+      return;
+    for (const { name } of await claude.fs.list(serviceFolder(runtime.store, definition.name)).catch(ifMissing([]))) {
+      const program = name.endsWith(".json") ? name.slice(0, -".json".length) : undefined;
+      if (program !== undefined && !names.has(`service:${program}`))
+        await runCmod(claude, ["program", definition.name, "--remove-service", "--", program], session);
+    }
+  };
+  await failsAs("its state did not load", () => modState.load());
+  await failsAs("its options did not load", () => modOptions.load(root));
+  const missing = modOptions.missing;
+  if (missing.length > 0)
+    throw new MissingOptions(missing, missing.map((key) => definition.options?.[key]?.title ?? key));
+  await failsAs("the details of its session did not load", () => followCurrent(session, undefined));
+  const returned = await failsAs("its setup function threw", () => definition.setup(mod));
+  api = apiOf(definition.name, returned);
+  await failsAs("its open panes did not load", () => area.restorePanes());
+  area.started();
+  removeUndeclaredServices().catch((error) => report({ id: "program:services", message: "Could not stop a service it no longer runs", error }));
+  return { mod, added, imports, raise: client.raise, settingsLoaded, area };
+}
+function apiOf(name, returned) {
+  if (returned === undefined || returned === null)
+    return {};
+  if (typeof returned !== "object" || !Object.values(returned).every((method) => typeof method === "function"))
+    throw new Error(`${name}: setup returns its API, an object of methods other mods call, or nothing. It returned ${typeof returned === "object" ? "an object with values that are not methods" : typeof returned}.`);
+  return returned;
+}
+var longestTimerMs = 2147483647;
+function checkedMs(name, subject, ms) {
+  if (!Number.isInteger(ms) || ms <= 0 || ms > longestTimerMs)
+    throw new Error(`${name}: ${subject} is ${ms}. Give a whole number of milliseconds above 0 and at most ${longestTimerMs}.`);
+  return ms;
+}
+function beforeAskOf(call) {
+  return call.method === conversationMethods.before && call.caller === cmodPluginName ? call.input : undefined;
+}
+async function failsAs(subject, step) {
+  try {
+    return await step();
+  } catch (error) {
+    throw new Error(`${subject}: ${messageOf(error)}`, { cause: error });
+  }
+}
+function progressOf({ done, total, label }) {
+  return Box({ gap: 2, children: [Progress({ value: total > 0 ? done / total * 100 : 0 }), Text({ dimColor: true, wrap: "truncate-end", children: label })] });
+}
+
+// node_modules/@cmodjs/core/runtime/permission-check.js
+var verdictName = (decision) => decision === "deny" ? "refuse" : decision;
+var permissionRoutes = (method, { raise, refusalFor, hookOn, routeOn, current }) => {
+  const isBefore = method.startsWith("before");
+  if (method.endsWith("PermissionCheck")) {
+    const payloadOf = (e, below) => {
+      const { id, cwd } = current();
+      return { session: id, cwd, ...defined({ task: e.agentId, callId: e.tool_use_id, reason: below.reason, rule: below.rule, ceiling: e.ceiling === undefined ? undefined : verdictName(e.ceiling) }), name: e.tool, input: recordOf(e.input), decision: verdictName(below.decision) };
+    };
+    const failed = async (e, error, next) => {
+      const refusal = refusalFor(method, payloadOf(e, await next(e)), error);
+      return refusal === undefined ? undefined : { decision: "deny", reason: refusal.refuse };
+    };
+    return routeOn("tool.check", async (e, next) => {
+      const below = await next(e);
+      const payload = payloadOf(e, below);
+      if (!isBefore) {
+        raise(method, payload, next.signal);
+        return below;
+      }
+      const answer = await raise(method, payload, next.signal);
+      if (answer === undefined || below.decision === "deny")
+        return below;
+      if (typeof answer["refuse"] === "string")
+        return { decision: "deny", reason: answer["refuse"] };
+      if (!globalThis.cmodWithoutApprove) {
+        if (typeof answer["ask"] === "string")
+          return { decision: "ask", reason: answer["ask"] };
+        if (answer["allow"] === true)
+          return { decision: "allow" };
+      }
+      return below;
+    }, isBefore ? failed : undefined);
+  }
+  const refused = (refuse, interrupt) => ({ decision: defined({ behavior: "deny", message: refuse, interrupt }) });
+  return hookOn("PermissionRequest", async (input, signal) => {
+    const payload = processPayloadOf("PermissionRequest", input);
+    if (!isBefore) {
+      raise(method, payload, signal);
+      return;
+    }
+    const answer = await raise(method, payload, signal);
+    if (answer === undefined)
+      return;
+    if (typeof answer["refuse"] === "string")
+      return refused(answer["refuse"], answer["interrupt"]);
+    if (!globalThis.cmodWithoutApprove) {
+      if (answer["allow"] === true)
+        return { decision: defined({ behavior: "allow", updatedInput: answer["input"], updatedPermissions: answer["updates"] }) };
+    }
+    return;
+  }, isBefore ? (input, error) => {
+    const refusal = refusalFor(method, processPayloadOf("PermissionRequest", input), error);
+    return refusal === undefined ? undefined : refused(refusal.refuse);
+  } : undefined);
+};
+
+// node_modules/@cmodjs/core/register.js
+var lifecycle;
+var permissionCheck;
+var registered;
+var lockedRetryMs = [100, 300, 600];
+var heldLock = "Lock file is already being held";
+var timers2 = globalThis;
+async function whenUnlocked(write) {
+  for (const waitMs of lockedRetryMs) {
+    try {
+      return await write();
+    } catch (error) {
+      if (!messageOf(error).includes(heldLock))
+        throw error;
+      await new Promise((resolve) => void timers2.setTimeout(resolve, waitMs));
+    }
+  }
+  return write();
+}
+async function startMod($, eventInput, passOn) {
+  const claude = {
+    plugin: { name: $.plugin.name, root: $.plugin.root },
+    ui: {
+      log: (text, options) => $.ui.log(text, options),
+      warn: (_id, text) => $.ui.log(text, { to: "debug" }),
+      notice: (toolUseId, text) => $.ui.notice(toolUseId, text),
+      toast: (text, options) => $.ui.toast(text, options),
+      invalidate: (event) => $.ui.invalidate(event),
+      ask: (question, options) => $.ui.ask(question, options),
+      open: (pane) => $.ui.open(pane),
+      close: (pane) => $.ui.close(pane),
+      panes: () => $.ui.panes(),
+      scroll: (args) => $.ui.scroll(args),
+      copy: (args) => $.ui.copy(args),
+      focus: (args) => $.ui.focus(args),
+      resolve: (render) => $.ui.resolve(render)
+    },
+    process: {
+      run: (argv, init) => $.process.run(argv, init),
+      spawn: (request) => $.process.spawn(request)
+    },
+    fs: {
+      read: (path) => $.fs.read(path),
+      write: (path, text) => $.fs.write(path, text),
+      list: (path) => $.fs.list(path),
+      exists: (path) => $.fs.exists(path),
+      stat: (path, options) => $.fs.stat(path, options)
+    },
+    http: { fetch: (url, init) => $.http.fetch(url, init) },
+    settings: { read: (args) => $.settings.read(args) },
+    config: { list: () => $.config.list() },
+    store: {
+      get: (key) => $.store.get(key),
+      set: (key, value) => whenUnlocked(() => $.store.set(key, value)),
+      delete: (key) => whenUnlocked(() => $.store.delete(key)),
+      keys: () => $.store.keys()
+    },
+    clock: {
+      now: () => $.clock.now(),
+      after: (ms, fn) => $.clock.after(ms, fn),
+      every: (ms, fn) => $.clock.every(ms, fn)
+    },
+    session: {
+      id: () => $.session.id(),
+      root: () => $.session.root(),
+      cwd: () => $.session.cwd(),
+      model: () => $.session.model(),
+      usage: () => $.session.usage(),
+      surfaces: () => $.session.surfaces(),
+      version: async () => (await $.session.version()).version,
+      messages: (args) => args === undefined ? $.session.messages() : $.session.messages(args),
+      append: (args) => $.session.append(args),
+      send: (args) => $.session.send(args)
+    },
+    prompt: { submit: (args) => $.prompt.submit(args) },
+    turn: { abort: (args) => $.turn.abort(args) },
+    model: { complete: (request, options) => $.model.complete(request, options) },
+    command: { register: (command) => $.command.register(command), list: () => $.command.list(), run: (args) => $.command.run(args) },
+    tool: { register: (tool) => $.tool.register(tool), call: (input) => $.tool.call(input) },
+    agent: {
+      list: () => $.agent.list(),
+      spawn: (args) => $.agent.spawn(args)
+    },
+    env: {
+      home: () => $.env.get("HOME"),
+      dataHome: () => $.env.get("XDG_DATA_HOME"),
+      cacheHome: () => $.env.get("XDG_CACHE_HOME"),
+      configHome: () => $.env.get("CLAUDE_CONFIG_DIR"),
+      browser: () => $.env.get("BROWSER"),
+      sshConnection: () => $.env.get("SSH_CONNECTION"),
+      display: () => $.env.get("DISPLAY"),
+      waylandDisplay: () => $.env.get("WAYLAND_DISPLAY")
+    },
+    device: { read: () => readDevice(claude) },
+    cmod: { call: (input) => $.cmod.call(input) }
+  };
+  const [, answer] = await settledAfterAbort(Promise.all([lifecycle.start(claude, readPlugin), passOn(eventInput)]), passOn.signal);
+  return answer;
+}
+function routeToMod(_$, eventInput, passOn) {
+  return lifecycle.route(passOn.event, eventInput, (passed) => passOn(passed), passOn.signal);
+}
+function routeFailure(_$, eventInput, passOn) {
+  return lifecycle.caught(passOn.event, eventInput, (passed) => passOn(passed), passOn);
+}
+var withCaller = (eventInput, passOn) => ({ ...eventInput, caller: passOn.origin.plugin });
+var withoutCaller = (passOn) => (passed) => passOn(Object.fromEntries(Object.entries(passed).filter(([key]) => key !== "caller")));
+function routeCallToMod(_$, eventInput, passOn) {
+  return lifecycle.route("cmod.call", withCaller(eventInput, passOn), withoutCaller(passOn), passOn.signal);
+}
+function routeCallFailure(_$, eventInput, passOn) {
+  return lifecycle.caught("cmod.call", withCaller(eventInput, passOn), withoutCaller(passOn), passOn);
+}
+function registerMod(addHook, definition, options) {
+  registerHooks(addHook, definition, options);
+  addHook("ui.render", routeToMod).catch(routeFailure);
+}
+function registerHooks(addHook, definition, options, serve) {
+  permissionCheck = undefined;
+  registered = definition;
+  lifecycle = createLifecycle(definition, () => permissionCheck, options, true, serve);
+  addHook("session.start", startMod);
+  addHook("classic.Setup", routeToMod).catch(routeFailure);
+  addHook("classic.SessionStart", routeToMod).catch(routeFailure);
+  addHook("classic.SessionEnd", routeToMod).catch(routeFailure);
+  addHook("classic.UserPromptSubmit", routeToMod).catch(routeFailure);
+  addHook("classic.UserPromptExpansion", routeToMod).catch(routeFailure);
+  addHook("classic.InstructionsLoaded", routeToMod).catch(routeFailure);
+  addHook("classic.ConfigChange", routeToMod).catch(routeFailure);
+  addHook("classic.DirectoryAdded", routeToMod).catch(routeFailure);
+  addHook("classic.PreModelSwitch", routeToMod).catch(routeFailure);
+  addHook("classic.PostModelSwitch", routeToMod).catch(routeFailure);
+  addHook("classic.PermissionDenied", routeToMod).catch(routeFailure);
+  addHook("classic.PostToolUse", routeToMod).catch(routeFailure);
+  addHook("classic.PostToolUseFailure", routeToMod).catch(routeFailure);
+  addHook("classic.PostToolBatch", routeToMod).catch(routeFailure);
+  addHook("classic.MessageDisplay", routeToMod).catch(routeFailure);
+  addHook("classic.SubagentStart", routeToMod).catch(routeFailure);
+  addHook("classic.SubagentStop", routeToMod).catch(routeFailure);
+  addHook("classic.TaskCreated", routeToMod).catch(routeFailure);
+  addHook("classic.TaskCompleted", routeToMod).catch(routeFailure);
+  addHook("classic.TeammateIdle", routeToMod).catch(routeFailure);
+  addHook("classic.Elicitation", routeToMod).catch(routeFailure);
+  addHook("classic.ElicitationResult", routeToMod).catch(routeFailure);
+  addHook("classic.Notification", routeToMod).catch(routeFailure);
+  addHook("classic.PreCompact", routeToMod).catch(routeFailure);
+  addHook("classic.PostCompact", routeToMod).catch(routeFailure);
+  addHook("classic.Stop", routeToMod).catch(routeFailure);
+  addHook("classic.StopFailure", routeToMod).catch(routeFailure);
+  addHook("classic.WorktreeCreate", routeToMod).catch(routeFailure);
+  addHook("classic.WorktreeRemove", routeToMod).catch(routeFailure);
+  addHook("tool.call", routeToMod).catch(routeFailure);
+  addHook("prompt.submit", routeToMod).catch(routeFailure);
+  addHook("prompt.context", routeToMod).catch(routeFailure);
+  addHook("command.run", routeToMod).catch(routeFailure);
+  addHook("session.measure", routeToMod).catch(routeFailure);
+  addHook("skill.prompt", routeToMod).catch(routeFailure);
+  addHook("ui.press", routeToMod).catch(routeFailure);
+  addHook("ui.scroll", routeToMod).catch(routeFailure);
+  addHook("ui.close", routeToMod).catch(routeFailure);
+  addHook("cmod.call", { to: definition.name }, routeCallToMod).catch(routeCallFailure);
+  addHook("session.compact", routeToMod).catch(routeFailure);
+}
+function registerPermissionCheck(addHook) {
+  permissionCheck = permissionRoutes;
+  addHook("tool.check", routeToMod).catch(routeFailure);
+  addHook("classic.PermissionRequest", routeToMod).catch(routeFailure);
+}
+
+// node_modules/@cmodjs/core/installer.js
+var stepId = /^[A-Za-z0-9_-]{1,64}$/;
+function checkSteps(name, steps) {
+  const seen = new Set;
+  for (const step of steps) {
+    if (!stepId.test(step.id))
+      throw new Error(`${name}: the install step "${step.id}" has no valid id. Use 1 to 64 letters, digits, "_", or "-".`);
+    if (step.title.trim() === "")
+      throw new Error(`${name}: the install step "${step.id}" needs a title, the line the installer shows above it.`);
+    if (seen.has(step.id))
+      throw new Error(`${name}: two install steps have the id "${step.id}". Give each step its own id.`);
+    seen.add(step.id);
+  }
+}
+
+// node_modules/@cmodjs/core/mod.js
+var sessions = {
+  get current() {
+    return bound().sessions.current;
+  },
+  list: (options) => bound().sessions.list(options),
+  get: (id) => bound().sessions.get(id),
+  search: (text, matcher, options) => bound().sessions.search(text, matcher, options)
+};
+var fs = {
+  read: (path) => bound().fs.read(path),
+  write: (path, text) => bound().fs.write(path, text),
+  exists: (path) => bound().fs.exists(path),
+  find: (glob) => bound().fs.find(glob),
+  list: (path) => bound().fs.list(path),
+  stat: (path, options) => bound().fs.stat(path, options),
+  onChange: (matcher, listener) => bound().fs.onChange(matcher, listener)
+};
+var process = {
+  run: (argv, options) => bound().process.run(argv, options),
+  spawn: (argv, options) => bound().process.spawn(argv, options)
+};
+var http = {
+  fetch: (url, options) => bound().http.fetch(url, options)
+};
+var provide = (name, methods) => bound().provide(name, methods);
+function defineMod(definition) {
+  if (definition.name.trim() === "")
+    throw new Error("defineMod: the mod needs a name, such as the name in .claude-plugin/plugin.json.");
+  if (definition.options !== undefined)
+    checkOptions(definition.name, definition.options);
+  if (definition.hotkeys !== undefined)
+    checkHotkeys(definition.name, definition.hotkeys);
+  if (definition.installer !== undefined)
+    checkSteps(definition.name, definition.installer);
+  return definition;
+}
+
+// node_modules/@cmodjs/core/jobs/program.js
+var backoffSeconds = [1, 2, 4, 8, 16];
+var leaseCheckMs = 5000;
+var staleMs = 15000;
+var retryWithinMs = 1000;
+function program(options) {
+  const { command, environment, singleInstance = false, isService = false, isWebApp = false, processType } = options;
+  return ({ mod, announce, reserveName }) => {
+    const { claude, report, spawnCmod, isInstalledCopy, watches, interfaces } = engineOf(mod);
+    const [executable] = command;
+    if (executable === undefined)
+      throw new Error(`${mod.name}: the program has no command. Name the program on PATH and its arguments, such as ['preview-server', '--port', '0'].`);
+    if (isService)
+      for (const type of ["program", "service"])
+        reserveName(type, ft(executable), `${mod.name}: the service ${executable} is already added. Give each isService program its own executable.`);
+    else if (singleInstance)
+      reserveName("program", ft(executable), `${mod.name}: the single instance of ${executable} is already added. Give each singleInstance program its own executable.`);
+    const isElected = singleInstance || isService;
+    if (isWebApp && !isElected)
+      throw new Error(`${mod.name}: the web app ${executable} runs a copy per session, and your tailnet reaches one copy per computer. Add singleInstance: true or isService: true.`);
+    if (processType !== undefined && !processTypes.includes(processType))
+      throw new Error(`${mod.name}: ${executable}'s processType is ${String(processType)}. Give ${processTypes.join(" or ")}.`);
+    if (processType !== undefined && !isService)
+      throw new Error(`${mod.name}: ${executable}'s processType names the launchd class of a service. Add isService: true.`);
+    const holderFlags = isWebApp ? ["--web-app"] : [];
+    const serviceClass = processType === undefined ? [] : ["--process-type", processType];
+    const request = { argv: command, env: { CMOD_DATA: mod.dataFolder, CMOD_CACHE: mod.cacheFolder, ...environment } };
+    let state = "stopped";
+    let address;
+    let failure;
+    let exits = 0;
+    const waiting = [];
+    const failing = new Set;
+    let isFollowing = false;
+    let isWatching = false;
+    let instance;
+    let leaseCheck;
+    const spawn = (isOwnService) => {
+      if (isOwnService)
+        return spawnCmod(["program", mod.name, ...holderFlags, "--service", ...serviceClass, ...Object.keys(environment ?? {}).flatMap((name) => ["--env", name]), "--", ...command], environment);
+      return isElected ? spawnCmod(["program", mod.name, ...holderFlags, "--no-wait", "--", ...command], environment) : claude.process.spawn(request);
+    };
+    const instanceFile = () => instance ??= cmodStore(claude).then((store) => instancePath(store, mod.name, ft(executable)));
+    const following = (run) => void run.catch((error) => report({ id: `program:${executable}:follow`, message: `Could not follow the ${executable} program`, error }));
+    const stop = (reason) => {
+      address = undefined;
+      state = "fatal";
+      failure = new Error(`${mod.name}: the ${executable} program stopped: ${reason}`);
+      const retry = () => {
+        exits = 0;
+        failure = undefined;
+        start();
+      };
+      report({ id: `program:${executable}`, message: `The ${executable} program stopped`, description: reason, retry });
+      for (const waiter of waiting.splice(0))
+        waiter.reject(failure);
+      for (const fail of failing)
+        fail(failure);
+      failing.clear();
+    };
+    const ownProvider = async (name) => {
+      const found = await claude.cmod.call({ to: cmodPluginName, method: interfaceMethods.provider, input: { interface: name, mod: mod.name, program: ft(executable) } });
+      if (found === null)
+        return;
+      return (await interfaces.providers(name)).find((each) => each["mod"] === found.mod && each["program"] === found.program && each["device"]?.id === found.device?.id);
+    };
+    const providedHere = async (name) => {
+      while (state !== "fatal") {
+        const own = await ownProvider(name).catch((error) => {
+          if (isUnanswered(error))
+            return;
+          throw error;
+        });
+        if (own !== undefined)
+          return own;
+      }
+      throw failure;
+    };
+    const recordedInstance = async (file) => {
+      const recorded = await claude.fs.read(file).catch(ifMissing(undefined));
+      if (recorded === undefined)
+        return;
+      const instance = JSON.parse(recorded);
+      const next = typeof instance.address === "string" ? addressOf(instance.address.trim()) : undefined;
+      if (next === undefined)
+        return {};
+      return { address: typeof instance.tailnetUrl === "string" ? { ...next, tailnetUrl: instance.tailnetUrl } : next };
+    };
+    const show = (next) => {
+      address = next;
+      state = "running";
+      exits = 0;
+      for (const waiter of waiting.splice(0))
+        waiter.resolve(next);
+    };
+    const noAddress = () => new Error(`${mod.name}: the ${executable} program printed no address, because it only provides interfaces. Reach them through provider(name).`);
+    const started = () => {
+      if (state !== "starting")
+        return;
+      state = "running";
+      exits = 0;
+      for (const waiter of waiting.splice(0))
+        waiter.reject(noAddress());
+    };
+    const checkLease = (file) => leaseCheck ??= (async () => {
+      if (!isFollowing || await isHeld(claude, `${file}.lock`, staleMs))
+        return;
+      isFollowing = false;
+      start();
+    })().finally(() => {
+      leaseCheck = undefined;
+    });
+    const track = async (file) => {
+      if (!isFollowing)
+        return;
+      const instance = await recordedInstance(file);
+      if (instance?.address !== undefined)
+        return show(instance.address);
+      if (instance !== undefined)
+        return started();
+      address = undefined;
+      state = "starting";
+      claude.clock.after(Math.random() * retryWithinMs, () => following(checkLease(file)));
+    };
+    const follow = async (file) => {
+      isFollowing = true;
+      if (!isWatching) {
+        isWatching = true;
+        watches.add([file], () => following(track(file)));
+        claude.clock.every(leaseCheckMs, () => following(checkLease(file)));
+      }
+      await track(file);
+    };
+    const start = async () => {
+      isFollowing = false;
+      address = undefined;
+      state = "starting";
+      let pending = "";
+      let lastError = "";
+      let isShown = false;
+      try {
+        const isOwnService = isService && await isInstalledCopy();
+        if (isElected && !isOwnService) {
+          const file = await instanceFile();
+          if (await isHeld(claude, `${file}.lock`, staleMs))
+            return await follow(file);
+        }
+        for await (const piece of spawn(isOwnService)) {
+          if (piece.stream === "stderr") {
+            lastError = piece.text.trim().split(`
+`).at(-1) ?? lastError;
+            continue;
+          }
+          if (isShown)
+            continue;
+          const lines = `${pending}${piece.text}`.split(`
+`);
+          pending = lines.pop() ?? "";
+          for (const line of lines.slice(0, 1)) {
+            if (isElected && line.trim() === "held")
+              return await follow(await instanceFile());
+            isShown = true;
+            const next = addressOf(line.trim());
+            if (isElected && line.trim() === "provided")
+              started();
+            else if (next === undefined) {
+              stop(`its first line is "${line.trim()}". Write 127.0.0.1:<port> or unix:<socket path> as the first line on standard output.`);
+              return;
+            } else
+              show(isWebApp ? (await recordedInstance(await instanceFile()))?.address ?? next : next);
+          }
+        }
+      } catch (error) {
+        lastError = messageOf(error);
+      }
+      address = undefined;
+      exits += 1;
+      const wait = backoffSeconds[exits - 1];
+      if (wait === undefined) {
+        stop(`it did not start again after ${backoffSeconds.length} tries: ${lastError === "" ? "no standard error" : lastError}.`);
+        return;
+      }
+      state = "backoff";
+      claude.clock.after(wait * 1000, () => void start());
+    };
+    announce(`the ${executable} program`);
+    claude.session.surfaces().then((surfaces) => {
+      if (surfaces.length > 0 && state === "stopped")
+        start();
+    });
+    return {
+      get state() {
+        return state;
+      },
+      ready() {
+        if (state === "running")
+          return address === undefined ? Promise.reject(noAddress()) : Promise.resolve(address);
+        if (state === "fatal")
+          return Promise.reject(failure);
+        if (state === "stopped")
+          start();
+        return new Promise((resolve, reject) => waiting.push({ resolve, reject }));
+      },
+      provider(name) {
+        if (!isElected)
+          return Promise.reject(new Error(`${mod.name}: provider(${name}) needs the ${executable} program to run as singleInstance or isService, because only one copy of a program can provide an interface.`));
+        if (state === "fatal")
+          return Promise.reject(failure);
+        if (state === "stopped")
+          start();
+        return new Promise((resolve, reject) => {
+          failing.add(reject);
+          providedHere(name).then((own) => resolve(own), reject).finally(() => failing.delete(reject));
+        });
+      }
+    };
+  };
+}
+function addressOf(line) {
+  const tcp = /^127\.0\.0\.1:(\d{1,5})$/.exec(line);
+  if (tcp !== null)
+    return { url: `http://127.0.0.1:${tcp[1]}` };
+  const unix = /^unix:(\/.+)$/.exec(line);
+  if (unix?.[1] !== undefined)
+    return { url: "http://localhost", socketPath: unix[1] };
+  return;
+}
+
+// node_modules/@cmodjs/core/jobs/context.js
+function withinDeadline(mod, deadline, subject, run) {
+  return beforeDeadline(engineOf(mod).claude.clock, deadline, subject, () => Promise.resolve().then(run));
+}
+
+// node_modules/@cmodjs/core/jobs/slash-command.js
+var deadline = { ms: 30000, job: "slashCommand" };
+var commandName = /^[A-Za-z0-9_-]{1,64}$/;
+function slashCommand(options) {
+  const { name, description, argumentHint, immediate, reply } = options;
+  return (job) => {
+    const { mod, announce, reserveName } = job;
+    const { claude, router, report, answerInput } = engineOf(mod);
+    if (!commandName.test(name))
+      throw new Error(`${mod.name}: "${name}" is not a slash command name. Use 1 to 64 letters, digits, "_", or "-", without the slash.`);
+    const reserved = reserveName("slashCommand", name, `${mod.name}: the slash command /${name} is already added. Give each slashCommand its own name.`);
+    let registered;
+    claude.command.register({ name, description, ...argumentHint === undefined ? {} : { argumentHint }, ...immediate === undefined ? {} : { immediate } }).then(({ command }) => {
+      registered = command;
+    }, (error) => {
+      report({ id: `command:${name}`, message: `/${name} is not added`, error });
+    });
+    announce(`/${name}`);
+    const answering = router.add("command.run", async (e, next) => {
+      if (e.command !== registered)
+        return next(e);
+      try {
+        return await answerInput(async () => answerOf(mod.name, await withinDeadline(mod, deadline, `/${name}`, () => reply({ args: e.args, positionals: splitWords(e.args) }, mod))), () => next(e));
+      } catch (error) {
+        return { text: `/${name} failed: ${oneLine(error)}` };
+      }
+    });
+    return {
+      name,
+      remove() {
+        answering.remove();
+        reserved.remove();
+      }
+    };
+  };
+}
+function answerOf(name, reply) {
+  if (reply === undefined)
+    return {};
+  if (typeof reply === "string")
+    return { text: reply };
+  return { ...reply.text === undefined ? {} : { text: reply.text }, ...reply.note === undefined ? {} : { context: [modNote(name, reply.note)] } };
+}
+function splitWords(args) {
+  return Dt(args, (key) => `$${key}`).flatMap((entry) => {
+    if (typeof entry === "string")
+      return [entry];
+    if ("comment" in entry)
+      return [];
+    if (entry.op === "glob")
+      return [entry.pattern];
+    return [entry.op];
+  });
+}
+function oneLine(error) {
+  return messageOf(error).replace(/\s*\n\s*/g, " ");
+}
+// ../../../../../tmp/cmod-publish-rulebook-KfOmBY/release/src/views/results.tsx
+var resultsView = {
+  id: "results",
+  title: "rulebook",
+  render: (mod) => {
+    const { run } = mod.state.memory;
+    if (run.status === "idle")
+      return /* @__PURE__ */ h(Text, {
+        dimColor: true
+      }, "Run /rulebook to check every Prompt in this project.");
+    if (run.status === "running")
+      return /* @__PURE__ */ h(Text, {
+        dimColor: true
+      }, run.files.length === 0 ? "Checking every Prompt in this project with every rule…" : `Checking ${run.files.join(", ")} with every rule…`);
+    if (run.status === "failed")
+      return /* @__PURE__ */ h(Text, null, `rulebook failed: ${run.error}`);
+    return /* @__PURE__ */ h(Results, {
+      reports: run.reports,
+      failures: run.failures
+    });
+  }
+};
+function Results({ reports, failures }) {
+  const findings = reports.flatMap((report) => report.findings);
+  const errors = findings.filter(({ level }) => level === "error").length;
+  const flagged = reports.filter((report) => report.findings.length > 0 || report.failures.length > 0);
+  return /* @__PURE__ */ h(Box, {
+    flexDirection: "column",
+    gap: 1
+  }, /* @__PURE__ */ h(Text, {
+    bold: true
+  }, `${errors} ${errors === 1 ? "error" : "errors"}, ${findings.length - errors} ${findings.length - errors === 1 ? "warning" : "warnings"} in ${reports.length} ${reports.length === 1 ? "file" : "files"}`), failures.map((failure) => /* @__PURE__ */ h(Text, {
+    key: failure,
+    wrap: "wrap"
+  }, failure)), flagged.map((report) => /* @__PURE__ */ h(Box, {
+    key: report.path,
+    flexDirection: "column"
+  }, /* @__PURE__ */ h(Text, {
+    bold: true
+  }, report.path), report.findings.map((finding) => /* @__PURE__ */ h(Text, {
+    key: `${finding.rule}:${finding.line}`,
+    wrap: "wrap"
+  }, `  ${finding.line}  ${finding.level}  ${finding.rule}  ${finding.message}`)), report.failures.map((failure) => /* @__PURE__ */ h(Text, {
+    key: `failure:${failure.rule}`,
+    dimColor: true,
+    wrap: "wrap"
+  }, `  ${failure.rule} did not run: ${failure.reason}`)))));
+}
+
+// ../../../../../tmp/cmod-publish-rulebook-KfOmBY/release/src/state.ts
+var initialState = { memory: { run: { status: "idle" }, shown: {}, refusedTurn: undefined } };
+
+// ../../../../../tmp/cmod-publish-rulebook-KfOmBY/release/src/mod.tsx
+var rulebook = defineMod({
+  name: "rulebook",
+  state: initialState,
+  setup(mod) {
+    const results = mod.views.add(resultsView);
+    const everyAgent = sessions.current.goal;
+    const server = mod.use(program({ command: ["rulebook", "__run_server"], singleInstance: true }));
+    let environment;
+    const asked = async (question, input, signal) => {
+      environment ??= environmentOf().catch((error) => {
+        environment = undefined;
+        throw error;
+      });
+      const { url, socketPath } = await server.ready();
+      const body = `{"input":${JSON.stringify(input)},"environment":${await environment}}`;
+      const response = await http.fetch(`${url}/${question}`, { method: "POST", body, ...socketPath === undefined ? {} : { socketPath }, ...signal === undefined ? {} : { signal } });
+      if (!response.ok)
+        throw new Error(`rulebook ${question} failed: ${response.text}`);
+      return JSON.parse(response.text);
+    };
+    let project;
+    let listing;
+    let sources = [];
+    let watching;
+    const watch = () => {
+      watching?.remove();
+      if (sources.length === 0)
+        return;
+      const subscription = fs.onChange({ path: sources }, () => {
+        if (watching !== subscription)
+          return;
+        watching = undefined;
+        subscription.remove();
+        listing = undefined;
+      });
+      watching = subscription;
+    };
+    const load = () => {
+      project = sessions.current.project;
+      const loading = asked("rules", { cwd: project }).then(listedOf);
+      listing = loading;
+      loading.then((loaded) => {
+        sources = loaded.sources;
+        for (const failure of loaded.failures)
+          mod.toast.warning(failure);
+      }, () => {
+        if (listing === loading)
+          listing = undefined;
+      }).then(watch);
+      return loading;
+    };
+    const listed = () => listing !== undefined && project === sessions.current.project ? listing : load();
+    const rulesIn = async (path) => {
+      const { root, folders } = await listed();
+      return (folderOf2(folders, path.startsWith("@") ? path : displayPath(root, path))?.rules ?? []).map(({ id, description, severity, metadata }) => ({ id, description, severity, metadata }));
+    };
+    const rulebookRules = provide("rulebook/Rules", { rules: rulesIn });
+    const severitiesFor = async (check) => {
+      const rules = await rulesIn(check.path);
+      if (rules.length === 0)
+        return {};
+      const answers = await rulebookRules.ask("Check", { ...check, rules });
+      return Object.assign({}, ...answers.flatMap((answer) => isRecord(answer) && isRecord(answer.rules) ? [answer.rules] : []));
+    };
+    const asks = new Map;
+    const relayed = (answer, callId) => {
+      for (const failure of answer.failures)
+        mod.log(failure, { level: "warning" });
+      if (answer.refuse !== undefined)
+        return { refuse: answer.refuse };
+      if (answer.ask !== undefined && callId !== undefined)
+        asks.set(callId, answer.ask);
+      if (answer.note !== undefined)
+        return { note: answer.note };
+      return;
+    };
+    const show = async (agent, files, isNewContext) => {
+      const { root, folders } = await listed();
+      const shown = new Set(isNewContext ? [] : mod.state.memory.shown[agent]);
+      const told = (path, covers) => {
+        const unshown = (folderOf2(folders, path)?.rules ?? []).filter((rule) => !shown.has(rule.id) && covers(rule));
+        for (const { id } of unshown)
+          shown.add(id);
+        return unshown.map(({ description }) => `- ${description}`).join(`
+`);
+      };
+      const everywhere = told(displayPath(root, sessions.current.project), ({ isEverywhere }) => isEverywhere);
+      const perFile = [...new Set(files)].map((file) => {
+        const path = displayPath(root, file);
+        const covered = told(path, ({ covers }) => covers(path));
+        return covered === "" ? "" : `Rules for ${path}:
+${covered}`;
+      });
+      const note = [everywhere, ...perFile].filter((block) => block !== "").join(`
+
+`);
+      if (note !== "" || isNewContext)
+        mod.state.memory.shown = { ...mod.state.memory.shown, [agent]: [...shown] };
+      return note === "" ? undefined : { note };
+    };
+    everyAgent.beforeSessionStart((start) => show(start.task ?? start.session, [], true));
+    everyAgent.beforePrompt({ task: /./ }, (prompt) => show(prompt.task ?? prompt.session, [], false));
+    everyAgent.beforeToolResult((result) => {
+      asks.delete(result.callId);
+      return show(result.task ?? result.session, [...result.files.read, ...result.files.changed], false);
+    });
+    everyAgent.beforeToolCall({ name: /^(Edit|Write|MultiEdit|NotebookEdit)$/ }, async (call, { signal }) => {
+      const rules = await severitiesFor(checkOf(call, editedPath(call.input) ?? sessions.current.project));
+      return relayed(await asked("edit", { tool_name: call.name, tool_input: call.input, cwd: call.cwd, ...whoCalls(call), rules }, signal), call.callId);
+    }, { timeoutMs: longestMs });
+    everyAgent.beforeToolCall(async (call, { signal }) => {
+      const message = (await listed()).messages.find(({ isSentBy }) => isSentBy(call.name));
+      if (message === undefined)
+        return;
+      const rules = await severitiesFor(checkOf(call, message.name));
+      return relayed(await asked("text", { name: message.name, input: call.input, cwd: call.cwd, tool_name: call.name, ...whoCalls(call), rules }, signal), call.callId);
+    }, { timeoutMs: longestMs });
+    sessions.current.beforePermissionCheck(({ callId }) => {
+      const reason = callId === undefined ? undefined : asks.get(callId);
+      if (callId === undefined || reason === undefined)
+        return;
+      asks.delete(callId);
+      return { ask: reason };
+    });
+    sessions.current.beforeTurnEnd(async (turn, { signal }) => {
+      const reply = (await turn.messages()).findLast((message) => message.type === Reply);
+      if (reply === undefined)
+        return;
+      const rules = await severitiesFor({ path: "@reply", session: sessions.current.id });
+      const answer = await asked("text", { name: "@reply", text: reply.text, cwd: sessions.current.cwd, rules }, signal);
+      const relay = relayed(answer);
+      if (answer.refuse !== undefined && mod.state.memory.refusedTurn !== turn.prompt.id) {
+        mod.state.memory.refusedTurn = turn.prompt.id;
+        return relay;
+      }
+      if (answer.findings.length > 0)
+        mod.toast.warning(answer.findings.map(({ line, rule, message }) => `Reply line ${line}: ${message} (${rule})`).join(`
+`));
+      return;
+    }, { timeoutMs: longestMs });
+    mod.use(slashCommand({
+      name: "rulebook",
+      description: "Check every Prompt in this project, or the files named, with every rulebook rule",
+      argumentHint: "[files]",
+      reply: async ({ positionals }) => {
+        mod.state.memory.run = { status: "running", files: positionals };
+        checkProject(mod, positionals);
+        await results.open();
+        return;
+      }
+    }));
+  }
+});
+async function checkProject(mod, files) {
+  try {
+    const checked = await process.run(["rulebook", "check", "--reporter=json", ...files], { cwd: sessions.current.cwd, timeoutMs: longestMs });
+    if (checked.exitCode > 1)
+      throw new Error(checked.stderr.trim());
+    const { reports, failures } = JSON.parse(checked.stdout);
+    mod.state.memory.run = { status: "done", reports, failures };
+  } catch (error) {
+    mod.state.memory.run = { status: "failed", error: messageOf(error) };
+  }
+}
+async function environmentOf() {
+  const printed = await process.run(["env", "-0"]);
+  if (printed.exitCode !== 0)
+    throw new Error(`env -0 exited ${printed.exitCode}: ${printed.stderr.trim()}`);
+  return JSON.stringify(Object.fromEntries(printed.stdout.split("\x00").filter((line) => line.includes("=")).map((line) => [line.slice(0, line.indexOf("=")), line.slice(line.indexOf("=") + 1)])));
+}
+function listedOf({ root, sources, folders, messages, failures }) {
+  return {
+    root,
+    sources,
+    failures,
+    folders: [...folders].sort((a, b) => b.path.length - a.path.length).map(({ path, rules }) => ({ path, rules: rules.map((rule) => ({ ...rule, covers: anyOf(rule.files) })) })),
+    messages: messages.map((message) => ({ ...message, isSentBy: anyOf(message.tools) }))
+  };
+}
+function whoCalls(call) {
+  return { session_id: call.session, ...call.agentType === undefined ? {} : { agent_type: call.agentType }, ...call.task === undefined ? {} : { agent_id: call.task } };
+}
+function checkOf(call, path) {
+  return { path, session: call.session, ...call.task === undefined ? {} : { task: call.task }, ...call.agentType === undefined ? {} : { agentType: call.agentType }, tool: call.name };
+}
+function editedPath(input) {
+  const path = input.file_path ?? input.notebook_path;
+  return typeof path === "string" ? path : undefined;
+}
+function folderOf2(folders, path) {
+  return folders.find((each) => each.path === "" || path === each.path || path.startsWith(`${each.path}/`));
+}
+function isRecord(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+function anyOf(listed) {
+  const regExps = listed.map(({ source, flags }) => new RegExp(source, flags));
+  return (text) => regExps.some((regExp) => regExp.test(text));
+}
+function displayPath(root, file) {
+  const path = it(root, file);
+  return path.startsWith("..") || ye(path) ? file : path;
+}
+
+// ../../../../../tmp/cmod-publish-rulebook-KfOmBY/release/hooks/register.ts
+function register(addHook, options) {
+  registerMod(addHook, rulebook, options);
+  registerPermissionCheck(addHook);
+}
+export {
+  register
+};
