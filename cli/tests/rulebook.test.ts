@@ -311,6 +311,18 @@ test("an agentic rule's findings count when its subagent answers through the Str
   expect(edit('Write', { file_path: join(project, 'Claude.md'), content: 'A fact.\n' }, fakeClaude(stream)).refuse).toContain('1  error  global/require-true-facts  The code says otherwise.')
 })
 
+test('an agentic session gets its Skill as the prompt argument, so it starts even when Claude Code stops waiting for stdin', () => {
+  agenticRule('require-true-facts', 'model: haiku')
+  const claude = write(join(home, 'bin', 'claude'), `#!/bin/sh
+if [ "$1" != "/rulebook-rule:check" ]; then echo 'Error: Input must be provided either through stdin or as a prompt argument when using --print' >&2; exit 1; fi
+echo '{"type":"result","is_error":false,"structured_output":{"findings":[{"line":1,"message":"The code says otherwise."}]}}'
+`)
+  chmodSync(claude, 0o755)
+  const answer = edit('Write', { file_path: join(project, 'Claude.md'), content: 'A fact.\n' }, claude)
+  expect(answer.failures).toEqual([])
+  expect(answer.refuse).toContain('1  error  global/require-true-facts  The code says otherwise.')
+})
+
 test('a manual rule never runs on an edit, and runs when rulebook runs', () => {
   agenticRule('require-true-facts', 'runs: manual')
   const claude = fakeClaude('{"type":"result","is_error":false,"structured_output":{"findings":[{"line":1,"message":"The code says otherwise."}]}}')

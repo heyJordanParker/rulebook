@@ -52,9 +52,15 @@ export const rulebook = defineMod({
         environment = undefined
         throw error
       })
-      const { url, socketPath } = await server.ready()
       const body = `{"input":${JSON.stringify(input)},"environment":${await environment}}`
-      const response = await http.fetch(`${url}/${question}`, { method: 'POST', body, ...(socketPath === undefined ? {} : { socketPath }), ...(signal === undefined ? {} : { signal }) })
+      const sent = async () => {
+        const { url, socketPath } = await server.ready()
+        return http.fetch(`${url}/${question}`, { method: 'POST', body, ...(socketPath === undefined ? {} : { socketPath }), ...(signal === undefined ? {} : { signal }) })
+      }
+      const response = await sent().catch((error: unknown) => {
+        if (signal?.aborted === true) throw error
+        return sent()
+      })
       if (!response.ok) throw new Error(`rulebook ${question} failed: ${response.text}`)
       return JSON.parse(response.text) as Answer
     }

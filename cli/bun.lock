@@ -16,7 +16,7 @@
         "@ast-grep/lang-yaml": "0.0.6",
         "@ast-grep/napi": "0.51.1",
         "@biomejs/biome": "2.6.4",
-        "@cmodjs/core": "8.0.0",
+        "@cmodjs/core": "8.3.1",
         "diff": "9.0.0",
         "marked": "15.0.0",
         "oxlint": "1.86.0",
@@ -103,7 +103,7 @@
 
     "@cacheable/utils": ["@cacheable/utils@2.5.0", "", { "dependencies": { "hashery": "^1.5.1", "keyv": "^5.6.0" } }, "sha512-buipgOVDkkPXNR5+xBpDw7Zk2n1EvU7qBJCNUcL7rhQ//kfpOXPAvQ511Os0vpLYJ1pZnvudNytkQt2hst3wqA=="],
 
-    "@cmodjs/core": ["@cmodjs/core@8.0.0", "", { "dependencies": { "bun-types": "^1.4.2", "json-schema-to-ts": "^3.1.1" } }, "sha512-MJHoBxd0Dvn97BTA6OQLQSI1hI0qXWDeff1lZEiOwN6wPBpES+r5LW3RN6DohROWNjQZao9JrQ274PLwgYjaPQ=="],
+    "@cmodjs/core": ["@cmodjs/core@8.3.1", "", { "dependencies": { "bun-types": "^1.4.2", "json-schema-to-ts": "^3.1.1" } }, "sha512-i1Pz4w7V5SN+ZPu/QmGlTAp1DWjNMvC/EirGjLgqL4Q0AjWFn0FikMxZRBPXDZvjLgMA8P6DJ07SgDswwhiwaA=="],
 
     "@csstools/css-calc": ["@csstools/css-calc@3.4.3", "", { "peerDependencies": { "@csstools/css-parser-algorithms": "^4.0.2", "@csstools/css-tokenizer": "^4.0.2" } }, "sha512-iex20d8CHVkyvg6B7UKV7uHnI2Bqo9g+EFfT9E0y+GvTvhZ/DwONJ+9aKb1dlqm0ZiGsL5RXjp0fCoJYnkeDjA=="],
 

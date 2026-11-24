@@ -11,7 +11,7 @@ You write a rule once, and no Agent's work breaks it again. Every decision passe
 ## The mod and the server
 - `node_modules/@cmodjs/core/docs/` documents the installed cmod, from `index.md`. Read it before cmod work, because training data is out of date.
 - The repository root is the mod, `src/mod.tsx`. It only relays each `edit`, `text`, or `rules` question to the server, so every lint behavior lives in `cli/src/`.
-- The mod runs `rulebook __run_server` with `singleInstance: true` and asks `ready()` before each question, because the one copy moves when the session that started it ends. It sends its session's `env -0` with each question, because the server has the environment of whichever session started it.
+- The mod runs `rulebook __run_server` with `singleInstance: true` and asks `ready()` before each question, and once more after a failed one, because the one copy moves when the session that started it ends. It sends its session's `env -0` with each question, because the server has the environment of whichever session started it.
 - The server answers in worker threads, one per project root and `ENVIRONMENT` values, so no project's configs answer for another. A worker stops after 15 idle minutes, as eslint_d does.
 - After each answer a worker names every path its state read. Before each question the server stats them and replaces the worker when one appeared, went away, or changed since it started, because a process cannot unload a module. `readPaths` holds failed tries too, because `loadSettings` caches a failed load.
 - A worker caches the imported set, because `git ls-files` took seconds in large repositories. A checked write to a Claude.md or rules file joins `watchImportSource`, so the worker is replaced after the write lands, never before.
@@ -25,7 +25,7 @@ You write a rule once, and no Agent's work breaks it again. Every decision passe
 - The command line copies Biome's: `rulebook check` and its flags, `rulebook inspect rules`, `rulebook claude-hook` named for its protocol, and a hidden `rulebook __run_server`. `claude-hook` runs in a fresh process with no server: an error exits 2 on stderr, an ask is `permissionDecision: ask`, and a warning is `additionalContext`.
 - An `ask` finding asks only in a check with a `call`, and is an `error` in any other.
 - `cli/tests/ask.ts` answers a question in a fresh process, so the tests compare the server's answers with it.
-- `inScope` drops `runs: manual` rules only from an Agent's write or tool call, as pre-commit's `manual` stage does.
+- `inScope` drops `runs: manual` rules only from an Agent's write or tool call, so every `rulebook check` runs them.
 - A Claude.md, or a file one imports, reaches a rule as Claude Code reads it, with a blank line for each hidden line. `linesWritten` diffs whole lines with `diffArrays` and counts every line written past 1,000 changed lines, because the diff's cost grows with length times change. A finding on any other line is existing.
 - `context.previous` is the disk text before an edit, or the `HEAD` text in a commit, in the same Claude.md view, and absent for a new file and in a full run. A finding on the root is `isWhole` and never existing, so a rule about the whole file compares with `previous`. A probe pin with only blank lines after it matches only an `isWhole` finding.
 - A write whose text `editedText` cannot compute is checked with no text, so only a rule that reads `context.call` and reports the root flags it.
@@ -41,7 +41,7 @@ You write a rule once, and no Agent's work breaks it again. Every decision passe
 - `rulebook/imports` and `rulebook/no-suppressions` are built in and `off` until a config sets them. `SUPPRESSIONS` needs one entry per `LinterName`, so a new linter fails the type check until it adds its own.
 - `loadRules` skips a rule file that fails, and only the `rules` listing and a full run report it, once across all sessions, because reporting it on every check flooded each session.
 - A script rule is an ESLint 9.7 rule. `visited` runs its visitors from one ast-grep `findAll`, because visiting every node took 45 times as long, so it offers no selectors or `:exit` visitors. `unknownKinds` fails a visitor that names no node kind.
-- An agentic rule runs as the one Skill of a temporary plugin through `claude -p` with hooks off, so its `agent`'s frontmatter applies and the mod never runs again inside it.
+- An agentic rule runs as the one Skill of a temporary plugin through `claude -p` with hooks off, so its `agent`'s frontmatter applies and the mod never runs again inside it. The Skill is the first argument, because `claude -p` waits 3 s for stdin.
 - `model: jev` runs a rule on TypeSafe's Jev through `runJev`, one `noul` question per line, flagged below `threshold`. It sends windows of `WINDOW` characters, because Jev refused 1,100 lines at once. TypeSafe refuses the alias `jev`, so it sends `jev-latest`. The key is the cmod secret `jev`.
 - `cli/src/claude-md.ts` reads Claude.md files, rules folders, and imports the way Claude Code 2.1.317 does, with `marked` pinned at Claude Code's 15.0.0, because 15.0.12 and later lex images and loose lists differently. It alone reads `CLAUDE_CONFIG_DIR`.
 
