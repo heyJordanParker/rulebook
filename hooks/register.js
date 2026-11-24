@@ -279,7 +279,7 @@ function readHotkeys(hotkeys) {
     throw new Error(`package.json "cmod.hotkeys" is not a map of hotkeys to their title and optional default combo. ${fix}`);
   return { hotkeys: checkHotkeys('package.json "cmod"', hotkeys) };
 }
-var coreVersion = "8.0.0";
+var coreVersion = "8.3.1";
 var oldestCmodVersion = "8.0.0";
 function hotkeyCommand(mod, hotkey) {
   return `${mod}--${hotkey}`;
@@ -3765,7 +3765,10 @@ var conversationMethods = {
   before: "cmod:before",
   sessionColor: "cmod:sessionColor"
 };
-var sessionFields = { id: true, title: true, color: true, project: true, cwd: true, model: true, startedAt: true, lastAt: true, forkedFrom: true, isRunning: true, agentType: true, visitedAt: true, device: true, status: true, waitingFor: true, contextPercent: true, lastTurn: true };
+function subagentTranscript(sessionTranscript, task) {
+  return sessionTranscript?.endsWith(".jsonl") === true ? `${sessionTranscript.slice(0, -".jsonl".length)}/subagents/agent-${task}.jsonl` : undefined;
+}
+var sessionFields = { id: true, title: true, color: true, project: true, cwd: true, transcriptPath: true, model: true, startedAt: true, lastAt: true, forkedFrom: true, isRunning: true, agentType: true, visitedAt: true, device: true, status: true, waitingFor: true, contextPercent: true, lastTurn: true };
 async function usageOf(claude) {
   const [model, usage] = await Promise.all([claude.session.model(), claude.session.usage()]);
   const { tokens, window, percent } = usage.context;
@@ -4127,6 +4130,7 @@ function createSessionsClient({ name, claude, report, hookOn, routeOn, permissio
   const ownerOf = (session, data) => {
     const parent = session === current.id ? current : known.get(session);
     const isBackground = data.isBackground === true;
+    const transcriptPath = isBackground ? known.get(data.id)?.transcriptPath : subagentTranscript(parent?.transcriptPath, data.id);
     return sessionOf(() => ({
       id: data.id,
       title: data.title,
@@ -4134,6 +4138,7 @@ function createSessionsClient({ name, claude, report, hookOn, routeOn, permissio
       ...data.agentType === undefined ? {} : { agentType: data.agentType },
       model: data.model ?? "",
       cwd: parent?.cwd ?? "",
+      ...transcriptPath === undefined ? {} : { transcriptPath },
       isRunning: data.closedAt === undefined && (isBackground || (parent?.isRunning ?? true)),
       startedAt: data.openedAt,
       lastAt: data.closedAt ?? data.openedAt,
@@ -4186,7 +4191,7 @@ function createSessionsClient({ name, claude, report, hookOn, routeOn, permissio
       const routes = permissionRoutes?.();
       if (routes === undefined)
         throw new Error(withoutPermissionCheck(name, method));
-      return routes(method, { raise, refusalFor, hookOn, routeOn, current: () => current });
+      return routes(method, { name, raise, refusalFor, hookOn, routeOn, current: () => current });
     }
     const event = processEvents[named];
     const hook = (isBefore ? event.before : undefined) ?? event.on;
@@ -4351,7 +4356,7 @@ var answerKeys = {
   WorktreeCreate: ["result"],
   Elicitation: ["refuse"],
   ElicitationResponse: ["refuse"],
-  PermissionCheck: ["allow", "ask", "refuse"],
+  PermissionCheck: ["allow", "ask", "refuse", "note"],
   PermissionRequest: ["allow", "input", "updates", "refuse", "interrupt"],
   PermissionDenial: ["retry"],
   ToolBatch: ["note"],
@@ -5844,11 +5849,11 @@ function createUi({ name, claude, router, report, announce, mod, borrowed, nextD
     widgets: { add: addWidget },
     styles: { add: addStyle },
     asked,
-    async answerInput(run, passOn) {
+    async answerInput(run, passInput) {
       const before = unheldRequests;
       const answer = await asked(run);
       if (unheldRequests > before)
-        await passOn();
+        await passInput();
       return answer;
     },
     answer(method, input, caller) {
@@ -7117,7 +7122,7 @@ function createLifecycle(definition, permissionRoutes = () => {
   };
   const isInstalledCopy = async () => {
     await recording;
-    if (plugin === undefined)
+    if (plugin === undefined || plugin.name === cmodPluginName)
       return true;
     const recorded = await readRecord((path) => claude().fs.read(path).catch(ifMissing(undefined)), plugin.store, plugin.name);
     return recorded === undefined || recorded.root === plugin.root;
@@ -7888,8 +7893,8 @@ async function createMod(definition, runtime) {
     }
   };
   const followCurrent = async (id, title) => {
-    const [model, usage] = await Promise.all([claude.session.model(), claude.session.usage()]);
-    followed = { id, title: title ?? "", project: modState.root, cwd, model, startedAt: new Date(usage.startedAt).toISOString(), ...forkedFrom === undefined ? {} : { forkedFrom }, ...agentType === undefined ? {} : { agentType } };
+    const [model, usage, { transcriptPath }] = await Promise.all([claude.session.model(), claude.session.usage(), claude.session.info()]);
+    followed = { id, title: title ?? "", project: modState.root, cwd, ...transcriptPath === "" ? {} : { transcriptPath }, model, startedAt: new Date(usage.startedAt).toISOString(), ...forkedFrom === undefined ? {} : { forkedFrom }, ...agentType === undefined ? {} : { agentType } };
     client.follow(followed);
   };
   router.add("classic.SessionStart", async (e, next) => {
@@ -8078,7 +8083,7 @@ function progressOf({ done, total, label }) {
 
 // node_modules/@cmodjs/core/runtime/permission-check.js
 var verdictName = (decision) => decision === "deny" ? "refuse" : decision;
-var permissionRoutes = (method, { raise, refusalFor, hookOn, routeOn, current }) => {
+var permissionRoutes = (method, { name, raise, refusalFor, hookOn, routeOn, current }) => {
   const isBefore = method.startsWith("before");
   if (method.endsWith("PermissionCheck")) {
     const payloadOf = (e, below) => {
@@ -8089,7 +8094,14 @@ var permissionRoutes = (method, { raise, refusalFor, hookOn, routeOn, current })
       const refusal = refusalFor(method, payloadOf(e, await next(e)), error);
       return refusal === undefined ? undefined : { decision: "deny", reason: refusal.refuse };
     };
-    return routeOn("tool.check", async (e, next) => {
+    const notes = new Map;
+    const delivered = isBefore ? routeOn("tool.call", async (e, next) => {
+      const ran = await next(e);
+      const note = notes.get(e.tool_use_id);
+      notes.delete(e.tool_use_id);
+      return note === undefined || ran.deny !== undefined ? ran : { ...ran, context: [...ran.context ?? [], note] };
+    }) : undefined;
+    const checked = routeOn("tool.check", async (e, next) => {
       const below = await next(e);
       const payload = payloadOf(e, below);
       if (!isBefore) {
@@ -8099,6 +8111,8 @@ var permissionRoutes = (method, { raise, refusalFor, hookOn, routeOn, current })
       const answer = await raise(method, payload, next.signal);
       if (answer === undefined || below.decision === "deny")
         return below;
+      if (typeof answer["note"] === "string" && e.tool_use_id !== undefined)
+        notes.set(e.tool_use_id, modNote(name, answer["note"]));
       if (typeof answer["refuse"] === "string")
         return { decision: "deny", reason: answer["refuse"] };
       if (!globalThis.cmodWithoutApprove) {
@@ -8109,6 +8123,12 @@ var permissionRoutes = (method, { raise, refusalFor, hookOn, routeOn, current })
       }
       return below;
     }, isBefore ? failed : undefined);
+    return {
+      remove() {
+        checked.remove();
+        delivered?.remove();
+      }
+    };
   }
   const refused = (refuse, interrupt) => ({ decision: defined({ behavior: "deny", message: refuse, interrupt }) });
   return hookOn("PermissionRequest", async (input, signal) => {
@@ -8203,6 +8223,7 @@ async function startMod($, eventInput, passOn) {
       usage: () => $.session.usage(),
       surfaces: () => $.session.surfaces(),
       version: async () => (await $.session.version()).version,
+      info: () => $.session.info(),
       messages: (args) => args === undefined ? $.session.messages() : $.session.messages(args),
       append: (args) => $.session.append(args),
       send: (args) => $.session.send(args)
@@ -8224,7 +8245,9 @@ async function startMod($, eventInput, passOn) {
       browser: () => $.env.get("BROWSER"),
       sshConnection: () => $.env.get("SSH_CONNECTION"),
       display: () => $.env.get("DISPLAY"),
-      waylandDisplay: () => $.env.get("WAYLAND_DISPLAY")
+      waylandDisplay: () => $.env.get("WAYLAND_DISPLAY"),
+      herdrTerminal: () => $.env.get("HC_TERMINAL_ID"),
+      herdrSocket: () => $.env.get("HC_TERMINAL_SOCKET")
     },
     device: { read: () => readDevice(claude) },
     cmod: { call: (input) => $.cmod.call(input) }
@@ -8238,8 +8261,8 @@ function routeToMod(_$, eventInput, passOn) {
 function routeFailure(_$, eventInput, passOn) {
   return lifecycle.caught(passOn.event, eventInput, (passed) => passOn(passed), passOn);
 }
-var withCaller = (eventInput, passOn) => ({ ...eventInput, caller: passOn.origin.plugin });
-var withoutCaller = (passOn) => (passed) => passOn(Object.fromEntries(Object.entries(passed).filter(([key]) => key !== "caller")));
+var withCaller = (eventInput, next) => ({ ...eventInput, caller: next.origin.plugin });
+var withoutCaller = (next) => (passed) => next(Object.fromEntries(Object.entries(passed).filter(([key]) => key !== "caller")));
 function routeCallToMod(_$, eventInput, passOn) {
   return lifecycle.route("cmod.call", withCaller(eventInput, passOn), withoutCaller(passOn), passOn.signal);
 }
@@ -8540,6 +8563,15 @@ function program(options) {
       state = "backoff";
       claude.clock.after(wait * 1000, () => void start());
     };
+    const answer = () => {
+      if (state === "running")
+        return address === undefined ? Promise.reject(noAddress()) : Promise.resolve(address);
+      if (state === "fatal")
+        return Promise.reject(failure);
+      if (state === "stopped")
+        start();
+      return new Promise((resolve, reject) => waiting.push({ resolve, reject }));
+    };
     announce(`the ${executable} program`);
     claude.session.surfaces().then((surfaces) => {
       if (surfaces.length > 0 && state === "stopped")
@@ -8550,13 +8582,7 @@ function program(options) {
         return state;
       },
       ready() {
-        if (state === "running")
-          return address === undefined ? Promise.reject(noAddress()) : Promise.resolve(address);
-        if (state === "fatal")
-          return Promise.reject(failure);
-        if (state === "stopped")
-          start();
-        return new Promise((resolve, reject) => waiting.push({ resolve, reject }));
+        return state === "running" && isFollowing ? instanceFile().then(track).then(answer) : answer();
       },
       provider(name) {
         if (!isElected)
@@ -8645,7 +8671,7 @@ function splitWords(args) {
 function oneLine(error) {
   return messageOf(error).replace(/\s*\n\s*/g, " ");
 }
-// ../../../../../tmp/cmod-publish-rulebook-KfOmBY/release/src/views/results.tsx
+// ../../../../../tmp/cmod-publish-rulebook-5oD2iP/release/src/views/results.tsx
 var resultsView = {
   id: "results",
   title: "rulebook",
@@ -8694,10 +8720,10 @@ function Results({ reports, failures }) {
   }, `  ${failure.rule} did not run: ${failure.reason}`)))));
 }
 
-// ../../../../../tmp/cmod-publish-rulebook-KfOmBY/release/src/state.ts
+// ../../../../../tmp/cmod-publish-rulebook-5oD2iP/release/src/state.ts
 var initialState = { memory: { run: { status: "idle" }, shown: {}, refusedTurn: undefined } };
 
-// ../../../../../tmp/cmod-publish-rulebook-KfOmBY/release/src/mod.tsx
+// ../../../../../tmp/cmod-publish-rulebook-5oD2iP/release/src/mod.tsx
 var rulebook = defineMod({
   name: "rulebook",
   state: initialState,
@@ -8711,9 +8737,16 @@ var rulebook = defineMod({
         environment = undefined;
         throw error;
       });
-      const { url, socketPath } = await server.ready();
       const body = `{"input":${JSON.stringify(input)},"environment":${await environment}}`;
-      const response = await http.fetch(`${url}/${question}`, { method: "POST", body, ...socketPath === undefined ? {} : { socketPath }, ...signal === undefined ? {} : { signal } });
+      const sent = async () => {
+        const { url, socketPath } = await server.ready();
+        return http.fetch(`${url}/${question}`, { method: "POST", body, ...socketPath === undefined ? {} : { socketPath }, ...signal === undefined ? {} : { signal } });
+      };
+      const response = await sent().catch((error) => {
+        if (signal?.aborted === true)
+          throw error;
+        return sent();
+      });
       if (!response.ok)
         throw new Error(`rulebook ${question} failed: ${response.text}`);
       return JSON.parse(response.text);
@@ -8902,7 +8935,7 @@ function displayPath(root, file) {
   return path.startsWith("..") || ye(path) ? file : path;
 }
 
-// ../../../../../tmp/cmod-publish-rulebook-KfOmBY/release/hooks/register.ts
+// ../../../../../tmp/cmod-publish-rulebook-5oD2iP/release/hooks/register.ts
 function register(addHook, options) {
   registerMod(addHook, rulebook, options);
   registerPermissionCheck(addHook);

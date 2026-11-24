@@ -365,16 +365,22 @@ A rule or linter that did not run lists why, and lets the commit through, as it 
 
 ## Run the manual rules
 
-An agent's write runs only the rules that run `always`, so a `manual` rule runs where a slow check costs nobody a turn. Every `rulebook check` runs it.
+An agent's write runs only the rules that run `always`, so a slow `manual` rule never holds up a write. Every `rulebook check` runs it, whoever starts the check: you, a git hook, or CI.
 
-A pre-commit hook runs it on every commit. With git 2.54 or later, a hook set in git's config runs beside the project's own hooks, so it fits a repository whose `core.hooksPath` already holds a pre-commit hook:
+Each place you run rulebook picks its own rules. `--skip` leaves out each rule, rule folder, or linter it names, and `--skip=agentic` leaves out every agentic rule:
+
+```sh
+rulebook check --skip=global/require-true-facts
+```
+
+A pre-commit hook is one place to run a check. With git 2.54 or later, a hook set in git's config runs beside the project's own hooks, so it fits a repository whose `core.hooksPath` already holds a pre-commit hook:
 
 ```sh
 git config hook.rulebook.event pre-commit
 git config hook.rulebook.command "rulebook check --staged"
 ```
 
-CI runs it on every push. A project that installs `@cmodjs/rulebook` as a dev dependency runs the same version CI does:
+CI is another. A project that installs `@cmodjs/rulebook` as a dev dependency runs the same version CI does:
 
 ```yaml
 name: rulebook
@@ -389,7 +395,7 @@ jobs:
       - run: node_modules/.bin/rulebook check
 ```
 
-An agentic rule runs `claude -p`, so CI that has no logged-in `claude` skips those rules with `rulebook check --skip=agentic`.
+An agentic rule runs `claude -p`, so CI that has no logged-in `claude` runs `rulebook check --skip=agentic`.
 
 ## Agents read the rules first
 
