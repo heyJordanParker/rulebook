@@ -92,10 +92,10 @@ export async function runAgentic(rule: AgenticRule, file: CheckedFile, root: str
 
 async function runSession(plugin: string, root: string, deadline: AbortSignal): Promise<readonly Finding[]> {
   deadline.throwIfAborted()
-  const child = Bun.spawn([claudeProgram(), ...sessionArguments(plugin)], {
+  const child = Bun.spawn([claudeProgram(), `/${PLUGIN}:${SKILL}`, ...sessionArguments(plugin)], {
     cwd: root,
     env: process.env,
-    stdin: new Blob([`/${PLUGIN}:${SKILL}`]),
+    stdin: 'ignore',
     stdout: 'pipe',
     stderr: 'pipe',
     signal: deadline,

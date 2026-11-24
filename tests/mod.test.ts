@@ -180,7 +180,7 @@ test("a mod's beforeCheck answer turns a rule off for the one agent's edit it an
   const task = await tested.startTask({ title: 'Fix the docs', agentType: 'Explore' })
   await tested.raise.beforeToolCall({ name: 'Write', input: { file_path: '/work/Claude.md', content: 'x' } }, { task })
   const rules = [EM_DASHES, TRUE_FACTS].map(({ id, description, severity, metadata }) => ({ id, description, severity, metadata }))
-  expect(checks).toEqual([{ path: '/work/Claude.md', session: 'test-session', tool: 'Write', rules }, { path: '/work/Claude.md', session: 'test-session', task, tool: 'Write', rules }])
+  expect(checks).toEqual([{ path: '/work/Claude.md', session: 'test-session', tool: 'Write', rules }, { path: '/work/Claude.md', session: 'test-session', task, agentType: 'Explore', tool: 'Write', rules }])
   expect(asked(tested, 'edit').map(({ input }) => input.rules)).toEqual([{ 'global/require-true-facts': 'off' }, {}])
 })
 
@@ -244,6 +244,19 @@ test('an answer the rulebook server fails is an error, never a pass', async () =
   expect(await tested.raise.beforeToolCall({ name: 'Write', input: { file_path: '/work/Claude.md', content: 'x' } })).toBeUndefined()
   await tested.settle()
   expect(tested.shown.toasts.filter(({ type }) => type === 'error')).toEqual([expect.objectContaining({ description: expect.stringContaining('rulebook edit failed: /work/rulebook.config.ts: "lint" is not a rulebook config key.') })])
+})
+
+test('a question the rulebook server closes mid-answer goes to the server again, so the write is still checked', async () => {
+  const tested = serving({ rules: LISTING, edit: { refuse: 'Edit to Claude.md refused.', failures: [], findings: [SPLIT] } })
+  const answer = tested.fakes.http.fetch!
+  let isClosing = true
+  tested.fakes.http.fetch = async (url, init) => {
+    if (!url.endsWith('/edit') || !isClosing) return answer(url, init)
+    isClosing = false
+    throw new Error(`$.http.fetch(${url}) over ${SOCKET} failed: ECONNRESET: The socket connection was closed unexpectedly.`)
+  }
+  expect(await tested.raise.beforeToolCall({ name: 'Write', input: { file_path: '/work/Claude.md', content: 'x' } })).toEqual({ refuse: 'Edit to Claude.md refused.' })
+  expect(asked(tested, 'edit')).toHaveLength(2)
 })
 
 test("a call to a tool a message's tools match is refused before it runs when its text breaks a rule, and no other tool is checked", async () => {

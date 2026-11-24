@@ -2,6 +2,16 @@
 
 What changed in each version of rulebook, for the people who use it. cmod publish releases the section for the version, and Settings shows it.
 
+## [0.10.1]
+
+### Fixed
+- A write is still checked when the session that runs the rulebook server ends mid-check. The mod sends the check once more, to the server's new copy, where before the write landed unchecked.
+- An agentic rule starts when many files are checked at once. rulebook passes the rule's Skill to `claude -p` as its prompt, where before Claude Code stopped waiting for stdin after 3 s and the rule did not run.
+- The README no longer promises that a commit or a push runs the `manual` rules. Every `rulebook check` runs them, and `--skip` picks the rules each place leaves out.
+
+### Changed
+- The mod bundles `@cmodjs/core` 8.3.1.
+
 ## [0.10.0]
 
 ### Added
