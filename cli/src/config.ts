@@ -12,7 +12,7 @@ type LoadedConfig = {
   readonly dir: string
   readonly basePath: string
   readonly plugins: Readonly<Record<string, string>>
-  readonly probes: readonly string[]
+  readonly tests: readonly string[]
   readonly messages: Readonly<Record<string, MessageSource>>
 }
 
@@ -34,7 +34,7 @@ export type Settings = {
   readonly messages: Readonly<Record<string, MessageSource>>
 }
 
-const KEYS = new Set(['extends', 'plugins', 'files', 'probes', 'timeout', 'existingErrors', 'rules', 'linters', 'programs', 'messages'])
+const KEYS = new Set(['extends', 'plugins', 'files', 'tests', 'timeout', 'existingErrors', 'rules', 'linters', 'programs', 'messages'])
 const RULE_KEYS = new Set(['severity', 'runs', 'files', 'timeout', 'agent', 'model', 'effort', 'threshold'])
 const MESSAGE_KEYS = new Set(['tools', 'folder'])
 const BUILT_IN: Pick<LoadedConfig, 'file' | 'plugins' | 'messages'> = {
@@ -164,7 +164,7 @@ function loadedConfig(config: Config, { file, dir, basePath }: Place): LoadedCon
     const path = folder === undefined ? undefined : resolve(dir, folder)
     return [name, { tools, folder: path !== undefined && existsSync(path) ? realpathSync(path) : path }]
   }))
-  return { file, dir, basePath, plugins, probes: config.probes ?? [], messages }
+  return { file, dir, basePath, plugins, tests: config.tests ?? [], messages }
 }
 
 function realFolder(file: string, folder: string): string {
@@ -182,7 +182,7 @@ function validConfig(file: string, value: unknown): Config {
   if (value.extends !== undefined && !(Array.isArray(value.extends) && value.extends.every((entry) => typeof entry === 'string' || isRecord(entry)))) fail('extends is a list of config paths, relative to the config, and config objects, such as [recommended].')
   if (value.plugins !== undefined && !(isRecord(value.plugins) && Object.values(value.plugins).every((folder) => typeof folder === 'string'))) fail('plugins maps each plugin name to a folder.')
   for (const name of Object.keys(value.plugins ?? {})) if (!/^[a-z][a-z0-9-]*$/.test(name)) fail(`"${name}" is not a plugin name: use lowercase letters, digits, and "-".`)
-  for (const key of ['files', 'probes'] as const) if (value[key] !== undefined && !isStrings(value[key])) fail(`${key} is a list of globs.`)
+  for (const key of ['files', 'tests'] as const) if (value[key] !== undefined && !isStrings(value[key])) fail(`${key} is a list of globs.`)
   if (value.timeout !== undefined && !isTimeout(value.timeout)) fail('timeout is a whole number of milliseconds above 0.')
   if (value.existingErrors !== undefined && value.existingErrors !== 'error' && value.existingErrors !== 'warn') fail('existingErrors is "error" or "warn".')
   if (value.rules !== undefined && !isRecord(value.rules)) fail('rules maps each rule name, such as "global/block-em-dashes", to a severity or to settings.')
