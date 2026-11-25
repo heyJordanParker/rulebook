@@ -10,8 +10,8 @@
       "description": "Checks every file, reply, tool call, and commit against your rules and linters before it lands, and an error refuses it.",
       "source": {
         "source": "archive",
-        "url": "https://github.com/heyJordanParker/rulebook/releases/download/v0.10.0/rulebook-0.10.0.zip",
-        "sha256": "8bdce624200a1010e9a95b85f188c46995b0568886d9a64a89b498270e57bfee"
+        "url": "https://github.com/heyJordanParker/rulebook/releases/download/v0.10.1/rulebook-0.10.1.zip",
+        "sha256": "25def2ebfebf1e28bca9d3a210e519446cffe5978ec763c5c6a5bb94f0031ce4"
       }
     },
     {

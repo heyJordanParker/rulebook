@@ -8671,7 +8671,7 @@ function splitWords(args) {
 function oneLine(error) {
   return messageOf(error).replace(/\s*\n\s*/g, " ");
 }
-// ../../../../../tmp/cmod-publish-rulebook-5oD2iP/release/src/views/results.tsx
+// ../../../../../tmp/cmod-publish-rulebook-I2Gzpf/release/src/views/results.tsx
 var resultsView = {
   id: "results",
   title: "rulebook",
@@ -8720,10 +8720,10 @@ function Results({ reports, failures }) {
   }, `  ${failure.rule} did not run: ${failure.reason}`)))));
 }
 
-// ../../../../../tmp/cmod-publish-rulebook-5oD2iP/release/src/state.ts
+// ../../../../../tmp/cmod-publish-rulebook-I2Gzpf/release/src/state.ts
 var initialState = { memory: { run: { status: "idle" }, shown: {}, refusedTurn: undefined } };
 
-// ../../../../../tmp/cmod-publish-rulebook-5oD2iP/release/src/mod.tsx
+// ../../../../../tmp/cmod-publish-rulebook-I2Gzpf/release/src/mod.tsx
 var rulebook = defineMod({
   name: "rulebook",
   state: initialState,
@@ -8935,7 +8935,7 @@ function displayPath(root, file) {
   return path.startsWith("..") || ye(path) ? file : path;
 }
 
-// ../../../../../tmp/cmod-publish-rulebook-5oD2iP/release/hooks/register.ts
+// ../../../../../tmp/cmod-publish-rulebook-I2Gzpf/release/hooks/register.ts
 function register(addHook, options) {
   registerMod(addHook, rulebook, options);
   registerPermissionCheck(addHook);
