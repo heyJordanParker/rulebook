@@ -50,7 +50,7 @@ beforeEach(() => {
   mkdirSync(project)
   Bun.spawnSync(['git', 'init', '-q'], { cwd: project })
   write(join(home, 'config', 'rulebook', 'rulebook.config.ts'), `import { defineConfig, recommended } from '@cmodjs/rulebook'
-export default defineConfig({ extends: [recommended], plugins: { global: './rules' }, files: ['**/Claude.md'], probes: ['probes/*.md'] })
+export default defineConfig({ extends: [recommended], plugins: { global: './rules' }, files: ['**/Claude.md'], tests: ['tests/*.md'] })
 `)
   write(join(home, 'config', 'rulebook', 'rules', 'block-em-dashes.ts'), EM_DASH_RULE)
   write(join(home, 'config', 'rulebook', 'rules', 'block-hedging.ts'), HEDGING_RULE)
@@ -411,12 +411,12 @@ test('a pattern rule in PHP flags a PHP file', () => {
   expect(rulebook(['check', '--skip=agentic', 'debug.php']).stdout).toBe("debug.php\n  3  error  global/block-var-dump  Don't leave var_dump in the code.\n     > var_dump($user);\n\n1 error, 0 warnings in 1 file\n")
 })
 
-test('a rule in a subfolder carries the folder in its name, and a config or pin that names it without the folder fails and names it', () => {
+test('a rule in a subfolder carries the folder in its name, and a config or rulebook-expect comment that names it without the folder fails and names it', () => {
   write(join(home, 'config', 'rulebook', 'rules', 'writing', 'block-x.ts'), lineRule("Don't write x.", 'x', "message: 'Remove the x.', "))
   expect(edit('Write', { file_path: join(project, 'Claude.md'), content: 'Run x.\n' }).refuse).toContain('1  error  global/writing/block-x  Remove the x.')
 
-  const probe = write(join(home, 'config', 'rulebook', 'probes', 'block-x.md'), '<!-- rulebook-expect global/block-x -->\nRun x.\n')
-  expect(rulebook(['check', probe]).stdout).toContain('1  error  global/block-x  The pin expects global/block-x to flag line 2, and it does not.')
+  const ruleTest = write(join(home, 'config', 'rulebook', 'tests', 'block-x.md'), '<!-- rulebook-expect global/block-x -->\nRun x.\n')
+  expect(rulebook(['check', ruleTest]).stdout).toContain('1  error  global/block-x  This rulebook-expect comment expects global/block-x to flag line 2, and it does not.')
 
   write(join(project, 'rulebook.config.ts'), `export default { rules: { 'global/block-x': 'off' } }\n`)
   const run = rulebook(['check', '--stdin-file-path=Claude.md'], 'Run x.\n')
@@ -522,28 +522,28 @@ test('each regular expression rulebook inspect rules lists covers the paths and 
   expect(listed.map(({ source, flags }, index) => [globs[index], paths.filter((path) => new RegExp(source, flags).test(path))])).toEqual(covered)
 })
 
-test('a probe passes while each pin fires, and fails on a pin that stops firing or a flag with no pin', () => {
-  const probe = write(join(home, 'config', 'rulebook', 'probes', 'block-em-dashes.md'), '<!-- rulebook-expect global/block-em-dashes -->\nRun it — now.\n\nRun it now.\n')
-  expect(rulebook(['check', probe]).code).toBe(0)
-  write(probe, '<!-- rulebook-expect global/block-em-dashes -->\nRun it now.\n\nRun it — now.\n')
-  const run = rulebook(['check', probe])
+test('a rule test passes while each rulebook-expect comment fires, and fails on one that stops firing or a flag no comment expects', () => {
+  const ruleTest = write(join(home, 'config', 'rulebook', 'tests', 'block-em-dashes.md'), '<!-- rulebook-expect global/block-em-dashes -->\nRun it \u2014 now.\n\nRun it now.\n')
+  expect(rulebook(['check', ruleTest]).code).toBe(0)
+  write(ruleTest, '<!-- rulebook-expect global/block-em-dashes -->\nRun it now.\n\nRun it \u2014 now.\n')
+  const run = rulebook(['check', ruleTest])
   expect(run.code).toBe(1)
-  expect(run.stdout).toContain('1  error  global/block-em-dashes  The pin expects global/block-em-dashes to flag line 2, and it does not.')
-  expect(run.stdout).toContain('4  error  global/block-em-dashes  Split the sentence at the em dash. (no pin expects this flag)')
+  expect(run.stdout).toContain('1  error  global/block-em-dashes  This rulebook-expect comment expects global/block-em-dashes to flag line 2, and it does not.')
+  expect(run.stdout).toContain('4  error  global/block-em-dashes  Split the sentence at the em dash. (no rulebook-expect comment expects this flag)')
 })
 
-test("a probe skips each pin of a rule outside the run's scope, and still fails a pin that names no rule", () => {
+test("a rule test skips each rulebook-expect comment of a rule outside the run's scope, and still fails one that names no rule", () => {
   agenticRule('require-true-facts', 'runs: manual')
-  const probe = write(join(home, 'config', 'rulebook', 'probes', 'require-true-facts.md'), '<!-- rulebook-expect global/require-true-facts -->\nThe sky is green.\n')
-  expect(rulebook(['check', '--skip=agentic', probe])).toEqual({ code: 0, stdout: '0 errors, 0 warnings in 1 file\n', stderr: '' })
-  expect(edit('Write', { file_path: probe, content: '<!-- rulebook-expect global/require-true-facts -->\nThe grass is blue.\n' })).toEqual(NOTHING)
-  write(probe, '<!-- rulebook-expect global/no-such-rule -->\nThe sky is green.\n')
-  expect(rulebook(['check', '--skip=agentic', probe]).stdout).toContain('1  error  global/no-such-rule  The pin expects global/no-such-rule to flag line 2, and it does not.')
+  const ruleTest = write(join(home, 'config', 'rulebook', 'tests', 'require-true-facts.md'), '<!-- rulebook-expect global/require-true-facts -->\nThe sky is green.\n')
+  expect(rulebook(['check', '--skip=agentic', ruleTest])).toEqual({ code: 0, stdout: '0 errors, 0 warnings in 1 file\n', stderr: '' })
+  expect(edit('Write', { file_path: ruleTest, content: '<!-- rulebook-expect global/require-true-facts -->\nThe grass is blue.\n' })).toEqual(NOTHING)
+  write(ruleTest, '<!-- rulebook-expect global/no-such-rule -->\nThe sky is green.\n')
+  expect(rulebook(['check', '--skip=agentic', ruleTest]).stdout).toContain('1  error  global/no-such-rule  This rulebook-expect comment expects global/no-such-rule to flag line 2, and it does not.')
 })
 
-test('a pin outside a probe is an error, and a pin shown in a code block is text', () => {
+test('a rulebook-expect comment outside a rule test is an error, and one shown in a code block is text', () => {
   const answer = edit('Write', { file_path: join(project, 'Claude.md'), content: '<!-- rulebook-expect global/block-em-dashes -->\nRun it now.\n' })
-  expect(answer.refuse).toContain('1  error  rulebook/pins')
+  expect(answer.refuse).toContain('1  error  rulebook/expect-comments  A rulebook-expect comment works only in a rule test. Remove it.')
   expect(edit('Write', { file_path: join(project, 'Claude.md'), content: '```md\n<!-- rulebook-expect global/block-em-dashes -->\n```\n' })).toEqual(NOTHING)
 })
 
@@ -1055,14 +1055,14 @@ test('a rule reads the file before the write, so a rule about the whole file ref
   expect(rulebook(['check', '--staged']).code).toBe(1)
 })
 
-test('a pin on the last line of a probe expects a flag on the whole file', () => {
+test('a rulebook-expect comment on the last line of a rule test expects a flag on the whole file', () => {
   write(join(home, 'config', 'rulebook', 'rules', 'block-long-notes.ts'), "export default { description: 'Keep a note under 4 lines.', files: ['**/*.md'], create: ({ sourceCode, report }) => { if (sourceCode.lines.length >= 4) report({ node: sourceCode.ast }); return {} } }\n")
-  const probe = write(join(home, 'config', 'rulebook', 'probes', 'block-long-notes.md'), 'One.\nTwo.\n\n<!-- rulebook-expect global/block-long-notes -->\n')
-  expect(rulebook(['check', '--skip=agentic', probe])).toEqual({ code: 0, stdout: '0 errors, 0 warnings in 1 file\n', stderr: '' })
-  write(probe, 'One.\n<!-- rulebook-expect global/block-long-notes -->\n')
-  expect(rulebook(['check', '--skip=agentic', probe]).stdout).toContain('The pin expects global/block-long-notes to flag the whole file, and it does not.')
-  write(probe, '<!-- rulebook-expect global/block-long-notes -->\nOne.\n')
-  expect(rulebook(['check', '--skip=agentic', probe]).stdout).toContain('The pin expects global/block-long-notes to flag line 2, and it does not.')
+  const ruleTest = write(join(home, 'config', 'rulebook', 'tests', 'block-long-notes.md'), 'One.\nTwo.\n\n<!-- rulebook-expect global/block-long-notes -->\n')
+  expect(rulebook(['check', '--skip=agentic', ruleTest])).toEqual({ code: 0, stdout: '0 errors, 0 warnings in 1 file\n', stderr: '' })
+  write(ruleTest, 'One.\n<!-- rulebook-expect global/block-long-notes -->\n')
+  expect(rulebook(['check', '--skip=agentic', ruleTest]).stdout).toContain('This rulebook-expect comment expects global/block-long-notes to flag the whole file, and it does not.')
+  write(ruleTest, '<!-- rulebook-expect global/block-long-notes -->\nOne.\n')
+  expect(rulebook(['check', '--skip=agentic', ruleTest]).stdout).toContain('This rulebook-expect comment expects global/block-long-notes to flag line 2, and it does not.')
 })
 
 test('rulebook claude-hook refuses an Edit a rule flags and answers a warning as context for the agent', () => {

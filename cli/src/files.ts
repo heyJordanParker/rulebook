@@ -76,9 +76,9 @@ function isRulesLink(entry: string): boolean {
   return statSync(entry, { throwIfNoEntry: false })?.isDirectory() === true && isRulesFolder(entry)
 }
 
-export function probeFiles(settings: Settings): readonly string[] {
-  const probes = settings.configs.flatMap((config) => config.probes.flatMap((glob) => [...new Bun.Glob(glob).scanSync({ cwd: config.dir, absolute: true, dot: true })]))
-  return [...new Set(probes.map((file) => realpathSync(file)))].filter((file) => isInside(settings.root, file)).sort()
+export function ruleTestFiles(settings: Settings): readonly string[] {
+  const ruleTests = settings.configs.flatMap((config) => config.tests.flatMap((glob) => [...new Bun.Glob(glob).scanSync({ cwd: config.dir, absolute: true, dot: true })]))
+  return [...new Set(ruleTests.map((file) => realpathSync(file)))].filter((file) => isInside(settings.root, file)).sort()
 }
 
 export async function listedFiles(folder: string): Promise<readonly string[] | undefined> {

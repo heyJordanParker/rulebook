@@ -89,7 +89,7 @@ export type Config = {
   readonly extends?: readonly (string | Config)[]
   readonly plugins?: Readonly<Record<string, string>>
   readonly files?: readonly string[]
-  readonly probes?: readonly string[]
+  readonly tests?: readonly string[]
   readonly timeout?: number
   readonly existingErrors?: 'error' | 'warn'
   readonly rules?: Readonly<Record<string, Severity | 'off' | RuleSettings>>

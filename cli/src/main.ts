@@ -7,7 +7,7 @@ import { checkFile, displayPath, isCovered, isPrompt, isSkipped, lintProject } f
 import { checkStaged } from './commit.ts'
 import { loadSettings, projectRoot, type Settings } from './config.ts'
 import { fileRoot, realFile } from './edit.ts'
-import { filesBySettings, importedFiles, listedFiles, loadImportedFiles, probeFiles, projectFiles } from './files.ts'
+import { filesBySettings, importedFiles, listedFiles, loadImportedFiles, projectFiles, ruleTestFiles } from './files.ts'
 import { answer, checkToolCall, projectOf } from './questions.ts'
 import { commitReport, editAnswer, textReport } from './report.ts'
 import { loadRules, type LoadedRule } from './rules.ts'
@@ -16,7 +16,7 @@ import { serve } from './serve.ts'
 const HELP = `rulebook ${packageJson.version}: checks any file, agent reply, and tool call against your rules and your project's linters.
 
 Usage:
-  rulebook check [files...]                Check every file a rule covers, every Prompt, and every probe of this project, or only the files named, with every rule and linter.
+  rulebook check [files...]                Check every file a rule covers, every Prompt, and every rule test of this project, or only the files named, with every rule and linter.
   rulebook check --staged                  Check what the next commit records, on the lines it writes, with every rule and linter. Run it from a git pre-commit hook.
   rulebook check --stdin-file-path=<path>  Check stdin as the text of the file or message at <path>, such as @reply or @command, with the rules that run always, as an agent's write is checked.
   rulebook check --reporter=json           Print the results as JSON.
@@ -114,7 +114,7 @@ async function check(named: readonly string[], skip: readonly string[], isJson: 
   const checked = await Promise.all(files.map(async (file) => {
     const own = displayPath(settings, file).startsWith('@') ? settings : await loadSettings(dirname(file), root)
     const report = await checkFile(own, await rulesOf(own), file, await Bun.file(file).text(), { scope: 'all', imported: async () => imported, skip })
-    if (report === undefined && named.length > 0) throw new Error(`${file} is not a Prompt, a probe, or a file a rule's files cover.`)
+    if (report === undefined && named.length > 0) throw new Error(`${file} is not a Prompt, a rule test, or a file a rule's files cover.`)
     return report
   }))
   const linted = new Map([...groups].map(([own, owned]) => [{ ...own, linters: own.linters.filter((name) => !isSkipped(skip, name)) }, owned]))
@@ -127,7 +127,7 @@ async function check(named: readonly string[], skip: readonly string[], isJson: 
 async function coveredFiles(groups: ReadonlyMap<Settings, readonly string[]>, rulesOf: (settings: Settings) => Promise<readonly LoadedRule[]>): Promise<readonly string[]> {
   const covered = await Promise.all([...groups].map(async ([settings, files]) => {
     const rules = await rulesOf(settings)
-    return [...files.filter((file) => isPrompt(settings, file) || isCovered(settings, rules, file)), ...probeFiles(settings)]
+    return [...files.filter((file) => isPrompt(settings, file) || isCovered(settings, rules, file)), ...ruleTestFiles(settings)]
   }))
   return covered.flat()
 }

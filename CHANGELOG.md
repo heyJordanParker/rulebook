@@ -2,6 +2,12 @@
 
 What changed in each version of rulebook, for the people who use it. cmod publish releases the section for the version, and Settings shows it.
 
+## [0.11.0]
+
+### Changed
+- A probe is now a rule test, the name Semgrep, ast-grep, and ESLint give it. The config key `probes` is now `tests`, so rename it in each `rulebook.config.ts`, and move the files if you like, such as `probes/` to `tests/`. A config that still says `probes` fails and lists the keys.
+- A `rulebook-expect` comment outside a rule test is flagged as `rulebook/expect-comments`, where before it was `rulebook/pins`. Its messages now name the `rulebook-expect` comment instead of a pin.
+
 ## [0.10.1]
 
 ### Fixed

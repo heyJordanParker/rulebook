@@ -12,13 +12,13 @@ description: Write or change a rulebook rule, a check rulebook runs on any file,
 - `plugins` names each rule folder. A rule is a file at any depth, named `<plugin>/<path without extension>`: `rules/writing/block-em-dashes.ts` under `global` is `global/writing/block-em-dashes`.
 - `rules` sets a rule to `'off'`, a severity, or an object that also overrides `files`, `runs`, and an agentic rule's `timeout`, `agent`, `model`, `effort`, and `threshold`.
 - No rule is on by default. `extends: [recommended]` turns on `rulebook/imports`, and `'rulebook/no-suppressions': 'error'` flags comments that suppress a linter, such as `# noqa`. A Claude Code plugin's rules apply only when a config extends its `rulebook.config.ts`.
-- `files` lists the Prompts a rule without `files` checks, and `probes` the probe files, relative to the config's folder, or the project root for the global config.
+- `files` lists the Prompts a rule without `files` checks, and `tests` the rule tests, relative to the config's folder, or the project root for the global config.
 - `messages` registers a message: `tools` checks each matching tool call as `@<name>`, and `folder` makes a full run check its files as `@<name>/<path>`. `@reply` and `@command` are built in.
 - `linters` lists the linters rulebook runs: `mago`, `pint`, `oxlint`, `biome`, `stylelint`, `tsc`, `ruff`, `selene`, and `shellcheck`.
 
 IF you move or rename a rule:
-### Rename it in every config setting and probe pin
-A setting or pin that names the old path fails with an error.
+### Rename it in every config setting and `rulebook-expect` comment
+A setting or comment that names the old path fails with an error.
 
 ## 2. Name the rule for what it does
 
@@ -136,9 +136,9 @@ IF an agentic rule takes longer than an edit can wait:
 ### Make it manual with the timeout it needs
 Measure one run on the largest file it covers, and set `timeout` well past that.
 
-## 8. Write a probe for the rule
+## 8. Write a test for the rule
 
-A probe is a file the config's `probes` names, in the rule's language. Put each line the rule must flag under a pin, and add lines it must leave alone. A pin with only blank lines after it expects a flag on the whole file. A probe runs only the rules it pins, and a pin works only in a probe.
+A rule test is a file the config's `tests` names, in the rule's language. Put each line the rule must flag under a `rulebook-expect` comment, and add lines it must leave alone. A comment with only blank lines after it expects a flag on the whole file. A rule test runs only the rules its comments name.
 
 ```md
 <!-- rulebook-expect global/block-hedging -->
@@ -149,4 +149,4 @@ The tests pass.
 
 ## 9. Run the rule
 
-Find the rule in `rulebook inspect rules` with no failure beside it. Run `rulebook check <probe>`, which passes with no output above the count line, and `rulebook check <a covered file>`. Check a message sample through stdin: `rulebook check --stdin-file-path=@command < sample.txt` exits 1 when the rule flags it.
+Find the rule in `rulebook inspect rules` with no failure beside it. Run `rulebook check <rule test>`, which passes with no output above the count line, and `rulebook check <a covered file>`. Check a message sample through stdin: `rulebook check --stdin-file-path=@command < sample.txt` exits 1 when the rule flags it.

@@ -40,7 +40,7 @@ type CheckOptions = {
 }
 
 export const COMMAND = '@command'
-const PIN = /^\s*<!--\s*rulebook-expect\s+(\S+)\s*-->\s*$/
+const EXPECT = /^\s*<!--\s*rulebook-expect\s+(\S+)\s*-->\s*$/
 const MAX_EDIT_LENGTH = 1_000
 
 function matches(globs: readonly string[], path: string): boolean {
@@ -71,8 +71,8 @@ export function isCovered(settings: Settings, rules: readonly LoadedRule[], file
   return rules.some((rule) => covers(rule, path, false))
 }
 
-function isProbe(settings: Settings, file: string): boolean {
-  return settings.configs.some((config) => isInside(config.dir, file) && matches(config.probes, relative(config.dir, file)))
+function isRuleTest(settings: Settings, file: string): boolean {
+  return settings.configs.some((config) => isInside(config.dir, file) && matches(config.tests, relative(config.dir, file)))
 }
 
 export function isPrompt(settings: Settings, file: string): boolean {
@@ -82,17 +82,17 @@ export function isPrompt(settings: Settings, file: string): boolean {
 export async function checkFile(settings: Settings, rules: readonly LoadedRule[], file: string, text: string, options: CheckOptions): Promise<FileReport | undefined> {
   const path = displayPath(settings, file)
   const isMessage = path.startsWith('@')
-  const probe = !isMessage && isProbe(settings, file)
-  const configured = probe || (!isMessage && isPrompt(settings, file))
+  const ruleTest = !isMessage && isRuleTest(settings, file)
+  const configured = ruleTest || (!isMessage && isPrompt(settings, file))
   const isMemory = !isMessage && isClaudeMd(file)
   const imported = !isMessage && !(configured && isMemory) && existsSync(file) && (await options.imported()).has(realpathSync(file))
   const covered = rules.filter((rule) => inScope(rule, options) && covers(rule, path, configured || imported))
-  const linted = !isMessage && !probe ? coveringLinters(settings.linters.filter((name) => !isSkipped(options.skip, name)), settings.programs, file, text, settings.root) : []
+  const linted = !isMessage && !ruleTest ? coveringLinters(settings.linters.filter((name) => !isSkipped(options.skip, name)), settings.programs, file, text, settings.root) : []
   if (!configured && !imported && covered.length === 0 && linted.length === 0) return undefined
   const written = text.split('\n')
   const isDoc = imported || isMemory
-  const mayPin = text.includes('rulebook-expect')
-  const claudeMd = isDoc || probe || (mayPin && written.some((line) => PIN.test(line))) ? readClaudeMd(text) : undefined
+  const mayExpect = text.includes('rulebook-expect')
+  const claudeMd = isDoc || ruleTest || (mayExpect && written.some((line) => EXPECT.test(line))) ? readClaudeMd(text) : undefined
   const memory = isDoc ? claudeMd : undefined
   const before = options.previous === undefined || !isDoc ? options.previous : readClaudeMd(options.previous).lines.join('\n')
   const prompt: CheckedFile = {
@@ -104,9 +104,9 @@ export async function checkFile(settings: Settings, rules: readonly LoadedRule[]
     ...(options.call === undefined ? {} : { call: options.call }),
   }
   const doc = memory === undefined ? undefined : { file, imports: memory.imports }
-  const pins = mayPin ? pinsOf(written, claudeMd?.lines ?? []) : []
-  const pinned = new Set(pins.map(({ rule }) => rule))
-  const chosen = probe ? rules.filter((rule) => inScope(rule, options) && pinned.has(rule.id)) : covered
+  const expectations = mayExpect ? expectationsOf(written, claudeMd?.lines ?? []) : []
+  const expected = new Set(expectations.map(({ rule }) => rule))
+  const chosen = ruleTest ? rules.filter((rule) => inScope(rule, options) && expected.has(rule.id)) : covered
   const wrote = options.previous === undefined ? undefined : linesWritten(options.previous, written)
   const changed = wrote === undefined ? undefined : [...wrote].filter((line) => written[line - 1]?.trim() !== '')
 
@@ -128,7 +128,7 @@ export async function checkFile(settings: Settings, rules: readonly LoadedRule[]
   const levelOfRule = ({ level }: LoadedRule): Level => (level === 'off' || (level === 'ask' && options.call === undefined) ? 'error' : level)
   const found = [...runs.flatMap((run) => ('found' in run ? run.found.map(({ line, message, isWhole }) => ({ line, message: message ?? run.rule.message ?? run.rule.description, rule: run.rule.id, level: levelOfRule(run.rule), ...(isWhole === true ? { isWhole } : {}) })) : [])), ...lints.flatMap((lint) => lint.flags)]
   const unscoped = new Set(rules.filter((rule) => !inScope(rule, options)).map(({ id }) => id))
-  const flagged: readonly Flag[] = probe ? probeFindings(found, pins.filter(({ rule }) => !unscoped.has(rule)), written.findLastIndex((line) => line.trim() !== '') + 1) :[...found, ...pins.map((pin) => ({ rule: 'rulebook/pins', line: pin.line, level: 'error' as const, message: 'A rulebook-expect pin works only in a probe file. Remove it.' }))]
+  const flagged: readonly Flag[] = ruleTest ? ruleTestFindings(found, expectations.filter(({ rule }) => !unscoped.has(rule)), written.findLastIndex((line) => line.trim() !== '') + 1) : [...found, ...expectations.map((expectation) => ({ rule: 'rulebook/expect-comments', line: expectation.line, level: 'error' as const, message: 'A rulebook-expect comment works only in a rule test. Remove it.' }))]
 
   return {
     path,
@@ -204,17 +204,17 @@ export function isSkipped(skip: readonly string[] | undefined, name: string): bo
   return skip?.some((skipped) => name === skipped || name.startsWith(`${skipped}/`)) ?? false
 }
 
-type Pin = { readonly rule: string; readonly line: number; readonly target: number }
+type Expectation = { readonly rule: string; readonly line: number; readonly target: number }
 
-function pinsOf(written: readonly string[], shown: readonly string[]): readonly Pin[] {
-  const pins: Pin[] = []
+function expectationsOf(written: readonly string[], shown: readonly string[]): readonly Expectation[] {
+  const expectations: Expectation[] = []
   const waiting: { rule: string; line: number }[] = []
   written.forEach((text, index) => {
-    const rule = PIN.test(shown[index] ?? '') ? undefined : PIN.exec(text)?.[1]
+    const rule = EXPECT.test(shown[index] ?? '') ? undefined : EXPECT.exec(text)?.[1]
     if (rule !== undefined) waiting.push({ rule, line: index + 1 })
-    else for (const pin of waiting.splice(0)) pins.push({ ...pin, target: index + 1 })
+    else for (const expectation of waiting.splice(0)) expectations.push({ ...expectation, target: index + 1 })
   })
-  return [...pins, ...waiting.map((pin) => ({ ...pin, target: written.length + 1 }))]
+  return [...expectations, ...waiting.map((expectation) => ({ ...expectation, target: written.length + 1 }))]
 }
 
 function linesWritten(previous: string, written: readonly string[]): ReadonlySet<number> {
@@ -304,18 +304,18 @@ export const noSuppressionsRule: StaticRule = {
 
 type Flag = Omit<Reported, 'isExisting' | 'quote'> & { readonly isWhole?: true }
 
-function probeFindings(found: readonly Flag[], pins: readonly Pin[], lastLine: number): readonly Flag[] {
-  const open = [...pins]
-  const isWholePin = (pin: Pin): boolean => pin.target > lastLine
+function ruleTestFindings(found: readonly Flag[], expectations: readonly Expectation[], lastLine: number): readonly Flag[] {
+  const open = [...expectations]
+  const isWhole = (expectation: Expectation): boolean => expectation.target > lastLine
   const unexpected = found.filter((finding) => {
-    const index = open.findIndex((pin) => pin.rule === finding.rule && (finding.isWhole === true ? isWholePin(pin) : !isWholePin(pin) && pin.target === finding.line))
+    const index = open.findIndex((expectation) => expectation.rule === finding.rule && (finding.isWhole === true ? isWhole(expectation) : !isWhole(expectation) && expectation.target === finding.line))
     if (index === -1) return true
     open.splice(index, 1)
     return false
   })
   return [
-    ...unexpected.map((finding) => ({ ...finding, level: 'error' as const, message: `${finding.message} (no pin expects this flag)` })),
-    ...open.map((pin) => ({ rule: pin.rule, line: pin.line, level: 'error' as const, message: `The pin expects ${pin.rule} to flag ${isWholePin(pin) ? 'the whole file' : `line ${pin.target}`}, and it does not.` })),
+    ...unexpected.map((finding) => ({ ...finding, level: 'error' as const, message: `${finding.message} (no rulebook-expect comment expects this flag)` })),
+    ...open.map((expectation) => ({ rule: expectation.rule, line: expectation.line, level: 'error' as const, message: `This rulebook-expect comment expects ${expectation.rule} to flag ${isWhole(expectation) ? 'the whole file' : `line ${expectation.target}`}, and it does not.` })),
   ]
 }
 

@@ -111,7 +111,7 @@ rulebook checks each file with two configs, the second merged over the first:
 
 A config pulls in other configs only through `extends`: a list of config paths, relative to the config, with `~` read as the home folder, and config objects imported from packages. A file gets the global config, then each `extends` entry from left to right, then the config's own keys. Lists add up, and a later `rules` setting merges over an earlier one key by key, as ESLint merges its rule settings, so a nearer config can turn any rule it inherits off or down. A severity written as a string, such as `'warn'`, sets only `severity`. A config reached twice merges once, at its first place. An `extends` path that names no file fails and names it.
 
-rulebook turns on no rule by itself. `recommended`, which `@cmodjs/rulebook` exports, makes the files Claude Code reads as instructions Prompts, `**/{CLAUDE,Claude}.md`, `**/{CLAUDE,Claude}.local.md`, `**/AGENTS.md`, and `**/.claude/{rules,agents,commands,skills}/**/*.md`, and turns on `rulebook/imports`, which flags a CLAUDE.md import that names no file, the way ESLint's `js.configs.recommended` turns on its rules. `rulebook/no-suppressions`, which flags a comment that suppresses a linter's rule, stays off until a config sets its severity. rulebook always registers the `@reply` and `@command` messages, and checks every `rulebook-expect` pin as `rulebook/pins`.
+rulebook turns on no rule by itself. `recommended`, which `@cmodjs/rulebook` exports, makes the files Claude Code reads as instructions Prompts, `**/{CLAUDE,Claude}.md`, `**/{CLAUDE,Claude}.local.md`, `**/AGENTS.md`, and `**/.claude/{rules,agents,commands,skills}/**/*.md`, and turns on `rulebook/imports`, which flags a CLAUDE.md import that names no file, the way ESLint's `js.configs.recommended` turns on its rules. `rulebook/no-suppressions`, which flags a comment that suppresses a linter's rule, stays off until a config sets its severity. rulebook always registers the `@reply` and `@command` messages, and flags a `rulebook-expect` comment outside a rule test as `rulebook/expect-comments`.
 
 rulebook reads no config from the Claude Code plugins that are turned on. A plugin's rules, and the tool calls and folders its `messages` name, reach a project only when a config extends the plugin's `rulebook.config.ts`.
 
@@ -122,7 +122,7 @@ export default defineConfig({
   extends: [recommended, '../rulebook.config.ts'],
   plugins: { app: './rules' },
   files: ['docs/**/*.md'],
-  probes: ['probes/**/*.md'],
+  tests: ['tests/**/*.md'],
   timeout: 30_000,
   existingErrors: 'warn',
   rules: {
@@ -140,7 +140,7 @@ export default defineConfig({
 | `extends` | The configs this one builds on: paths relative to the config, and config objects such as `recommended`. |
 | `plugins` | Each rule folder, by the name its rules carry, such as `app/require-owners`. |
 | `files` | The Prompts: the files every rule without its own `files` checks, relative to the config's folder. The global config's globs, and those of a config outside the project, are relative to the project root. Every file a Claude.md or `.claude/rules/` file among them imports, four hops deep, counts too. |
-| `probes` | The probe files, relative to the config. |
+| `tests` | The rule tests, relative to the config. |
 | `timeout` | How long an agentic rule or a linter run may take, in milliseconds, unless the rule sets its own. 30 000 by default. |
 | `existingErrors` | `warn`, the default, lets an edit through an error that was already in the file. `error` blocks it too. Either way, an edit's answer lists only the findings on lines the edit wrote, and counts the rest in one line that names the `rulebook check <file>` command that lists them. An edit that adds and removes more than 1,000 lines in all counts every line as written, because finding the lines it wrote took 18 s for a rewrite of a 10,000-line file. |
 | `rules` | A severity, `"off"`, or the settings of any rule: `severity`, `runs`, `files`, and for an agentic rule `timeout`, `agent`, `model`, `effort`. `model: 'jev'` runs the rule on Jev, and `threshold` sets the probability a line needs to pass on Jev. |
@@ -427,9 +427,9 @@ for (const rulebook of await providers('rulebook/Rules'))
 
 Each check names its `path`, the `session`, and for a subagent its `task` and `agentType`, the `tool` it calls, and the `rules` of the path's folder. `types/index.d.ts` types the interface.
 
-## Prove a rule with a probe
+## Test a rule
 
-A probe holds lines the rule must flag, each under a pin, and lines it must leave alone. rulebook fails on a pin that stops firing and on a flag with no pin. It skips each pin of a rule the run leaves out, such as a `runs: manual` rule's pin in an edit or a rule a `--skip` names, and fails a pin that names no rule. A pin works only in a probe.
+A rule test is a file that `tests` names. It holds lines the rule must flag, each under a `rulebook-expect` comment, and lines it must leave alone, the way a Semgrep test file holds `ruleid:` comments. rulebook fails on a comment whose rule stops flagging its line and on a flag no comment expects. It skips each comment of a rule the run leaves out, such as a `runs: manual` rule's comment in an edit or a rule a `--skip` names, and fails a comment that names no rule. A `rulebook-expect` comment works only in a rule test.
 
 ```md
 <!-- rulebook-expect global/block-em-dashes -->
@@ -438,14 +438,14 @@ Run the tests — they take a minute.
 Run the tests. They take a minute.
 ```
 
-A pin with nothing after it but blank lines expects its rule to flag the whole file, the finding a rule reports on `context.sourceCode.ast`.
+A `rulebook-expect` comment with nothing after it but blank lines expects its rule to flag the whole file, the finding a rule reports on `context.sourceCode.ast`.
 
 ## Run it
 
 rulebook's commands and flags are Biome's, so `rulebook check` works the way `biome check` does:
 
 ```text
-rulebook check [files...]                Check every file a rule covers, every Prompt, and every probe of this project, or only the files named, with every rule and linter.
+rulebook check [files...]                Check every file a rule covers, every Prompt, and every rule test of this project, or only the files named, with every rule and linter.
 rulebook check --staged                  Check what the next commit records, on the lines it writes, with every rule and linter. Run it from a git pre-commit hook.
 rulebook check --stdin-file-path=<path>  Check stdin as the text of the file or message at <path>, such as @reply or @command, with the rules that run always, as an agent's write is checked.
 rulebook check --reporter=json           Print the results as JSON.
